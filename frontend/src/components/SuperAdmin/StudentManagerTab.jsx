@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence,motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search
@@ -9,7 +9,7 @@ import { API } from './constants';
 
 // ─── Add Student Modal ─────────────────────────────────────────────────────────
 const AddStudentModal = ({ onClose, onCreated }) => {
-    const [form, setForm] = useState({ studentId: '', name: '', password: '' });
+    const [studentId, setStudentId] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
@@ -17,7 +17,7 @@ const AddStudentModal = ({ onClose, onCreated }) => {
         e.preventDefault();
         setSaving(true); setError('');
         try {
-            const res = await api.post(`${API}/students`, form);
+            const res = await api.post(`${API}/students`, { studentId });
             onCreated(res.data.data);
         } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setSaving(false); }
@@ -29,27 +29,36 @@ const AddStudentModal = ({ onClose, onCreated }) => {
             onClick={e => e.target === e.currentTarget && onClose()}
         >
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}
-                className="bg-white border border-gray-200 rounded-2xl w-full max-w-md shadow-xl"
+                className="bg-white border border-gray-200 rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
             >
-                <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                    <h2 className="font-bold text-gray-900 text-lg">Add Student</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={20} /></button>
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-teal-50/50">
+                    <h2 className="font-bold text-gray-900 text-lg">Add New Student</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors"><X size={20} /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    {[['Student ID', 'studentId', 'text'], ['Full Name', 'name', 'text'], ['Password', 'password', 'password']].map(([label, key, type]) => (
-                        <div key={key}>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">{label}</label>
-                            <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                                required
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
-                            />
-                        </div>
-                    ))}
-                    {error && <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-2"><AlertTriangle size={14} />{error}</div>}
+                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-3 ml-1">Student Identifier (Roll/ID)</label>
+                        <input
+                            type="text"
+                            value={studentId}
+                            onChange={e => setStudentId(e.target.value)}
+                            placeholder="e.g. 2024CS001"
+                            required
+                            autoFocus
+                            className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3.5 text-gray-900 text-lg font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all"
+                        />
+                        <p className="mt-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest ml-1">
+                            Default password will be "123456"
+                        </p>
+                    </div>
+
+                    {error && <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-xl p-3"><AlertTriangle size={18} />{error}</div>}
+
                     <div className="flex gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors font-bold">Cancel</button>
-                        <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-colors">
-                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Add Student
+                        <button type="button" onClick={onClose} className="flex-1 py-3.5 border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition-colors font-bold">Cancel</button>
+                        <button type="submit" disabled={saving} className="flex-1 py-3.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-2xl text-white font-black flex items-center justify-center gap-2 transition-all shadow-lg shadow-teal-600/20 active:scale-95">
+                            {saving ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
+                            Create Student
                         </button>
                     </div>
                 </form>

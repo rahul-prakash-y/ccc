@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Create a configured axios instance for the application
 export const api = axios.create({
-    baseURL: 'http://localhost:5000/api', // General API base
+    baseURL: 'http://ccc-8z0k.onrender.com/api', // General API base
 });
 
 // Interceptor to auto-inject the Auth token if it exists in Zustand state
@@ -49,6 +49,19 @@ export const useAuthStore = create((set, get) => ({
         const updatedUser = { ...currentUser, ...userData };
         localStorage.setItem('user', JSON.stringify(updatedUser));
         set({ user: updatedUser });
+    },
+
+    onboard: async (name) => {
+        try {
+            const res = await api.post('/auth/onboard', { name });
+            const { token, user } = res.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(user));
+            set({ user, token });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.response?.data?.error || 'Onboarding failed' };
+        }
     },
 
     logout: async () => {

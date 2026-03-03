@@ -396,21 +396,28 @@ module.exports = async function (fastify, opts) {
     fastify.post('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const bcrypt = require('bcryptjs');
-            const { studentId, name, password } = request.body;
-            if (!studentId || !name || !password) {
-                return reply.code(400).send({ error: 'studentId, name, and password are required' });
+            const { studentId } = request.body;
+            if (!studentId) {
+                return reply.code(400).send({ error: 'studentId is required' });
             }
             const exists = await User.findOne({ studentId });
             if (exists) return reply.code(409).send({ error: 'User with this ID already exists' });
 
-            const hashedPassword = await bcrypt.hash(password, 10);
-            const student = new User({ studentId, name, password: hashedPassword, role: 'STUDENT' });
+            const defaultPassword = '123456';
+            const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+            const student = new User({
+                studentId,
+                name: `Student ${studentId}`,
+                password: hashedPassword,
+                role: 'STUDENT',
+                isOnboarded: false
+            });
             await student.save();
 
             await logActivity({
                 action: 'CREATED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Student', id: student._id.toString(), label: `${student.studentId} (${student.name})` },
+                target: { type: 'Student', id: student._id.toString(), label: `${student.studentId}` },
                 ip: request.ip
             });
 

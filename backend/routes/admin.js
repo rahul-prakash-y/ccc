@@ -56,25 +56,27 @@ module.exports = async function (fastify, opts) {
                     continue;
                 }
 
-                // Generate an 8-character highly-secure random alphanumeric password
-                const plainPassword = crypto.randomBytes(4).toString('hex');
-                const hashedPassword = await bcrypt.hash(plainPassword, 10);
+                // Default password "123456"
+                const defaultPassword = '123456';
+                const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+                const finalName = name ? name.toString().trim() : `Student ${studentId}`;
 
                 const newUser = new User({
                     studentId: studentId.toString().trim(),
-                    name: name.toString().trim(),
+                    name: finalName,
                     password: hashedPassword,
-                    role: 'STUDENT'
+                    role: 'STUDENT',
+                    isOnboarded: false
                 });
 
                 await newUser.save();
 
-                // Push to the exact output array that the Admin will download
                 generatedCredentials.push({
-                    Name: name,
+                    Name: finalName,
                     Student_ID: studentId,
-                    Department: department,
-                    Platform_Password: plainPassword
+                    Department: department || 'General',
+                    Platform_Password: defaultPassword
                 });
 
                 successCount++;

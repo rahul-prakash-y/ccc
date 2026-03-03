@@ -11,6 +11,7 @@ import CodeArena from './components/CodeArena';
 import AdminDashboard from './components/AdminDashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import BlockedAccount from './pages/BlockedAccount';
+import OnboardingPage from './components/OnboardingPage';
 
 import { useAuthStore } from './store/authStore';
 
@@ -21,6 +22,7 @@ const PublicRoute = ({ children }) => {
     const { user } = useAuthStore();
     if (user) {
         if (user.isBanned) return <Navigate to="/blocked" replace />;
+        if (user.role === 'STUDENT' && !user.isOnboarded) return <Navigate to="/onboarding" replace />;
         if (user.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
         if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
         return <Navigate to="/dashboard" replace />;
@@ -71,6 +73,16 @@ const AppRoutes = () => {
 
             {/* Blocked Account Page */}
             <Route path="/blocked" element={<BlockedAccount />} />
+
+            {/* Student Onboarding Page */}
+            <Route
+                path="/onboarding"
+                element={
+                    <ProtectedRoute>
+                        <OnboardingPage />
+                    </ProtectedRoute>
+                }
+            />
 
             {/* 404 Fallback Catch */}
             <Route path="*" element={<RoleFallback />} />

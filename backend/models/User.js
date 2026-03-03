@@ -20,7 +20,12 @@ const userSchema = new mongoose.Schema({
   },
   name: {
     type: String,
-    required: true,
+    required: false,
+    default: 'Student'
+  },
+  isOnboarded: {
+    type: Boolean,
+    default: false
   },
   registeredRoundIds: [{
     type: mongoose.Schema.Types.ObjectId,

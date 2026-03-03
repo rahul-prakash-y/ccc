@@ -1,0 +1,131 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, ArrowRight, Loader2, Rocket, ShieldCheck } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
+import { useNavigate } from 'react-router-dom';
+
+const OnboardingPage = () => {
+    const [name, setName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const { onboard, user } = useAuthStore();
+    const navigate = useNavigate();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (name.trim().length < 2) {
+            setError('Please enter your full name');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        const res = await onboard(name);
+        setLoading(false);
+
+        if (res.success) {
+            navigate('/dashboard');
+        } else {
+            setError(res.error);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 overflow-hidden relative">
+            {/* Background Decorations */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-violet-600/5 rounded-full blur-[120px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/5 rounded-full blur-[120px]" />
+            </div>
+
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-lg relative z-10"
+            >
+                <div className="bg-white border border-slate-100 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60">
+                    <div className="flex justify-center mb-8">
+                        <div className="w-20 h-20 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-violet-500/20 rotate-3 transform">
+                            <Rocket className="text-white" size={40} />
+                        </div>
+                    </div>
+
+                    <div className="text-center mb-10">
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-3">
+                            Welcome to the Platform
+                        </h1>
+                        <p className="text-slate-500 font-medium">
+                            First things first, let's get to know you.
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="relative group">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
+                                Your Full Name
+                            </label>
+                            <div className="relative">
+                                <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
+                                <input
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Enter your name..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-lg font-medium"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+
+                        <AnimatePresence>
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="text-red-400 text-sm font-bold text-center px-2"
+                                >
+                                    {error}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full group bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-2xl py-4 font-black text-lg transition-all shadow-xl shadow-violet-600/20 active:scale-[0.98] flex items-center justify-center gap-3"
+                        >
+                            {loading ? (
+                                <Loader2 className="animate-spin" size={24} />
+                            ) : (
+                                <>
+                                    Complete Profile
+                                    <ArrowRight className="group-hover:translate-x-1 transition-transform" size={24} />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    <div className="mt-12 pt-8 border-t border-slate-100 flex items-center justify-center gap-6">
+                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest">
+                            <ShieldCheck size={14} className="text-emerald-500" />
+                            Secure Platform
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest">
+                            <Rocket size={14} className="text-violet-500" />
+                            Fast Performance
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 text-center">
+                    <p className="text-slate-600 text-sm font-medium italic">
+                        Logged in as {user?.studentId}
+                    </p>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+export default OnboardingPage;

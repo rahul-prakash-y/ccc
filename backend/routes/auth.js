@@ -45,7 +45,8 @@ module.exports = async function (fastify, opts) {
                 role: user.role, // 'STUDENT' or 'ADMIN'
                 name: user.name,
                 isBanned: user.isBanned,
-                banReason: user.banReason
+                banReason: user.banReason,
+                isOnboarded: user.isOnboarded
             };
 
             // Sign token (valid for a typical hackathon duration plus warmup delay)
@@ -134,6 +135,51 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to log out cleanly' });
+        }
+    });
+
+    /**
+     * ROUTE: POST /api/auth/onboard
+     * Authenticated route for students to complete their profile.
+     */
+    fastify.post('/onboard', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const { name } = request.body;
+            if (!name || name.trim().length < 2) {
+                return reply.code(400).send({ error: 'Valid name is required' });
+            }
+
+            const user = await User.findByIdAndUpdate(
+                request.user.userId,
+                { name: name.trim(), isOnboarded: true },
+                { new: true }
+            );
+
+            if (!user) return reply.code(404).send({ error: 'User not found' });
+
+            // Create a new token with updated name and onboarded status
+            const payload = {
+                userId: user._id,
+                studentId: user.studentId,
+                role: user.role,
+                name: user.name,
+                isBanned: user.isBanned,
+                banReason: user.banReason,
+                isOnboarded: user.isOnboarded
+            };
+            const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
+
+            await logActivity({
+                action: 'ONBOARDED',
+                performedBy: { userId: user._id, studentId: user.studentId, name: user.name, role: user.role },
+                target: { type: 'User', id: user._id.toString(), label: `${user.studentId} — Onboarding Complete` },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, user: payload, token });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to complete onboarding' });
         }
     });
 
