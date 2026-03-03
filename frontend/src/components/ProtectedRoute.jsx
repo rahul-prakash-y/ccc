@@ -1,0 +1,20 @@
+import React from 'react';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+/**
+ * ProtectedRoute Wrapper
+ * Enforces presence of authentication state. If the user object is missing
+ * inside the React Context, they are instantly booted to the /login screen.
+ */
+const ProtectedRoute = () => {
+    const { user } = useAuth();
+
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
+    return <Outlet />;
+};
+
+export default ProtectedRoute;
