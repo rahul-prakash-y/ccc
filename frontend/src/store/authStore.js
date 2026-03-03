@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Create a configured axios instance for the application
 export const api = axios.create({
-    baseURL: 'http://localhost:5000/api', // General API base
+    baseURL: 'https://ccc-8z0k.onrender.com/api', // General API base
 });
 
 // Interceptor to auto-inject the Auth token if it exists in Zustand state
