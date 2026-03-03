@@ -323,4 +323,163 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * STUDENT MANAGEMENT — all routes below are SUPER_ADMIN only
+     */
+
+    // GET /api/superadmin/students — list all STUDENT users
+    fastify.get('/students', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { search = '' } = request.query;
+            const filter = { role: 'STUDENT' };
+            if (search) {
+                filter.$or = [
+                    { studentId: { $regex: search, $options: 'i' } },
+                    { name: { $regex: search, $options: 'i' } }
+                ];
+            }
+            const students = await User.find(filter)
+                .select('studentId name isBanned tokenIssuedAfter createdAt')
+                .sort({ createdAt: -1 })
+                .limit(200);
+            return reply.code(200).send({ success: true, data: students });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch students' });
+        }
+    });
+
+    // POST /api/superadmin/students — create a new STUDENT
+    fastify.post('/students', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const bcrypt = require('bcryptjs');
+            const { studentId, name, password } = request.body;
+            if (!studentId || !name || !password) {
+                return reply.code(400).send({ error: 'studentId, name, and password are required' });
+            }
+            const exists = await User.findOne({ studentId });
+            if (exists) return reply.code(409).send({ error: 'User with this ID already exists' });
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const student = new User({ studentId, name, password: hashedPassword, role: 'STUDENT' });
+            await student.save();
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: student._id.toString(), label: `${student.studentId} (${student.name})` },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: { _id: student._id, studentId: student.studentId, name: student.name } });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create student' });
+        }
+    });
+
+    // DELETE /api/superadmin/students/:studentId — remove a STUDENT permanently
+    fastify.delete('/students/:studentId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { studentId } = request.params;
+            const student = await User.findOneAndDelete({ _id: studentId, role: 'STUDENT' });
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: studentId, label: `${student.studentId} (${student.name})` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Student removed successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to remove student' });
+        }
+    });
+
+    // PATCH /api/superadmin/students/:studentId/block — toggle block/unblock a STUDENT
+    fastify.patch('/students/:studentId/block', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { studentId } = request.params;
+            const student = await User.findOne({ _id: studentId, role: 'STUDENT' });
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            student.isBanned = !student.isBanned;
+            if (student.isBanned) student.tokenIssuedAfter = new Date();
+            await student.save();
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: studentId, label: `${student.studentId} — ${student.isBanned ? 'BLOCKED' : 'UNBLOCKED'}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, isBanned: student.isBanned });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to toggle block status' });
+        }
+    });
+
+    // PATCH /api/superadmin/students/:studentId/force-logout — invalidate all sessions
+    fastify.patch('/students/:studentId/force-logout', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { studentId } = request.params;
+            const student = await User.findOneAndUpdate(
+                { _id: studentId, role: 'STUDENT' },
+                { tokenIssuedAfter: new Date() },
+                { new: true }
+            );
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: studentId, label: `${student.studentId} — FORCE LOGOUT` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Student has been force logged out' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to force logout student' });
+        }
+    });
+
+    // PATCH /api/superadmin/students/:studentId/reset-password — reset a student's password
+    fastify.patch('/students/:studentId/reset-password', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const bcrypt = require('bcryptjs');
+            const { studentId } = request.params;
+            const { newPassword } = request.body;
+            if (!newPassword || newPassword.length < 6) {
+                return reply.code(400).send({ error: 'New password must be at least 6 characters' });
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            const student = await User.findOneAndUpdate(
+                { _id: studentId, role: 'STUDENT' },
+                { password: hashedPassword, tokenIssuedAfter: new Date() },
+                { new: true }
+            );
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: studentId, label: `${student.studentId} — PASSWORD RESET` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Password reset successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to reset password' });
+        }
+    });
+
 };
+
