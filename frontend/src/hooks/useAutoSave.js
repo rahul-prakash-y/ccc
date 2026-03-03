@@ -4,13 +4,13 @@ import { api } from '../store/authStore';
 /**
  * Custom hook for debounced automatic saving during the active session.
  * 
- * @param {string} code - The current editor code state.
+ * @param {any} data - The current answers or code state.
  * @param {string} roundId - The currently active round ID.
  * @param {number} delayMs - Milliseconds to debounce (default 5000 = 5 seconds)
  * @param {boolean} isLocked - Stops saving if true.
  * @returns {string} The auto-save status (e.g., 'SAVED', 'SAVING', 'ERROR').
  */
-export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => {
+export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false) => {
     const [saveStatus, setSaveStatus] = useState('SAVED'); // 'SAVED' | 'SAVING' | 'ERROR'
     const isFirstRender = useRef(true);
     const syncTimerRef = useRef(null);
@@ -22,10 +22,13 @@ export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => 
 
         try {
             // API call to Express/Fastify backend to silently upsert the draft
-            await api.post(`/rounds/${roundId}/autosave`, { codeContent: content });
+            // If it's an object, we send it as 'answers', otherwise as 'codeContent'
+            const payload = typeof content === 'object' ? { answers: content } : { codeContent: content };
+            await api.post(`/rounds/${roundId}/autosave`, payload);
 
             // Fallback: Persistent Local Storage Draft in case of complete network outtage
-            localStorage.setItem(`draft_${roundId}`, content);
+            const stringified = typeof content === 'object' ? JSON.stringify(content) : content;
+            localStorage.setItem(`draft_${roundId}`, stringified);
 
             // Artificial delay for UI feedback
             await new Promise(resolve => setTimeout(resolve, 600));
@@ -52,14 +55,12 @@ export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => 
             clearTimeout(syncTimerRef.current);
         }
 
-        setSaveStatus('PENDING'); // Visual clue it will save soon
-
         syncTimerRef.current = setTimeout(() => {
-            performSave(code);
+            performSave(data);
         }, delayMs);
 
         return () => clearTimeout(syncTimerRef.current);
-    }, [code, delayMs, isLocked, performSave]);
+    }, [data, delayMs, isLocked, performSave]);
 
     const statusToReturn = isLocked ? 'LOCKED' : saveStatus;
 

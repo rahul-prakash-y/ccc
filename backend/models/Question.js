@@ -44,6 +44,24 @@ const questionSchema = new mongoose.Schema({
     order: {
         type: Number,
         default: 0
+    },
+    type: {
+        type: String,
+        enum: ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN'],
+        default: 'CODE'
+    },
+    category: {
+        type: String,
+        enum: ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL'],
+        default: 'GENERAL'
+    },
+    options: {
+        type: [String], // For MCQs
+        default: []
+    },
+    correctAnswer: {
+        type: String, // For automated grading (MCQs, etc)
+        default: ''
     }
 }, {
     timestamps: true

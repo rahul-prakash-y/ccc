@@ -13,7 +13,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
-            const { name, description, durationMinutes } = request.body;
+            const { name, description, durationMinutes, type } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
 
@@ -22,7 +22,8 @@ module.exports = async function (fastify, opts) {
                 description: description || '',
                 durationMinutes: durationMinutes || 60,
                 status: 'LOCKED',
-                isOtpActive: false
+                isOtpActive: false,
+                type: type || 'GENERAL'
             });
 
             await round.save();
@@ -118,7 +119,11 @@ module.exports = async function (fastify, opts) {
     fastify.post('/questions/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
-            const { title, description, inputFormat, outputFormat, sampleInput, sampleOutput, difficulty, points, order } = request.body;
+            const {
+                title, description, inputFormat, outputFormat,
+                sampleInput, sampleOutput, difficulty, points,
+                order, type, category, options, correctAnswer
+            } = request.body;
 
             if (!title || !description) {
                 return reply.code(400).send({ error: 'Title and description are required' });
@@ -136,7 +141,11 @@ module.exports = async function (fastify, opts) {
                 sampleOutput: sampleOutput || '',
                 difficulty: difficulty || 'MEDIUM',
                 points: points || 10,
-                order: order || 0
+                order: order || 0,
+                type: type || 'CODE',
+                category: category || 'GENERAL',
+                options: options || [],
+                correctAnswer: correctAnswer || ''
             });
 
             await question.save();

@@ -172,7 +172,11 @@ module.exports = async function (fastify, opts) {
             // Successful Submission
             submission.status = 'SUBMITTED';
             submission.endTime = now;
-            if (codeContent) submission.codeContent = codeContent;
+            if (answers) {
+                submission.codeContent = typeof answers === 'object' ? JSON.stringify(answers) : answers;
+            } else if (codeContent) {
+                submission.codeContent = codeContent;
+            }
             if (pdfUrl) submission.pdfUrl = pdfUrl;
 
             await submission.save();
@@ -193,6 +197,88 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to submit round' });
+        }
+    });
+
+    /**
+     * 4. Get Round Questions for Student (GET /api/rounds/:roundId/questions)
+     * Auth: Must use the authenticate hook (Student).
+     */
+    fastify.get('/:roundId/questions', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const studentId = request.user.userId;
+
+        try {
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const submission = await Submission.findOne({ student: studentId, round: roundId });
+            if (!submission || (submission.status !== 'IN_PROGRESS' && submission.status !== 'SUBMITTED')) {
+                return reply.code(403).send({ error: 'Access denied. You must start the round first.' });
+            }
+
+            const Question = require('../models/Question');
+            const questions = await Question.find({ round: roundId }).sort({ order: 1 });
+
+            return reply.code(200).send({
+                success: true,
+                data: {
+                    round: {
+                        name: round.name,
+                        type: round.type,
+                        durationMinutes: round.durationMinutes,
+                        status: round.status
+                    },
+                    questions: questions.map(q => ({
+                        _id: q._id,
+                        title: q.title,
+                        description: q.description,
+                        inputFormat: q.inputFormat,
+                        outputFormat: q.outputFormat,
+                        sampleInput: q.sampleInput,
+                        sampleOutput: q.sampleOutput,
+                        difficulty: q.difficulty,
+                        points: q.points,
+                        type: q.type,
+                        category: q.category,
+                        options: q.options // Only sent if MCQ, but safe to include
+                    }))
+                }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch round questions' });
+        }
+    });
+
+    /**
+     * 5. Auto-Save Draft (POST /api/rounds/:roundId/autosave)
+     * Auth: Must use the authenticate hook (Student).
+     */
+    fastify.post('/:roundId/autosave', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const { codeContent, answers } = request.body;
+        const studentId = request.user.userId;
+
+        try {
+            const submission = await Submission.findOne({ student: studentId, round: roundId });
+            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+
+            if (submission.status !== 'IN_PROGRESS') {
+                return reply.code(403).send({ error: 'Cannot autosave for a completed session' });
+            }
+
+            if (answers) {
+                submission.codeContent = typeof answers === 'object' ? JSON.stringify(answers) : answers;
+            } else if (codeContent !== undefined) {
+                submission.codeContent = codeContent;
+            }
+
+            await submission.save();
+            return reply.code(200).send({ success: true });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to autosave' });
         }
     });
 };

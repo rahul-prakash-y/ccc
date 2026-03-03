@@ -33,6 +33,11 @@ const roundSchema = new mongoose.Schema({
     isOtpActive: {
         type: Boolean,
         default: false
+    },
+    type: {
+        type: String,
+        enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL'],
+        default: 'GENERAL'
     }
 }, {
     timestamps: true

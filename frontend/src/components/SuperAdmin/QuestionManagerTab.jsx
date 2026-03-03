@@ -20,6 +20,10 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         difficulty: question?.difficulty || 'MEDIUM',
         points: question?.points || 10,
         order: question?.order || 0,
+        type: question?.type || 'CODE',
+        category: question?.category || 'GENERAL',
+        options: question?.options || [],
+        correctAnswer: question?.correctAnswer || '',
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -38,6 +42,15 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
             setSaving(false);
         }
     };
+
+    const handleOptionChange = (index, value) => {
+        const newOptions = [...form.options];
+        newOptions[index] = value;
+        setForm({ ...form, options: newOptions });
+    };
+
+    const addOption = () => setForm({ ...form, options: [...form.options, ''] });
+    const removeOption = (index) => setForm({ ...form, options: form.options.filter((_, i) => i !== index) });
 
     const field = (label, key, type = 'text', rows = null) => (
         <div>
@@ -74,16 +87,72 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Question Type</label>
+                            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            >
+                                <option value="CODE">Programming / Code</option>
+                                <option value="MCQ">Multiple Choice (MCQ)</option>
+                                <option value="DEBUG">Bug Fix / Debug</option>
+                                <option value="FILL_BLANKS">Fill in Blanks</option>
+                                <option value="EXPLAIN">Short Answer / Explain</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Category</label>
+                            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            >
+                                <option value="GENERAL">General</option>
+                                <option value="SQL">SQL</option>
+                                <option value="HTML">HTML</option>
+                                <option value="CSS">CSS</option>
+                                <option value="UI_UX">UI/UX</option>
+                            </select>
+                        </div>
+                    </div>
+
                     {field('Title *', 'title')}
-                    {field('Description *', 'description', 'text', 4)}
-                    <div className="grid grid-cols-2 gap-4">
-                        {field('Input Format', 'inputFormat', 'text', 2)}
-                        {field('Output Format', 'outputFormat', 'text', 2)}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        {field('Sample Input', 'sampleInput', 'text', 2)}
-                        {field('Sample Output', 'sampleOutput', 'text', 2)}
-                    </div>
+                    {field('Description / Question Text *', 'description', 'text', 4)}
+
+                    {form.type === 'MCQ' && (
+                        <div className="space-y-3 p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-bold text-violet-700 uppercase tracking-widest">Options</label>
+                                <button type="button" onClick={addOption} className="text-xs bg-violet-600 text-white px-3 py-1 rounded-lg font-bold">Add Option</button>
+                            </div>
+                            {form.options.map((opt, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={opt}
+                                        onChange={e => handleOptionChange(i, e.target.value)}
+                                        placeholder={`Option ${i + 1}`}
+                                        className="flex-1 bg-white border border-violet-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                                    />
+                                    <button type="button" onClick={() => removeOption(i)} className="text-red-500 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                </div>
+                            ))}
+                            {field('Correct Answer (Exactly as matching an option)', 'correctAnswer')}
+                        </div>
+                    )}
+
+                    {form.type !== 'MCQ' && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                {field('Input Format', 'inputFormat', 'text', 2)}
+                                {field('Output Format', 'outputFormat', 'text', 2)}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                {field('Sample Input', 'sampleInput', 'text', 2)}
+                                {field('Sample Output', 'sampleOutput', 'text', 2)}
+                            </div>
+                            {form.type !== 'CODE' && field('Correct Answer / Expected Output', 'correctAnswer', 'text', 2)}
+                        </>
+                    )}
+
                     <div className="grid grid-cols-3 gap-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Difficulty</label>
@@ -248,17 +317,42 @@ const QuestionManagerTab = ({ rounds }) => {
                                     className="border-t border-gray-100 overflow-hidden"
                                 >
                                     <div className="p-4 space-y-3 text-sm text-gray-600">
+                                        <div className="flex gap-4">
+                                            <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Type</p><p className="font-bold text-violet-600">{q.type}</p></div>
+                                            <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Category</p><p className="font-bold text-gray-700">{q.category}</p></div>
+                                        </div>
                                         <p className="leading-relaxed whitespace-pre-wrap">{q.description}</p>
-                                        {(q.inputFormat || q.outputFormat) && (
+
+                                        {q.type === 'MCQ' && q.options?.length > 0 && (
+                                            <div className="bg-violet-50 p-3 rounded-xl border border-violet-100">
+                                                <p className="text-xs font-bold text-violet-700 uppercase mb-2">Options</p>
+                                                <ul className="space-y-1">
+                                                    {q.options.map((opt, i) => (
+                                                        <li key={i} className={`flex items-center gap-2 ${opt === q.correctAnswer ? 'text-emerald-600 font-bold' : ''}`}>
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-violet-300" />
+                                                            {opt} {opt === q.correctAnswer && '(Correct)'}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {q.type !== 'MCQ' && (q.inputFormat || q.outputFormat) && (
                                             <div className="grid grid-cols-2 gap-4">
                                                 {q.inputFormat && <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Input Format</p><p>{q.inputFormat}</p></div>}
                                                 {q.outputFormat && <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Output Format</p><p>{q.outputFormat}</p></div>}
                                             </div>
                                         )}
-                                        {(q.sampleInput || q.sampleOutput) && (
+                                        {q.type !== 'MCQ' && (q.sampleInput || q.sampleOutput) && (
                                             <div className="grid grid-cols-2 gap-4">
                                                 {q.sampleInput && <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Sample Input</p><pre className="bg-gray-50 rounded-lg p-2 font-mono text-xs text-emerald-700">{q.sampleInput}</pre></div>}
                                                 {q.sampleOutput && <div><p className="text-xs font-bold text-gray-400 uppercase mb-1">Sample Output</p><pre className="bg-gray-50 rounded-lg p-2 font-mono text-xs text-indigo-600">{q.sampleOutput}</pre></div>}
+                                            </div>
+                                        )}
+                                        {q.correctAnswer && q.type !== 'MCQ' && (
+                                            <div className="border-t border-gray-100 pt-3">
+                                                <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Correct / Expected Answer</p>
+                                                <p className="font-mono bg-emerald-50 text-emerald-700 p-2 rounded-lg text-xs">{q.correctAnswer}</p>
                                             </div>
                                         )}
                                     </div>

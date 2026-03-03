@@ -10,7 +10,7 @@ const LiveOpsTab = () => {
     const [projectorRound, setProjectorRound] = useState(null);
     const [busy, setBusy] = useState({});
     const [showAddModal, setShowAddModal] = useState(false);
-    const [newRound, setNewRound] = useState({ name: '', durationMinutes: 60 });
+    const [newRound, setNewRound] = useState({ name: '', durationMinutes: 60, type: 'GENERAL' });
     const [adding, setAdding] = useState(false);
 
     // Universal confirmation modal state
@@ -104,7 +104,7 @@ const LiveOpsTab = () => {
         try {
             await api.post(`${API}/rounds`, newRound);
             setShowAddModal(false);
-            setNewRound({ name: '', durationMinutes: 60 });
+            setNewRound({ name: '', durationMinutes: 60, type: 'GENERAL' });
             fetchRounds();
         } catch (err) {
             console.error(err);
@@ -253,6 +253,21 @@ const LiveOpsTab = () => {
                                         value={newRound.durationMinutes}
                                         onChange={e => setNewRound({ ...newRound, durationMinutes: Number(e.target.value) })}
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Test Type</label>
+                                    <select
+                                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none bg-white"
+                                        value={newRound.type}
+                                        onChange={e => setNewRound({ ...newRound, type: e.target.value })}
+                                    >
+                                        <option value="GENERAL">General Challenge</option>
+                                        <option value="SQL_CONTEST">SQL Contest</option>
+                                        <option value="HTML_CSS_QUIZ">HTML & CSS Quiz</option>
+                                        <option value="UI_UX_CHALLENGE">UI/UX Challenge</option>
+                                        <option value="HTML_CSS_DEBUG">HTML/CSS Debug Challenge</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
+                                    </select>
                                 </div>
                                 <div className="pt-2 flex gap-3">
                                     <button
