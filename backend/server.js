@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 // Configure CORS for Frontend Interaction
 fastify.register(require('@fastify/cors'), {
     origin: process.env.FRONTEND_URL || '*', // Update in production to explicit domain
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true
 });
 

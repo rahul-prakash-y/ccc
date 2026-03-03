@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, BookOpen, ClipboardList, LogOut, Activity, UserCog, Users } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ShieldCheck, BookOpen, ClipboardList, LogOut, Activity, UserCog, Users, PlayCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { API, authHeader } from './constants';
+
+import LiveOpsTab from './LiveOpsTab';
 
 import ActivityLogsTab from './ActivityLogsTab';
 import StudentManagerTab from './StudentManagerTab';
@@ -11,6 +13,7 @@ import AuditLogsTab from './AuditLogsTab';
 import QuestionManagerTab from './QuestionManagerTab';
 
 const TABS = [
+    { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
     { id: 'activity', label: 'Activity Logs', icon: Activity },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'admins', label: 'Admins', icon: UserCog },
@@ -20,7 +23,7 @@ const TABS = [
 
 const SuperAdminDashboard = () => {
     const { user, logout } = useAuth();
-    const [activeTab, setActiveTab] = useState('activity');
+    const [activeTab, setActiveTab] = useState('liveops');
     const [rounds, setRounds] = useState([]);
 
     const fetchRounds = useCallback(async () => {
@@ -33,7 +36,10 @@ const SuperAdminDashboard = () => {
         }
     }, []);
 
-    useEffect(() => { fetchRounds(); }, [fetchRounds]);
+    useEffect(() => {
+        fetchRounds();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -57,20 +63,22 @@ const SuperAdminDashboard = () => {
                     </button>
                 </div>
 
-                {/* Tab navigation */}
                 <nav className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto pb-0">
-                    {TABS.map(({ id, label, icon: Icon }) => (
-                        <button
-                            key={id}
-                            onClick={() => setActiveTab(id)}
-                            className={`flex items-center gap-2 px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === id
+                    {TABS.map((tab) => {
+                        const IconComponent = tab.icon;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
                                     ? 'border-violet-600 text-violet-700'
                                     : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                                }`}
-                        >
-                            <Icon size={15} /> {label}
-                        </button>
-                    ))}
+                                    }`}
+                            >
+                                <IconComponent size={15} /> {tab.label}
+                            </button>
+                        );
+                    })}
                 </nav>
             </header>
 
@@ -84,6 +92,7 @@ const SuperAdminDashboard = () => {
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.15 }}
                     >
+                        {activeTab === 'liveops' && <LiveOpsTab />}
                         {activeTab === 'activity' && <ActivityLogsTab />}
                         {activeTab === 'students' && <StudentManagerTab />}
                         {activeTab === 'admins' && <AdminManagerTab />}

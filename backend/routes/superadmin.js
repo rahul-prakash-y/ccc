@@ -8,6 +8,40 @@ const { logActivity } = require('../utils/logger');
 module.exports = async function (fastify, opts) {
 
     /**
+     * POST /api/superadmin/rounds
+     * Super Admin can create new Rounds/Tests dynamically
+     */
+    fastify.post('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { name, description, durationMinutes } = request.body;
+
+            if (!name) return reply.code(400).send({ error: 'Round name is required' });
+
+            const round = new Round({
+                name,
+                description: description || '',
+                durationMinutes: durationMinutes || 60,
+                status: 'LOCKED',
+                isOtpActive: false
+            });
+
+            await round.save();
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: round._id, label: round.name },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create round' });
+        }
+    });
+
+    /**
      * 1. GET /api/superadmin/audit-logs
      * Returns all submissions across all rounds, enriched with student + round info.
      */
@@ -54,7 +88,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
-            const rounds = await Round.find({}).select('name status').sort({ createdAt: 1 });
+            const rounds = await Round.find({}).sort({ createdAt: 1 });
             return reply.code(200).send({ success: true, data: rounds });
         } catch (error) {
             fastify.log.error(error);
@@ -481,5 +515,94 @@ module.exports = async function (fastify, opts) {
         }
     });
 
-};
+    /**
+     * POST /api/superadmin/rounds/:roundId/generate-otp
+     * Allows SuperAdmin to generate Start/End OTPs and unlock a round.
+     */
+    fastify.post('/rounds/:roundId/generate-otp', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+        try {
+            const crypto = require('crypto');
+            const startOtp = crypto.randomInt(100000, 999999).toString();
+            const endOtp = crypto.randomInt(100000, 999999).toString();
 
+            const round = await Round.findByIdAndUpdate(
+                roundId,
+                { startOtp, endOtp, status: 'WAITING_FOR_OTP', isOtpActive: true },
+                { new: true }
+            );
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            await logActivity({
+                action: 'OTP_GENERATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: round.name },
+                ip: request.ip
+            });
+            return reply.send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate OTPs' });
+        }
+    });
+
+    /**
+     * PATCH /api/superadmin/rounds/:roundId/status
+     * Allows SuperAdmin to Force End a round, pause, etc.
+     */
+    fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const { status, isOtpActive, durationMinutes } = request.body;
+
+        try {
+            const updates = {};
+            if (status) updates.status = status;
+            if (isOtpActive !== undefined) updates.isOtpActive = isOtpActive;
+            if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
+
+            const round = await Round.findByIdAndUpdate(roundId, updates, { new: true });
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: round.name },
+                ip: request.ip
+            });
+            return reply.send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update round status' });
+        }
+    });
+    /**
+     * DELETE /api/superadmin/rounds/:roundId
+     * Deletes a round and its associated questions/submissions.
+     */
+    fastify.delete('/rounds/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+        try {
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Delete associated questions and submissions to maintain integrity
+            await Question.deleteMany({ round: roundId });
+            await Submission.deleteMany({ round: roundId });
+
+            await Round.findByIdAndDelete(roundId);
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: round.name },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, message: 'Round and its data deleted successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete round' });
+        }
+    });
+
+};

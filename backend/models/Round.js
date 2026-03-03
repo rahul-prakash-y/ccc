@@ -4,7 +4,7 @@ const roundSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        enum: ['SQL Contest', 'HTML/CSS Quiz', 'UI/UX Challenge', 'Debug Challenge', 'Mini Hackathon']
+        trim: true
     },
     description: {
         type: String
