@@ -36,10 +36,12 @@ const StudentDashboard = () => {
     }, [fetchRounds]);
 
     const handleRoundClick = (round) => {
-        if (round.status === 'WAITING_FOR_OTP') {
+        // If it's a RUNNING round BUT the student hasn't legally started it yet (no submission), 
+        // they MUST go through the OTP gate to initialize their timer/session.
+        if (round.status === 'WAITING_FOR_OTP' || (round.status === 'RUNNING' && !round.mySubmissionStatus)) {
             setSelectedRound(round);
             setIsOtpOpen(true);
-        } else if (round.status === 'RUNNING') {
+        } else if (round.status === 'RUNNING' || round.mySubmissionStatus === 'IN_PROGRESS') {
             navigate(`/arena/${round._id}`);
         }
     };

@@ -1,6 +1,8 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Round = require('../models/Round');
 const Submission = require('../models/Submission');
+const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
 
 // Helper to generate a secure 6-digit OTP
@@ -9,6 +11,30 @@ const generateOtp = () => {
 };
 
 module.exports = async function (fastify, opts) {
+    /**
+     * 0. List All Rounds (GET /api/rounds)
+     * Auth: Must use the authenticate hook (Student).
+     */
+    fastify.get('/', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const rounds = await Round.find({}).sort({ createdAt: -1 }).lean();
+            const studentId = request.user.userId;
+
+            // Enrich rounds with the student's submission status
+            const enrichedRounds = await Promise.all(rounds.map(async (round) => {
+                const submission = await Submission.findOne({ student: studentId, round: round._id }).select('status');
+                return {
+                    ...round,
+                    mySubmissionStatus: submission ? submission.status : null
+                };
+            }));
+
+            return reply.code(200).send({ success: true, data: enrichedRounds });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch rounds' });
+        }
+    });
 
     /**
      * 1. Admin OTP Generation (POST /api/rounds/:roundId/generate-otp)
@@ -131,7 +157,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/:roundId/submit', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { endOtp, codeContent, pdfUrl } = request.body;
+        const { endOtp, codeContent, pdfUrl, answers } = request.body;
         const studentId = request.user.userId;
 
         if (!endOtp) {
@@ -201,6 +227,77 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * 7. Report Anti-Cheat Violation (POST /api/rounds/:roundId/report-cheat)
+     * Auth: Student
+     */
+    fastify.post('/:roundId/report-cheat', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const { type, count } = request.body;
+        const userId = request.user.userId;
+
+        if (!mongoose.Types.ObjectId.isValid(roundId)) {
+            return reply.code(400).send({ error: 'Invalid Round ID' });
+        }
+
+        try {
+            const submission = await Submission.findOne({ student: userId, round: roundId });
+            if (!submission) return reply.code(404).send({ error: 'Submission session not found' });
+
+            const user = await User.findById(userId);
+            if (!user) return reply.code(404).send({ error: 'User not found' });
+
+            if (type === 'TAB_SWITCH') {
+                submission.tabSwitches = Math.max(submission.tabSwitches, count || 0);
+            } else if (type === 'CHEAT_FLAG') {
+                submission.cheatFlags += 1;
+            }
+
+            let shouldBan = false;
+            let reason = '';
+
+            // Using >= 1 for immediate disqualification as requested
+            if (submission.tabSwitches >= 1) {
+                shouldBan = true;
+                reason = 'Anti-cheat threshold (Tab Switch) exceeded.';
+            } else if (submission.cheatFlags >= 1) {
+                shouldBan = true;
+                reason = 'Anti-cheat threshold (Copy-Paste detected) exceeded.';
+            }
+
+            if (shouldBan) {
+                user.isBanned = true;
+                user.banReason = reason;
+                user.tokenIssuedAfter = new Date(); // Invalidate current session
+                submission.status = 'DISQUALIFIED';
+                submission.disqualificationReason = reason;
+                await user.save();
+            }
+
+            await submission.save();
+
+            // Log the violation
+            await logActivity({
+                action: 'CHEAT_DETECTED',
+                performedBy: { userId, studentId: request.user.studentId, name: request.user.name, role: request.user.role },
+                target: { type: 'Submission', id: submission._id, label: `${type} flag recorded` },
+                metadata: { type, count: submission.tabSwitches, flags: submission.cheatFlags, banned: shouldBan },
+                ip: request.ip
+            });
+
+            return reply.send({
+                success: true,
+                banned: shouldBan,
+                reason,
+                tabSwitches: submission.tabSwitches,
+                cheatFlags: submission.cheatFlags
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Security protocol failed to record violation' });
+        }
+    });
+
+    /**
      * 4. Get Round Questions for Student (GET /api/rounds/:roundId/questions)
      * Auth: Must use the authenticate hook (Student).
      */
@@ -208,13 +305,26 @@ module.exports = async function (fastify, opts) {
         const { roundId } = request.params;
         const studentId = request.user.userId;
 
+        if (!mongoose.Types.ObjectId.isValid(roundId)) {
+            return reply.code(404).send({ error: 'Invalid Round ID format' });
+        }
+
         try {
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             const submission = await Submission.findOne({ student: studentId, round: roundId });
-            if (!submission || (submission.status !== 'IN_PROGRESS' && submission.status !== 'SUBMITTED')) {
+
+            if (!submission) {
                 return reply.code(403).send({ error: 'Access denied. You must start the round first.' });
+            }
+
+            if (submission.status === 'DISQUALIFIED') {
+                return reply.code(403).send({ error: 'ACCESS REVOKED: You have been disqualified for violating security protocols.' });
+            }
+
+            if (submission.status !== 'IN_PROGRESS' && submission.status !== 'SUBMITTED') {
+                return reply.code(403).send({ error: 'Access denied. Round session is not active.' });
             }
 
             const Question = require('../models/Question');
@@ -227,7 +337,8 @@ module.exports = async function (fastify, opts) {
                         name: round.name,
                         type: round.type,
                         durationMinutes: round.durationMinutes,
-                        status: round.status
+                        status: round.status,
+                        startTime: submission.startTime
                     },
                     questions: questions.map(q => ({
                         _id: q._id,
@@ -265,7 +376,8 @@ module.exports = async function (fastify, opts) {
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
             if (submission.status !== 'IN_PROGRESS') {
-                return reply.code(403).send({ error: 'Cannot autosave for a completed session' });
+                // Silently return success to avoid noisy frontend errors once the session is done
+                return reply.code(200).send({ success: true, message: 'Session no longer active' });
             }
 
             if (answers) {

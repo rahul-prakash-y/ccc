@@ -30,7 +30,7 @@ const LiveOpsTab = () => {
         return () => clearInterval(t);
     }, [fetchRounds]);
 
-    const act = async (roundId, action, reqMethod = 'PATCH', body = null) => {
+    const act = async (roundId, action, reqMethod = 'PATCH', body = {}) => {
         setBusy(b => ({ ...b, [`${roundId}-${action}`]: true }));
         try {
             const path = action === 'generate-otp' ? `/rounds/${roundId}/generate-otp` : `/rounds/${roundId}/status`;

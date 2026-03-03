@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion,  } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
     ChevronDown, AlertTriangle, Eye, EyeOff
@@ -211,8 +211,13 @@ const QuestionManagerTab = ({ rounds }) => {
     }, []);
 
     useEffect(() => {
-        if (selectedRound) fetchQuestions(selectedRound);
-        else setQuestions([]);
+        if (selectedRound) {
+            fetchQuestions(selectedRound);
+            const t = setInterval(() => fetchQuestions(selectedRound), 15000);
+            return () => clearInterval(t);
+        } else {
+            setQuestions([]);
+        }
     }, [selectedRound, fetchQuestions]);
 
     const handleDelete = async (questionId) => {

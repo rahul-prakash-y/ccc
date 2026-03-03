@@ -11,7 +11,7 @@ module.exports = async function (fastify, opts) {
      * POST /api/superadmin/rounds
      * Super Admin can create new Rounds/Tests dynamically
      */
-    fastify.post('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { name, description, durationMinutes, type } = request.body;
 
@@ -87,7 +87,7 @@ module.exports = async function (fastify, opts) {
      * 2. GET /api/superadmin/rounds
      * Returns all rounds (for filter dropdown in audit logs and question manager).
      */
-    fastify.get('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.get('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const rounds = await Round.find({}).sort({ createdAt: 1 });
             return reply.code(200).send({ success: true, data: rounds });
@@ -101,7 +101,7 @@ module.exports = async function (fastify, opts) {
      * 3. GET /api/superadmin/questions/:roundId
      * Returns all questions for a given round.
      */
-    fastify.get('/questions/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.get('/questions/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
             const questions = await Question.find({ round: roundId }).sort({ order: 1, createdAt: 1 });
@@ -116,7 +116,7 @@ module.exports = async function (fastify, opts) {
      * 4. POST /api/superadmin/questions/:roundId
      * Create a new question for a round.
      */
-    fastify.post('/questions/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/questions/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
             const {
@@ -169,7 +169,7 @@ module.exports = async function (fastify, opts) {
      * 5. PUT /api/superadmin/questions/:questionId
      * Update an existing question.
      */
-    fastify.put('/questions/:questionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.put('/questions/:questionId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { questionId } = request.params;
             const updates = request.body;
@@ -195,7 +195,7 @@ module.exports = async function (fastify, opts) {
      * 6. DELETE /api/superadmin/questions/:questionId
      * Delete a question permanently.
      */
-    fastify.delete('/questions/:questionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.delete('/questions/:questionId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { questionId } = request.params;
             const question = await Question.findByIdAndDelete(questionId);
@@ -371,7 +371,7 @@ module.exports = async function (fastify, opts) {
      */
 
     // GET /api/superadmin/students — list all STUDENT users
-    fastify.get('/students', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.get('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { search = '' } = request.query;
             const filter = { role: 'STUDENT' };
@@ -393,7 +393,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // POST /api/superadmin/students — create a new STUDENT
-    fastify.post('/students', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const bcrypt = require('bcryptjs');
             const { studentId, name, password } = request.body;
@@ -422,7 +422,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // DELETE /api/superadmin/students/:studentId — remove a STUDENT permanently
-    fastify.delete('/students/:studentId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.delete('/students/:studentId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { studentId } = request.params;
             const student = await User.findOneAndDelete({ _id: studentId, role: 'STUDENT' });
@@ -443,14 +443,22 @@ module.exports = async function (fastify, opts) {
     });
 
     // PATCH /api/superadmin/students/:studentId/block — toggle block/unblock a STUDENT
-    fastify.patch('/students/:studentId/block', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/students/:studentId/block', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { studentId } = request.params;
             const student = await User.findOne({ _id: studentId, role: 'STUDENT' });
             if (!student) return reply.code(404).send({ error: 'Student not found' });
 
             student.isBanned = !student.isBanned;
-            if (student.isBanned) student.tokenIssuedAfter = new Date();
+
+            if (student.isBanned) {
+                student.tokenIssuedAfter = new Date(); // Invalidate current session
+            } else {
+                // Clear ban details when unblocking
+                student.banReason = null;
+                student.tokenIssuedAfter = null;
+            }
+
             await student.save();
 
             await logActivity({
@@ -467,8 +475,35 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * DELETE /api/superadmin/submissions/:submissionId
+     * Permanently deletes a student's submission record.
+     */
+    fastify.delete('/submissions/:submissionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { submissionId } = request.params;
+            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+
+            await Submission.findByIdAndDelete(submissionId);
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Submission', id: submissionId, label: `Deleted submission for ${submission.student?.name} (${submission.student?.studentId})` },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, message: 'Submission deleted successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete submission' });
+        }
+    });
+
+
     // PATCH /api/superadmin/students/:studentId/force-logout — invalidate all sessions
-    fastify.patch('/students/:studentId/force-logout', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/students/:studentId/force-logout', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { studentId } = request.params;
             const student = await User.findOneAndUpdate(
@@ -493,7 +528,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // PATCH /api/superadmin/students/:studentId/reset-password — reset a student's password
-    fastify.patch('/students/:studentId/reset-password', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/students/:studentId/reset-password', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const bcrypt = require('bcryptjs');
             const { studentId } = request.params;
@@ -528,7 +563,7 @@ module.exports = async function (fastify, opts) {
      * POST /api/superadmin/rounds/:roundId/generate-otp
      * Allows SuperAdmin to generate Start/End OTPs and unlock a round.
      */
-    fastify.post('/rounds/:roundId/generate-otp', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/rounds/:roundId/generate-otp', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
         try {
             const crypto = require('crypto');
@@ -559,7 +594,7 @@ module.exports = async function (fastify, opts) {
      * PATCH /api/superadmin/rounds/:roundId/status
      * Allows SuperAdmin to Force End a round, pause, etc.
      */
-    fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
         const { status, isOtpActive, durationMinutes } = request.body;
 
@@ -588,7 +623,7 @@ module.exports = async function (fastify, opts) {
      * DELETE /api/superadmin/rounds/:roundId
      * Deletes a round and its associated questions/submissions.
      */
-    fastify.delete('/rounds/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.delete('/rounds/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
         try {
             const round = await Round.findById(roundId);

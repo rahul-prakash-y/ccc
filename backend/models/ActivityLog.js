@@ -4,7 +4,7 @@ const activityLogSchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        enum: ['LOGIN', 'LOGOUT', 'CREATED', 'UPDATED', 'DELETED', 'BULK_UPLOAD', 'OTP_GENERATED', 'ROUND_STARTED', 'ROUND_SUBMITTED', 'DISQUALIFIED']
+        enum: ['LOGIN', 'LOGOUT', 'CREATED', 'UPDATED', 'DELETED', 'BULK_UPLOAD', 'OTP_GENERATED', 'ROUND_STARTED', 'ROUND_SUBMITTED', 'DISQUALIFIED', 'CHEAT_DETECTED']
     },
     performedBy: {
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

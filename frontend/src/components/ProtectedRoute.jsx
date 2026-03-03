@@ -14,6 +14,10 @@ const ProtectedRoute = () => {
         return <Navigate to="/login" replace />;
     }
 
+    if (user.isBanned) {
+        return <Navigate to="/blocked" replace />;
+    }
+
     return <Outlet />;
 };
 

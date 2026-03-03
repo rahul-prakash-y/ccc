@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence,motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search
@@ -139,7 +139,11 @@ const StudentManagerTab = () => {
         finally { setLoading(false); }
     }, []);
 
-    useEffect(() => { fetchStudents(); }, [fetchStudents]);
+    useEffect(() => {
+        fetchStudents();
+        const t = setInterval(() => fetchStudents(search), 15000);
+        return () => clearInterval(t);
+    }, [fetchStudents, search]);
 
     // debounced search
     useEffect(() => {

@@ -1,31 +1,87 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Split from 'react-split';
 import Editor from '@monaco-editor/react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Terminal, Lock, Send, AlertTriangle, Save, Loader2,
     ChevronLeft, ChevronRight, CheckCircle, Circle, HelpCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../store/authStore';
+import { useNavigate, useParams } from 'react-router-dom';
+import { api, useAuthStore } from '../store/authStore';
 
 import useContestTimer from '../hooks/useContestTimer';
 import useAutoSave from '../hooks/useAutoSave';
 
-const MOCK_START_TIME = new Date(Date.now() - 5000).toISOString();
-
-const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
+const CodeArena = ({ language = 'javascript' }) => {
+    const { roundId } = useParams();
     const navigate = useNavigate();
+    const { updateUser } = useAuthStore();
     const [questions, setQuestions] = useState([]);
     const [activeIdx, setActiveIdx] = useState(0);
     const [answers, setAnswers] = useState({});
     const [roundInfo, setRoundInfo] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isBanned, setIsBanned] = useState(false);
+    const [banReason, setBanReason] = useState('');
 
     const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
     const [endOtp, setEndOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(null);
+
+    const handleCheatDetected = useCallback(async (cheatEvent) => {
+        try {
+            const res = await api.post(`/rounds/${roundId}/report-cheat`, cheatEvent);
+            if (res.data.banned) {
+                setIsBanned(true);
+                setBanReason(res.data.reason);
+                updateUser({ isBanned: true, banReason: res.data.reason });
+            }
+        } catch (err) {
+            console.error("Anti-cheat sync failed:", err);
+            if (err.response?.status === 403) {
+                const reason = err.response?.data?.error || "Access Revoked";
+                setIsBanned(true);
+                setBanReason(reason);
+                updateUser({ isBanned: true, banReason: reason });
+            }
+        }
+    }, [roundId, updateUser]);
+
+    useEffect(() => {
+        const handlePaste = (e) => {
+            e.preventDefault();
+            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+        };
+
+        const blockAction = (e) => {
+            e.preventDefault();
+        };
+
+        const handleKeyDown = (e) => {
+            // Block Ctrl+C, Ctrl+V, Ctrl+X (and Meta for Mac)
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
+                e.preventDefault();
+                if (e.key === 'v') {
+                    handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+                }
+            }
+        };
+
+        window.addEventListener('paste', handlePaste, { capture: true });
+        window.addEventListener('copy', blockAction, { capture: true });
+        window.addEventListener('cut', blockAction, { capture: true });
+        window.addEventListener('contextmenu', blockAction, { capture: true });
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+
+        return () => {
+            window.removeEventListener('paste', handlePaste, { capture: true });
+            window.removeEventListener('copy', blockAction, { capture: true });
+            window.removeEventListener('cut', blockAction, { capture: true });
+            window.removeEventListener('contextmenu', blockAction, { capture: true });
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        };
+    }, [handleCheatDetected]);
 
     useEffect(() => {
         const load = async () => {
@@ -38,7 +94,7 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
                 if (draft) {
                     try {
                         setAnswers(JSON.parse(draft));
-                    } catch (_) {
+                    } catch {
                         // Recover legacy string draft into first question if it exists
                         const initialAnswers = {};
                         res.data.data.questions.forEach((q, i) => initialAnswers[q._id] = i === 0 ? draft : '');
@@ -51,6 +107,10 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
                 }
             } catch (err) {
                 console.error(err);
+                if (err.response?.status === 403) {
+                    setIsBanned(true);
+                    setBanReason(err.response?.data?.reason || "Disqualified (Platform Security)");
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -60,16 +120,16 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
 
     const { formattedTime, isTimeUp, isDangerZone } = useContestTimer({
         roundId,
-        serverStartTime: MOCK_START_TIME,
+        serverStartTime: roundInfo?.startTime,
         durationMinutes: roundInfo?.durationMinutes || 60,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        onCheatDetected: (flags) => console.log('Cheat detected:', flags)
+        onCheatDetected: handleCheatDetected
     });
 
-    const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp);
+    const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned);
 
     const handleAnswerChange = (questionId, value) => {
-        if (!isTimeUp) {
+        if (!isTimeUp && !isBanned) {
             setAnswers(prev => ({ ...prev, [questionId]: value }));
         }
     };
@@ -91,6 +151,30 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
             setIsSubmitting(false);
         }
     };
+
+    if (isBanned) {
+        return (
+            <div className="h-screen w-full bg-[#1a0505] flex flex-col items-center justify-center text-red-500 gap-6 font-mono p-10 text-center">
+                <AlertTriangle size={80} className="animate-pulse" />
+                <h1 className="text-4xl font-black tracking-tighter uppercase">Protocol Violation</h1>
+                <div className="max-w-md space-y-4">
+                    <p className="text-red-200/60 text-sm leading-relaxed">
+                        The Anti-Cheat system has detected unauthorized activity. Access to this session and the platform has been revoked.
+                    </p>
+                    <div className="bg-black/40 border border-red-500/30 p-4 rounded-xl">
+                        <span className="text-xs uppercase tracking-widest text-red-500">Reason</span>
+                        <p className="text-gray-200 font-bold mt-1">{banReason}</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => navigate('/dashboard')}
+                    className="mt-8 px-8 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-500 transition-colors shadow-lg shadow-red-900/50"
+                >
+                    EXIT ARENA
+                </button>
+            </div>
+        );
+    }
 
     if (isLoading) {
         return (
@@ -207,8 +291,8 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
                         >
                             <div className="flex items-center gap-2 mb-2">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest border
-                                    ${q.difficulty === 'HARD' ? 'bg-red-950/30 text-red-500 border-red-500/30' :
-                                        q.difficulty === 'MEDIUM' ? 'bg-orange-950/30 text-orange-500 border-orange-500/30' :
+                                    ${q?.difficulty === 'HARD' ? 'bg-red-950/30 text-red-500 border-red-500/30' :
+                                        q?.difficulty === 'MEDIUM' ? 'bg-orange-950/30 text-orange-500 border-orange-500/30' :
                                             'bg-emerald-950/30 text-emerald-500 border-emerald-500/30'}`}>
                                     {q.difficulty}
                                 </span>
