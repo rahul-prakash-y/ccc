@@ -1,0 +1,23 @@
+{
+  "name": "ccc",
+  "version": "1.0.0",
+  "description": "A high-performance Hackathon & Competitive Coding Management Platform designed for scale.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run start --prefix backend",
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://rahul-prakash-y@github.com/rahul-prakash-y/ccc.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rahul-prakash-y/ccc/issues"
+  },
+  "homepage": "https://github.com/rahul-prakash-y/ccc#readme"
+}
