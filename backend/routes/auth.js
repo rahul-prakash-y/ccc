@@ -112,4 +112,27 @@ module.exports = async function (fastify, opts) {
             return reply.code(400).send({ error: 'User creation failed', details: error.message });
         }
     });
+    /**
+     * ROUTE: POST /api/auth/logout
+     * Authenticated route. Allows tracing when a user actively clicks 'Logout'.
+     */
+    fastify.post('/logout', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const user = request.user;
+
+            // Log LOGOUT event
+            await logActivity({
+                action: 'LOGOUT',
+                performedBy: { userId: user.userId, studentId: user.studentId, name: user.name, role: user.role },
+                target: { type: 'User', id: user.userId, label: `${user.studentId} — ${user.role}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Logged out successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to log out cleanly' });
+        }
+    });
+
 };

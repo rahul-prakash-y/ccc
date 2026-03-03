@@ -470,7 +470,7 @@ module.exports = async function (fastify, opts) {
             if (!student) return reply.code(404).send({ error: 'Student not found' });
 
             await logActivity({
-                action: 'UPDATED',
+                action: 'LOGOUT',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
                 target: { type: 'Student', id: studentId, label: `${student.studentId} — FORCE LOGOUT` },
                 ip: request.ip

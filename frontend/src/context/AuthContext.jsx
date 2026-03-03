@@ -1,27 +1,24 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useContext } from 'react';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    // Initialize context by checking storage for our Fastify JWT payload
-    useEffect(() => {
+    const [user, setUser] = useState(() => {
         const token = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
-
         if (token && storedUser) {
             try {
-                setUser(JSON.parse(storedUser));
+                return JSON.parse(storedUser);
             } catch (error) {
                 console.error("Failed to parse stored user data:", error);
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
             }
         }
-        setLoading(false);
-    }, []);
+        return null;
+    });
+
+    // State initialized synchronously above
 
     const login = (token, userData) => {
         localStorage.setItem('token', token);
@@ -29,20 +26,23 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
     };
 
-    const logout = () => {
+    const logout = async () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            try {
+                // Ping backend to trace the logout (fire and forget to prevent UI lockup)
+                fetch('http://localhost:5000/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).catch(() => { });
+            } catch (err) {
+                console.error('Logout request failed:', err);
+            }
+        }
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
     };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-cyan-500 font-mono">
-                <div className="w-8 h-8 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
-                <span className="ml-4 tracking-widest">INITIALIZING_SYSTEM...</span>
-            </div>
-        );
-    }
 
     return (
         <AuthContext.Provider value={{ user, login, logout }}>
