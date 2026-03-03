@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, Clock, Play, CheckCircle } from 'lucide-react';
-import OtpGate from './OtpGate'; // Added import for OTP Gate
+import { Lock, Clock, Play, CheckCircle, LogOut } from 'lucide-react';
+import OtpGate from './OtpGate';
+import { useAuth } from '../context/AuthContext';
 
 const roundsData = [
     { id: 1, name: 'SQL Contest', status: 'COMPLETED' },
@@ -12,13 +13,14 @@ const roundsData = [
 ];
 
 const statusConfig = {
-    LOCKED: { icon: Lock, color: 'text-gray-500', bg: 'bg-gray-800/50', border: 'border-gray-700', label: 'Locked 🔒' },
-    WAITING_FOR_OTP: { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-900/20', border: 'border-yellow-500/50', label: 'Waiting for OTP' },
-    RUNNING: { icon: Play, color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-500/50', label: 'Running' },
-    COMPLETED: { icon: CheckCircle, color: 'text-blue-400', bg: 'bg-blue-900/20', border: 'border-blue-500/50', label: 'Submitted' }
+    LOCKED: { icon: Lock, color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-500 border-gray-200', label: 'Locked' },
+    WAITING_FOR_OTP: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Waiting for OTP' },
+    RUNNING: { icon: Play, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Running' },
+    COMPLETED: { icon: CheckCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200', badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Submitted' }
 };
 
 const StudentDashboard = () => {
+    const { user, logout } = useAuth();
     const [rounds, setRounds] = useState(roundsData);
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
@@ -28,93 +30,91 @@ const StudentDashboard = () => {
             setSelectedRound(round);
             setIsOtpOpen(true);
         } else if (round.status === 'RUNNING') {
-            console.log(`Resume ${round.name}... navigating to environment.`);
+            console.log(`Resume ${round.name}...`);
         }
     };
 
     const handleOtpUnlock = () => {
-        // In a real app, this updates backend status to RUNNING
         setRounds(rounds.map(r => r.id === selectedRound.id ? { ...r, status: 'RUNNING' } : r));
         setIsOtpOpen(false);
         setSelectedRound(null);
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0a0f] text-white p-8 font-sans selection:bg-purple-500/30 relative">
-            <div className="max-w-6xl mx-auto space-y-12">
-                {/* Header Section */}
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800 pb-8">
+        <div className="min-h-screen bg-slate-50 text-gray-900 font-sans">
+            {/* Top nav bar */}
+            <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+                <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
                     <div>
-                        <motion.h1
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 via-purple-500 to-emerald-400 bg-clip-text text-transparent"
+                        <h1 className="text-xl font-black text-gray-900 tracking-tight">Code Circuit Club</h1>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">Welcome back, {user?.name || 'Participant'}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-xs font-bold text-emerald-700 tracking-wide">LIVE</span>
+                        </div>
+                        <button onClick={logout}
+                            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors hover:bg-gray-50"
                         >
-                            Code Circuit Club
-                        </motion.h1>
-                        <p className="mt-2 text-gray-400 font-medium">Welcome back, Hacker. System online.</p>
+                            <LogOut size={14} /> Logout
+                        </button>
                     </div>
-                    <div className="mt-4 md:mt-0 flex items-center space-x-4 bg-gray-900/50 px-6 py-3 rounded-full border border-gray-800 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
-                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-sm font-semibold text-emerald-400 tracking-wider">SECURE CONNECTION</span>
-                    </div>
-                </header>
+                </div>
+            </header>
 
-                {/* Rounds Grid */}
-                <section>
-                    <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                        <span className="text-cyan-400">{'//'}</span> Mission Objectives
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {rounds.map((round, index) => {
-                            const config = statusConfig[round.status];
-                            const Icon = config.icon;
-                            const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
+            <main className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-1">Mission Objectives</h2>
+                    <p className="text-gray-400 text-sm">Click on an available round to enter.</p>
+                </div>
 
-                            return (
-                                <motion.div
-                                    key={round.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                    whileHover={isInteractable ? { scale: 1.02, y: -5 } : {}}
-                                    onClick={() => handleRoundClick(round)}
-                                    className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl border border-white/5 transition-all duration-300
-                    ${config.bg} ${isInteractable ? 'cursor-pointer hover:border-white/20 hover:shadow-2xl' : 'opacity-80'}
-                  `}
-                                >
-                                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {rounds.map((round, index) => {
+                        const config = statusConfig[round.status];
+                        const Icon = config.icon;
+                        const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
 
-                                    <div className="flex justify-between items-start mb-8">
-                                        <div className={`p-3 rounded-xl bg-black/40 backdrop-blur-md border border-white/5 ${config.color}`}>
-                                            <Icon size={24} />
-                                        </div>
-                                        <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${config.border} ${config.color} bg-black/40`}>
-                                            {config.label}
-                                        </div>
+                        return (
+                            <motion.div
+                                key={round.id}
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.07 }}
+                                whileHover={isInteractable ? { y: -4, scale: 1.015 } : {}}
+                                onClick={() => handleRoundClick(round)}
+                                className={`relative overflow-hidden rounded-2xl p-6 border-2 transition-all duration-300 bg-white
+                                    ${config.border}
+                                    ${isInteractable ? 'cursor-pointer hover:shadow-lg' : 'opacity-70 cursor-default'}
+                                `}
+                            >
+                                {/* Top accent line matching status */}
+                                <div className={`absolute top-0 left-0 right-0 h-1 ${round.status === 'RUNNING' ? 'bg-emerald-400' :
+                                        round.status === 'WAITING_FOR_OTP' ? 'bg-amber-400' :
+                                            round.status === 'COMPLETED' ? 'bg-indigo-400' : 'bg-gray-200'
+                                    }`} />
+
+                                <div className="flex justify-between items-start mb-6 mt-1">
+                                    <div className={`p-2.5 rounded-xl border ${config.bg} ${config.border} ${config.color}`}>
+                                        <Icon size={20} />
                                     </div>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${config.badge}`}>
+                                        {config.label}
+                                    </span>
+                                </div>
 
-                                    <div>
-                                        <h3 className="text-xl font-bold text-gray-100 mb-2">{round.name}</h3>
-                                        <p className="text-sm text-gray-400 truncate">
-                                            {round.status === 'LOCKED' ? 'Access Denied. Await Admin Signal.' :
-                                                round.status === 'COMPLETED' ? 'Mission Accomplished.' :
-                                                    'System Ready. Proceed with caution.'}
-                                        </p>
-                                    </div>
-
-                                    {round.status === 'RUNNING' && (
-                                        <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl"></div>
-                                    )}
-                                    {round.status === 'WAITING_FOR_OTP' && (
-                                        <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-yellow-500/20 rounded-full blur-3xl"></div>
-                                    )}
-                                </motion.div>
-                            );
-                        })}
-                    </div>
-                </section>
-            </div>
+                                <h3 className="text-lg font-bold text-gray-800 mb-1">{round.name}</h3>
+                                <p className="text-sm text-gray-400">
+                                    {round.status === 'LOCKED' ? 'Access denied. Await admin signal.' :
+                                        round.status === 'COMPLETED' ? 'Mission accomplished.' :
+                                            round.status === 'WAITING_FOR_OTP' ? 'Enter OTP to unlock.' :
+                                                'In progress — click to resume.'}
+                                </p>
+                            </motion.div>
+                        );
+                    })}
+                </div>
+            </main>
 
             <OtpGate
                 isOpen={isOtpOpen}

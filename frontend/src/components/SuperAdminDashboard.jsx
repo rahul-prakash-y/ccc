@@ -284,8 +284,8 @@ const AdminManagerTab = () => {
                                 <button onClick={() => handleBlock(admin)}
                                     disabled={busy[`${admin._id}-block`]}
                                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-colors disabled:opacity-50 ${admin.isBanned
-                                            ? 'border-emerald-900/50 text-emerald-400 hover:bg-emerald-950/40'
-                                            : 'border-red-900/50 text-red-400 hover:bg-red-950/40'
+                                        ? 'border-emerald-900/50 text-emerald-400 hover:bg-emerald-950/40'
+                                        : 'border-red-900/50 text-red-400 hover:bg-red-950/40'
                                         }`}
                                 >
                                     {busy[`${admin._id}-block`] ? <Loader2 size={13} className="animate-spin" /> : admin.isBanned ? <UserCheck size={13} /> : <UserX size={13} />}
@@ -850,8 +850,9 @@ const SuperAdminDashboard = () => {
 
     const tabs = [
         { id: 'activity', label: 'Activity Logs', icon: Activity },
+        { id: 'admins', label: 'Admins', icon: UserCog },
         { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
-        { id: 'questions', label: 'Question Manager', icon: BookOpen },
+        { id: 'questions', label: 'Questions', icon: BookOpen },
     ];
 
     return (
@@ -899,6 +900,7 @@ const SuperAdminDashboard = () => {
                 <AnimatePresence mode="wait">
                     <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15 }}>
                         {activeTab === 'activity' && <ActivityLogsTab />}
+                        {activeTab === 'admins' && <AdminManagerTab />}
                         {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
                         {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                     </motion.div>

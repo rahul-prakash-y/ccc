@@ -1,0 +1,326 @@
+const Question = require('../models/Question');
+const Submission = require('../models/Submission');
+const Round = require('../models/Round');
+const ActivityLog = require('../models/ActivityLog');
+const User = require('../models/User');
+const { logActivity } = require('../utils/logger');
+
+module.exports = async function (fastify, opts) {
+
+    /**
+     * 1. GET /api/superadmin/audit-logs
+     * Returns all submissions across all rounds, enriched with student + round info.
+     */
+    fastify.get('/audit-logs', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.query;
+            const filter = roundId ? { round: roundId } : {};
+
+            const submissions = await Submission.find(filter)
+                .populate('student', 'studentId name role')
+                .populate('round', 'name status')
+                .sort({ createdAt: -1 });
+
+            return reply.code(200).send({ success: true, data: submissions });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch audit logs' });
+        }
+    });
+
+    /**
+     * 1b. GET /api/superadmin/activity-logs
+     * Returns platform activity logs (login, logout, create, update, delete, etc.)
+     */
+    fastify.get('/activity-logs', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { action, limit = 200 } = request.query;
+            const filter = action ? { action } : {};
+
+            const logs = await ActivityLog.find(filter)
+                .sort({ createdAt: -1 })
+                .limit(Number(limit));
+
+            return reply.code(200).send({ success: true, data: logs });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch activity logs' });
+        }
+    });
+
+    /**
+     * 2. GET /api/superadmin/rounds
+     * Returns all rounds (for filter dropdown in audit logs and question manager).
+     */
+    fastify.get('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const rounds = await Round.find({}).select('name status').sort({ createdAt: 1 });
+            return reply.code(200).send({ success: true, data: rounds });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch rounds' });
+        }
+    });
+
+    /**
+     * 3. GET /api/superadmin/questions/:roundId
+     * Returns all questions for a given round.
+     */
+    fastify.get('/questions/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const questions = await Question.find({ round: roundId }).sort({ order: 1, createdAt: 1 });
+            return reply.code(200).send({ success: true, data: questions });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch questions' });
+        }
+    });
+
+    /**
+     * 4. POST /api/superadmin/questions/:roundId
+     * Create a new question for a round.
+     */
+    fastify.post('/questions/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const { title, description, inputFormat, outputFormat, sampleInput, sampleOutput, difficulty, points, order } = request.body;
+
+            if (!title || !description) {
+                return reply.code(400).send({ error: 'Title and description are required' });
+            }
+
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const question = new Question({
+                round: roundId,
+                title, description,
+                inputFormat: inputFormat || '',
+                outputFormat: outputFormat || '',
+                sampleInput: sampleInput || '',
+                sampleOutput: sampleOutput || '',
+                difficulty: difficulty || 'MEDIUM',
+                points: points || 10,
+                order: order || 0
+            });
+
+            await question.save();
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', id: question._id.toString(), label: question.title },
+                metadata: { roundId },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: question });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create question' });
+        }
+    });
+
+    /**
+     * 5. PUT /api/superadmin/questions/:questionId
+     * Update an existing question.
+     */
+    fastify.put('/questions/:questionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { questionId } = request.params;
+            const updates = request.body;
+
+            const question = await Question.findByIdAndUpdate(questionId, updates, { new: true, runValidators: true });
+            if (!question) return reply.code(404).send({ error: 'Question not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', id: questionId, label: question.title },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: question });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update question' });
+        }
+    });
+
+    /**
+     * 6. DELETE /api/superadmin/questions/:questionId
+     * Delete a question permanently.
+     */
+    fastify.delete('/questions/:questionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { questionId } = request.params;
+            const question = await Question.findByIdAndDelete(questionId);
+            if (!question) return reply.code(404).send({ error: 'Question not found' });
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', id: questionId, label: question.title },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Question deleted successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete question' });
+        }
+    });
+
+    /**
+     * ADMIN MANAGEMENT — all routes below are SUPER_ADMIN only
+     */
+
+    // GET /api/superadmin/admins — list all ADMIN users
+    fastify.get('/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const admins = await User.find({ role: 'ADMIN' })
+                .select('studentId name isBanned tokenIssuedAfter createdAt')
+                .sort({ createdAt: -1 });
+            return reply.code(200).send({ success: true, data: admins });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch admins' });
+        }
+    });
+
+    // POST /api/superadmin/admins — create a new ADMIN
+    fastify.post('/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const bcrypt = require('bcryptjs');
+            const { studentId, name, password } = request.body;
+            if (!studentId || !name || !password) {
+                return reply.code(400).send({ error: 'studentId, name, and password are required' });
+            }
+            const exists = await User.findOne({ studentId });
+            if (exists) return reply.code(409).send({ error: 'User with this ID already exists' });
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const admin = new User({ studentId, name, password: hashedPassword, role: 'ADMIN' });
+            await admin.save();
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', id: admin._id.toString(), label: `${admin.studentId} (${admin.name})` },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: { _id: admin._id, studentId: admin.studentId, name: admin.name } });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create admin' });
+        }
+    });
+
+    // DELETE /api/superadmin/admins/:adminId — remove an ADMIN permanently
+    fastify.delete('/admins/:adminId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { adminId } = request.params;
+            const admin = await User.findOneAndDelete({ _id: adminId, role: 'ADMIN' });
+            if (!admin) return reply.code(404).send({ error: 'Admin not found' });
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', id: adminId, label: `${admin.studentId} (${admin.name})` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Admin removed successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to remove admin' });
+        }
+    });
+
+    // PATCH /api/superadmin/admins/:adminId/block — toggle block/unblock an ADMIN
+    fastify.patch('/admins/:adminId/block', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { adminId } = request.params;
+            const admin = await User.findOne({ _id: adminId, role: 'ADMIN' });
+            if (!admin) return reply.code(404).send({ error: 'Admin not found' });
+
+            admin.isBanned = !admin.isBanned;
+            // Force logout on block
+            if (admin.isBanned) admin.tokenIssuedAfter = new Date();
+            await admin.save();
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', id: adminId, label: `${admin.studentId} — ${admin.isBanned ? 'BLOCKED' : 'UNBLOCKED'}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, isBanned: admin.isBanned });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to toggle block status' });
+        }
+    });
+
+    // PATCH /api/superadmin/admins/:adminId/force-logout — invalidate all existing sessions
+    fastify.patch('/admins/:adminId/force-logout', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { adminId } = request.params;
+            const admin = await User.findOneAndUpdate(
+                { _id: adminId, role: 'ADMIN' },
+                { tokenIssuedAfter: new Date() },
+                { new: true }
+            );
+            if (!admin) return reply.code(404).send({ error: 'Admin not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', id: adminId, label: `${admin.studentId} — FORCE LOGOUT` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Admin has been force logged out' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to force logout admin' });
+        }
+    });
+
+    // PATCH /api/superadmin/admins/:adminId/reset-password — set a new password for an admin
+    fastify.patch('/admins/:adminId/reset-password', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const bcrypt = require('bcryptjs');
+            const { adminId } = request.params;
+            const { newPassword } = request.body;
+            if (!newPassword || newPassword.length < 6) {
+                return reply.code(400).send({ error: 'New password must be at least 6 characters' });
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            // Also force logout so the old password sessions die
+            const admin = await User.findOneAndUpdate(
+                { _id: adminId, role: 'ADMIN' },
+                { password: hashedPassword, tokenIssuedAfter: new Date() },
+                { new: true }
+            );
+            if (!admin) return reply.code(404).send({ error: 'Admin not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', id: adminId, label: `${admin.studentId} — PASSWORD RESET` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Password reset successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to reset password' });
+        }
+    });
+
+};

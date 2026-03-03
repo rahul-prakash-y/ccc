@@ -1,0 +1,46 @@
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+  studentId: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    index: true
+  },
+  password: {
+    type: String,
+    required: true,
+    // Note: should be hashed before saving
+  },
+  role: {
+    type: String,
+    enum: ['STUDENT', 'ADMIN', 'SUPER_ADMIN'],
+    default: 'STUDENT'
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  registeredRoundIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Round'
+  }],
+  // Track anti-cheat flags globally across the platform
+  isBanned: {
+    type: Boolean,
+    default: false
+  },
+  banReason: {
+    type: String
+  },
+  // Force logout support: any token issued before this timestamp is rejected
+  tokenIssuedAfter: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model('User', userSchema);
