@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Users, Server, CheckSquare, Power, Clock, StopCircle, RefreshCw, Eye, UploadCloud, FileSpreadsheet, Loader2, LogOut } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 import { useDropzone } from 'react-dropzone';
 
 const MOCK_ROUNDS = [
@@ -13,7 +13,7 @@ const MOCK_ROUNDS = [
 ];
 
 const AdminDashboard = () => {
-    const { user, logout } = useAuth();
+    const { user, logout } = useAuthStore();
     const [rounds, setRounds] = useState(MOCK_ROUNDS);
     const [isProcessing, setIsProcessing] = useState(false);
     const [projectorRound, setProjectorRound] = useState(null);
@@ -155,9 +155,9 @@ const AdminDashboard = () => {
                             <div
                                 {...getRootProps()}
                                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${uploadStatus === 'ERROR' ? 'border-red-300 bg-red-50' :
-                                        uploadStatus === 'SUCCESS' ? 'border-emerald-300 bg-emerald-50' :
-                                            isDragActive ? 'border-indigo-400 bg-indigo-50' :
-                                                'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/50'
+                                    uploadStatus === 'SUCCESS' ? 'border-emerald-300 bg-emerald-50' :
+                                        isDragActive ? 'border-indigo-400 bg-indigo-50' :
+                                            'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/50'
                                     }`}
                             >
                                 <input {...getInputProps()} />

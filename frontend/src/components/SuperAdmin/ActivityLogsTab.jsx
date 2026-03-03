@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Search, Loader2, ChevronDown, RefreshCw } from 'lucide-react';
-import { API, authHeader, ACTION_STYLES, ALL_ACTIONS } from './constants';
+import { api } from '../../store/authStore';
+import { API, ACTION_STYLES, ALL_ACTIONS } from './constants';
 
 const ActivityLogsTab = () => {
     const [logs, setLogs] = useState([]);
@@ -14,9 +15,8 @@ const ActivityLogsTab = () => {
             const url = actionFilter
                 ? `${API}/activity-logs?action=${actionFilter}`
                 : `${API}/activity-logs`;
-            const res = await fetch(url, { headers: authHeader() });
-            const data = await res.json();
-            setLogs(data.data || []);
+            const res = await api.get(url);
+            setLogs(res.data.data || []);
         } catch (e) {
             console.error(e);
         } finally {

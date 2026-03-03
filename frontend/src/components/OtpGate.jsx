@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { api } from '../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Terminal, ArrowRight } from 'lucide-react';
 
-const OtpGate = ({ roundName, isOpen, onClose, onUnlock }) => {
+const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
     const [otp, setOtp] = useState('');
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -18,23 +19,10 @@ const OtpGate = ({ roundName, isOpen, onClose, onUnlock }) => {
         setError(null);
 
         try {
-            // API call to Fastify backend
-            // const response = await fetch('/api/rounds/verify-otp', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({ roundName, otp })
-            // });
-            // const data = await response.json();
-            // if (data.success) { onUnlock(); } else { throw new Error(data.message) }
-
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            if (otp === '123456') { // Mock secure validation
-                onUnlock();
-            } else {
-                throw new Error('Access Denied: Invalid Authorization Code');
-            }
+            const res = await api.post(`/rounds/${roundId}/start`, { startOtp: otp });
+            onUnlock(res.data);
         } catch (err) {
-            setError(err.message || 'System Error. Try again.');
+            setError(err.response?.data?.error || 'System Error. Try again.');
         } finally {
             setLoading(false);
         }

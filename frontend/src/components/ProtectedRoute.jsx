@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * ProtectedRoute Wrapper
@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
  * inside the React Context, they are instantly booted to the /login screen.
  */
 const ProtectedRoute = () => {
-    const { user } = useAuth();
+    const { user } = useAuthStore();
 
     if (!user) {
         return <Navigate to="/login" replace />;

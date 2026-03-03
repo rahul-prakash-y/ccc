@@ -4,7 +4,8 @@ import {
     Plus, Loader2, AlertTriangle, X, Check,
     UserCog, UserX, UserCheck, KeyRound, LogIn, Trash2
 } from 'lucide-react';
-import { API, authHeader } from './constants';
+import { api } from '../../store/authStore';
+import { API } from './constants';
 
 // ─── Add Admin Modal ───────────────────────────────────────────────────────────
 const AddAdminModal = ({ onClose, onCreated }) => {
@@ -16,11 +17,9 @@ const AddAdminModal = ({ onClose, onCreated }) => {
         e.preventDefault();
         setSaving(true); setError('');
         try {
-            const res = await fetch(`${API}/admins`, { method: 'POST', headers: authHeader(), body: JSON.stringify(form) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-            onCreated(data.data);
-        } catch (e) { setError(e.message); }
+            const res = await api.post(`${API}/admins`, form);
+            onCreated(res.data.data);
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setSaving(false); }
     };
 
@@ -70,13 +69,9 @@ const ResetPasswordModal = ({ admin, onClose }) => {
         e.preventDefault();
         setSaving(true); setError('');
         try {
-            const res = await fetch(`${API}/admins/${admin._id}/reset-password`, {
-                method: 'PATCH', headers: authHeader(), body: JSON.stringify({ newPassword: password })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            await api.patch(`${API}/admins/${admin._id}/reset-password`, { newPassword: password });
             setDone(true);
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setSaving(false); }
     };
 
@@ -136,9 +131,8 @@ const AdminManagerTab = () => {
     const fetchAdmins = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API}/admins`, { headers: authHeader() });
-            const data = await res.json();
-            setAdmins(data.data || []);
+            const res = await api.get(`${API}/admins`);
+            setAdmins(res.data.data || []);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     }, []);
@@ -149,16 +143,14 @@ const AdminManagerTab = () => {
         setBusy(b => ({ ...b, [`${adminId}-${path}`]: true }));
         setError('');
         try {
-            const res = await fetch(`${API}/admins/${adminId}/${path}`, {
+            const res = await api({
                 method,
-                headers: authHeader(),
-                body: body ? JSON.stringify(body) : undefined,
+                url: `${API}/admins/${adminId}/${path}`,
+                data: body
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Action failed');
-            return data;
+            return res.data;
         } catch (e) {
-            setError(e.message);
+            setError(e.response?.data?.error || 'Action failed');
             return null;
         } finally {
             setBusy(b => ({ ...b, [`${adminId}-${path}`]: false }));
@@ -182,11 +174,9 @@ const AdminManagerTab = () => {
         if (!window.confirm(`Permanently remove admin ${admin.studentId}? This cannot be undone.`)) return;
         setBusy(b => ({ ...b, [`${admin._id}-delete`]: true }));
         try {
-            const res = await fetch(`${API}/admins/${admin._id}`, { method: 'DELETE', headers: authHeader() });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            await api.delete(`${API}/admins/${admin._id}`);
             setAdmins(prev => prev.filter(a => a._id !== admin._id));
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setBusy(b => ({ ...b, [`${admin._id}-delete`]: false })); }
     };
 
@@ -252,8 +242,8 @@ const AdminManagerTab = () => {
                                 <button onClick={() => handleBlock(admin)}
                                     disabled={busy[`${admin._id}-block`]}
                                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-colors disabled:opacity-50 ${admin.isBanned
-                                            ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                                            : 'border-red-200 text-red-600 hover:bg-red-50'
+                                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                        : 'border-red-200 text-red-600 hover:bg-red-50'
                                         }`}
                                 >
                                     {busy[`${admin._id}-block`] ? <Loader2 size={13} className="animate-spin" /> : admin.isBanned ? <UserCheck size={13} /> : <UserX size={13} />}

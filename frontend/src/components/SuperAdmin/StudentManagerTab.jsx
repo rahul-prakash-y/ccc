@@ -4,7 +4,8 @@ import {
     Plus, Loader2, AlertTriangle, X, Check,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search
 } from 'lucide-react';
-import { API, authHeader } from './constants';
+import { api } from '../../store/authStore';
+import { API } from './constants';
 
 // ─── Add Student Modal ─────────────────────────────────────────────────────────
 const AddStudentModal = ({ onClose, onCreated }) => {
@@ -16,11 +17,9 @@ const AddStudentModal = ({ onClose, onCreated }) => {
         e.preventDefault();
         setSaving(true); setError('');
         try {
-            const res = await fetch(`${API}/students`, { method: 'POST', headers: authHeader(), body: JSON.stringify(form) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-            onCreated(data.data);
-        } catch (e) { setError(e.message); }
+            const res = await api.post(`${API}/students`, form);
+            onCreated(res.data.data);
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setSaving(false); }
     };
 
@@ -70,13 +69,9 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
         e.preventDefault();
         setSaving(true); setError('');
         try {
-            const res = await fetch(`${API}/students/${student._id}/reset-password`, {
-                method: 'PATCH', headers: authHeader(), body: JSON.stringify({ newPassword: password })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            await api.patch(`${API}/students/${student._id}/reset-password`, { newPassword: password });
             setDone(true);
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setSaving(false); }
     };
 
@@ -138,9 +133,8 @@ const StudentManagerTab = () => {
         setLoading(true);
         try {
             const url = q ? `${API}/students?search=${encodeURIComponent(q)}` : `${API}/students`;
-            const res = await fetch(url, { headers: authHeader() });
-            const data = await res.json();
-            setStudents(data.data || []);
+            const res = await api.get(url);
+            setStudents(res.data.data || []);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     }, []);
@@ -157,16 +151,14 @@ const StudentManagerTab = () => {
         setBusy(b => ({ ...b, [`${studentId}-${path}`]: true }));
         setError('');
         try {
-            const res = await fetch(`${API}/students/${studentId}/${path}`, {
+            const res = await api({
                 method,
-                headers: authHeader(),
-                body: body ? JSON.stringify(body) : undefined,
+                url: `${API}/students/${studentId}/${path}`,
+                data: body
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Action failed');
-            return data;
+            return res.data;
         } catch (e) {
-            setError(e.message);
+            setError(e.response?.data?.error || 'Action failed');
             return null;
         } finally {
             setBusy(b => ({ ...b, [`${studentId}-${path}`]: false }));
@@ -190,11 +182,9 @@ const StudentManagerTab = () => {
         if (!window.confirm(`Permanently remove student ${student.studentId}? This cannot be undone.`)) return;
         setBusy(b => ({ ...b, [`${student._id}-delete`]: true }));
         try {
-            const res = await fetch(`${API}/students/${student._id}`, { method: 'DELETE', headers: authHeader() });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            await api.delete(`${API}/students/${student._id}`);
             setStudents(prev => prev.filter(s => s._id !== student._id));
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e.response?.data?.error || e.message); }
         finally { setBusy(b => ({ ...b, [`${student._id}-delete`]: false })); }
     };
 
@@ -272,8 +262,8 @@ const StudentManagerTab = () => {
                                 <button onClick={() => handleBlock(student)}
                                     disabled={busy[`${student._id}-block`]}
                                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-colors disabled:opacity-50 ${student.isBanned
-                                            ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                                            : 'border-red-200 text-red-600 hover:bg-red-50'
+                                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                        : 'border-red-200 text-red-600 hover:bg-red-50'
                                         }`}
                                 >
                                     {busy[`${student._id}-block`] ? <Loader2 size={13} className="animate-spin" /> : student.isBanned ? <UserCheck size={13} /> : <UserX size={13} />}

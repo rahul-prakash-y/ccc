@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import SuperAdminRoute from './components/SuperAdminRoute';
@@ -12,11 +11,13 @@ import CodeArena from './components/CodeArena';
 import AdminDashboard from './components/AdminDashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 
+import { useAuthStore } from './store/authStore';
+
 /**
  * Handle Login redirection separately if already authenticated
  */
 const PublicRoute = ({ children }) => {
-    const { user } = useAuth();
+    const { user } = useAuthStore();
     if (user) {
         if (user.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
         if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
@@ -26,7 +27,7 @@ const PublicRoute = ({ children }) => {
 };
 
 const RoleFallback = () => {
-    const { user } = useAuth();
+    const { user } = useAuthStore();
     if (user?.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
     if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
     return <Navigate to="/dashboard" replace />;
@@ -73,12 +74,16 @@ const AppRoutes = () => {
 };
 
 function App() {
+    const initialize = useAuthStore(state => state.initialize);
+
+    React.useEffect(() => {
+        initialize();
+    }, [initialize]);
+
     return (
-        <AuthProvider>
-            <Router>
-                <AppRoutes />
-            </Router>
-        </AuthProvider>
+        <Router>
+            <AppRoutes />
+        </Router>
     );
 }
 

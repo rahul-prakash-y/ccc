@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ShieldCheck, BookOpen, ClipboardList, LogOut, Activity, UserCog, Users, PlayCircle } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { API, authHeader } from './constants';
+import { api, useAuthStore } from '../../store/authStore';
+import { API } from './constants';
 
 import LiveOpsTab from './LiveOpsTab';
 
@@ -22,14 +22,14 @@ const TABS = [
 ];
 
 const SuperAdminDashboard = () => {
-    const { user, logout } = useAuth();
+    const { user, logout } = useAuthStore();
     const [activeTab, setActiveTab] = useState('liveops');
     const [rounds, setRounds] = useState([]);
 
     const fetchRounds = useCallback(async () => {
         try {
-            const res = await fetch(`${API}/rounds`, { headers: authHeader() });
-            const data = await res.json();
+            const res = await api.get(`${API}/rounds`);
+            const data = res.data;
             setRounds(data.data || []);
         } catch (e) {
             console.error(e);

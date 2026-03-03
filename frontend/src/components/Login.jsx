@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { motion as motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { useAuthStore, api } from '../store/authStore';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Terminal, Lock, AlertCircle } from 'lucide-react';
 
 const Login = () => {
@@ -10,7 +10,7 @@ const Login = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const { login } = useAuth();
+    const login = useAuthStore(state => state.login);
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
@@ -19,14 +19,8 @@ const Login = () => {
         setError('');
 
         try {
-            const response = await fetch('http://localhost:5000/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ studentId, password }),
-                credentials: 'include',
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Login failed.');
+            const response = await api.post('/auth/login', { studentId, password });
+            const data = response.data;
 
             login(data.token, data.user);
             if (data.user.role === 'SUPER_ADMIN') {
@@ -37,7 +31,7 @@ const Login = () => {
                 navigate('/dashboard', { replace: true });
             }
         } catch (err) {
-            setError(err.message || 'Login failed.');
+            setError(err.response?.data?.error || 'Login failed.');
         } finally {
             setIsLoading(false);
         }

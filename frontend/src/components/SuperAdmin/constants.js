@@ -1,10 +1,6 @@
 // ─── Shared API config ────────────────────────────────────────────────────────
-export const API = 'http://localhost:5000/api/superadmin';
+export const API = '/superadmin';
 
-export const authHeader = () => ({
-    Authorization: `Bearer ${localStorage.getItem('token')}`,
-    'Content-Type': 'application/json',
-});
 
 // ─── Difficulty badge colours (Question Manager) ──────────────────────────────
 export const DIFFICULTY_COLORS = {

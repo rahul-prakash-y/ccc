@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { RefreshCw, PlayCircle, Eye, Loader2, StopCircle, Clock, CheckCircle2, Plus, AlertTriangle, Trash2 } from 'lucide-react';
-import { API, authHeader, STATUS_COLORS } from './constants';
+import { api } from '../../store/authStore';
+import { API, STATUS_COLORS } from './constants';
 
 const LiveOpsTab = () => {
     const [rounds, setRounds] = useState([]);
@@ -17,9 +18,8 @@ const LiveOpsTab = () => {
 
     const fetchRounds = useCallback(async () => {
         try {
-            const res = await fetch(`${API}/rounds`, { headers: authHeader() });
-            const data = await res.json();
-            setRounds(data.data || []);
+            const res = await api.get(`${API}/rounds`);
+            setRounds(res.data.data || []);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     }, []);
@@ -33,23 +33,18 @@ const LiveOpsTab = () => {
     const act = async (roundId, action, reqMethod = 'PATCH', body = null) => {
         setBusy(b => ({ ...b, [`${roundId}-${action}`]: true }));
         try {
-            const url = action === 'generate-otp' ? `${API}/rounds/${roundId}/generate-otp` : `${API}/rounds/${roundId}/status`;
-            const resolvedMethod = action === 'generate-otp' ? 'POST' : reqMethod;
+            const path = action === 'generate-otp' ? `/rounds/${roundId}/generate-otp` : `/rounds/${roundId}/status`;
+            const resolvedMethod = action === 'generate-otp' ? 'post' : reqMethod.toLowerCase();
 
-            const baseHeaders = authHeader();
-            if (!body) delete baseHeaders['Content-Type'];
-
-            const res = await fetch(url, {
+            const res = await api({
                 method: resolvedMethod,
-                headers: baseHeaders,
-                body: body ? JSON.stringify(body) : undefined
+                url: `${API}${path}`,
+                data: body
             });
-            const data = await res.json();
-            if (res.ok) {
-                setRounds(prev => prev.map(r => r._id === roundId ? { ...r, ...data.data } : r));
-                if (projectorRound && projectorRound._id === roundId) {
-                    setProjectorRound({ ...projectorRound, ...data.data }); // update projector if open
-                }
+            const data = res.data;
+            setRounds(prev => prev.map(r => r._id === roundId ? { ...r, ...data.data } : r));
+            if (projectorRound && projectorRound._id === roundId) {
+                setProjectorRound({ ...projectorRound, ...data.data }); // update projector if open
             }
         } catch (e) {
             console.error(e);
@@ -85,16 +80,8 @@ const LiveOpsTab = () => {
             onConfirm: async () => {
                 setBusy(b => ({ ...b, [`${round._id}-delete`]: true }));
                 try {
-                    const reqHeaders = authHeader();
-                    delete reqHeaders['Content-Type'];
-
-                    const res = await fetch(`${API}/rounds/${round._id}`, {
-                        method: 'DELETE',
-                        headers: reqHeaders
-                    });
-                    if (res.ok) {
-                        setRounds(prev => prev.filter(r => r._id !== round._id));
-                    }
+                    await api.delete(`${API}/rounds/${round._id}`);
+                    setRounds(prev => prev.filter(r => r._id !== round._id));
                 } catch (e) { console.error(e); }
                 finally {
                     setBusy(b => ({ ...b, [`${round._id}-delete`]: false }));
@@ -115,16 +102,10 @@ const LiveOpsTab = () => {
         if (!newRound.name.trim()) return;
         setAdding(true);
         try {
-            const res = await fetch(`${API}/rounds`, {
-                method: 'POST',
-                headers: authHeader(),
-                body: JSON.stringify(newRound)
-            });
-            if (res.ok) {
-                setShowAddModal(false);
-                setNewRound({ name: '', durationMinutes: 60 });
-                fetchRounds();
-            }
+            await api.post(`${API}/rounds`, newRound);
+            setShowAddModal(false);
+            setNewRound({ name: '', durationMinutes: 60 });
+            fetchRounds();
         } catch (err) {
             console.error(err);
         } finally {

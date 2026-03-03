@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Search, Loader2, ChevronDown } from 'lucide-react';
-import { API, authHeader, STATUS_COLORS } from './constants';
+import { api } from '../../store/authStore';
+import { API, STATUS_COLORS } from './constants';
 
 const AuditLogsTab = ({ rounds }) => {
     const [logs, setLogs] = useState([]);
@@ -12,9 +13,8 @@ const AuditLogsTab = ({ rounds }) => {
         setLoading(true);
         try {
             const url = roundId ? `${API}/audit-logs?roundId=${roundId}` : `${API}/audit-logs`;
-            const res = await fetch(url, { headers: authHeader() });
-            const data = await res.json();
-            setLogs(data.data || []);
+            const res = await api.get(url);
+            setLogs(res.data.data || []);
         } catch (e) {
             console.error(e);
         } finally {

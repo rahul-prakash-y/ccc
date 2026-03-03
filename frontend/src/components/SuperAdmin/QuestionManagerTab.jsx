@@ -4,7 +4,8 @@ import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
     ChevronDown, AlertTriangle, Eye, EyeOff
 } from 'lucide-react';
-import { API, authHeader, DIFFICULTY_COLORS } from './constants';
+import { api } from '../../store/authStore';
+import { API, DIFFICULTY_COLORS } from './constants';
 
 // ─── Question Form Modal ────────────────────────────────────────────────────────
 const QuestionModal = ({ question, roundId, onClose, onSave }) => {
@@ -28,13 +29,11 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         setSaving(true); setError('');
         try {
             const url = isEdit ? `${API}/questions/${question._id}` : `${API}/questions/${roundId}`;
-            const method = isEdit ? 'PUT' : 'POST';
-            const res = await fetch(url, { method, headers: authHeader(), body: JSON.stringify(form) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Save failed');
-            onSave(data.data);
+            const method = isEdit ? 'put' : 'post';
+            const res = await api({ method, url, data: form });
+            onSave(res.data.data);
         } catch (err) {
-            setError(err.message);
+            setError(err.response?.data?.error || err.message);
         } finally {
             setSaving(false);
         }
@@ -133,9 +132,8 @@ const QuestionManagerTab = ({ rounds }) => {
         if (!roundId) return;
         setLoading(true);
         try {
-            const res = await fetch(`${API}/questions/${roundId}`, { headers: authHeader() });
-            const data = await res.json();
-            setQuestions(data.data || []);
+            const res = await api.get(`${API}/questions/${roundId}`);
+            setQuestions(res.data.data || []);
         } catch (e) {
             console.error(e);
         } finally {
@@ -151,7 +149,7 @@ const QuestionManagerTab = ({ rounds }) => {
     const handleDelete = async (questionId) => {
         if (!window.confirm('Delete this question permanently?')) return;
         try {
-            await fetch(`${API}/questions/${questionId}`, { method: 'DELETE', headers: authHeader() });
+            await api.delete(`${API}/questions/${questionId}`);
             setQuestions(q => q.filter(x => x._id !== questionId));
         } catch (e) {
             console.error(e);

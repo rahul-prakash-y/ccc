@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Split from 'react-split';
 import Editor from '@monaco-editor/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Terminal, Lock, Send, AlertTriangle, Save, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../store/authStore';
 
 import useContestTimer from '../hooks/useContestTimer';
 import useAutoSave from '../hooks/useAutoSave';
@@ -10,14 +12,17 @@ import useAutoSave from '../hooks/useAutoSave';
 const MOCK_START_TIME = new Date(Date.now() - 5000).toISOString(); // 5 seconds ago
 
 const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
-    const [code, setCode] = useState('// Write your solution here...');
+    const navigate = useNavigate();
+    const [code, setCode] = useState(() => {
+        return localStorage.getItem(`draft_${roundId}`) || '// Write your solution here...';
+    });
     const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
     const [endOtp, setEndOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(null);
 
     // Time Limit & Anti-Cheat Hooks
-    const { timeLeft, formattedTime, isTimeUp, isDangerZone } = useContestTimer({
+    const { formattedTime, isTimeUp, isDangerZone } = useContestTimer({
         roundId,
         serverStartTime: MOCK_START_TIME,
         durationMinutes: 60, // 1 hour strict limit
@@ -28,13 +33,7 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
     // Debounced AutoSave Integration
     const { saveStatus } = useAutoSave(code, roundId, 5000, isTimeUp);
 
-    useEffect(() => {
-        // Recover drafts from local storage on load if API doesn't provide one
-        const draft = localStorage.getItem(`draft_${roundId}`);
-        if (draft && draft !== code) {
-            setCode(draft);
-        }
-    }, [roundId]);
+    // Moved draft recovery to useState initializer to prevent cascading renders
 
     const handleTimeUp = () => {
         setIsSubmitModalOpen(true);
@@ -58,28 +57,13 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
         setSubmitError(null);
 
         try {
-            // API call to Fastify backend logic
-            /*
-            const res = await fetch(`/api/rounds/${roundId}/submit`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ...` },
-               body: JSON.stringify({ endOtp, codeContent: code })
-            });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.error);
-            */
-
-            // Mock submit latency
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            if (endOtp !== '999999') {
-                throw new Error('Access Denied: Invalid End Authorization Code');
-            }
+            await api.post(`/rounds/${roundId}/submit`, { endOtp, codeContent: code });
 
             alert("Submission Successful! Return to Dashboard.");
-            window.location.href = '/dashboard';
+            navigate('/dashboard');
 
         } catch (err) {
-            setSubmitError(err.message || 'System Error. Try again.');
+            setSubmitError(err.response?.data?.error || 'System Error. Try again.');
             setIsSubmitting(false);
         }
     };
@@ -113,8 +97,8 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
 
                     {/* Strict Countdown Timer */}
                     <div className={`flex items-center gap-3 px-4 py-2 rounded-lg font-mono text-lg font-bold border ${isTimeUp ? 'bg-red-950/30 border-red-500/50 text-red-400' :
-                            isDangerZone ? 'bg-orange-950/30 border-orange-500/50 text-orange-400 animate-pulse' :
-                                'bg-gray-900 border-gray-700 text-gray-100'
+                        isDangerZone ? 'bg-orange-950/30 border-orange-500/50 text-orange-400 animate-pulse' :
+                            'bg-gray-900 border-gray-700 text-gray-100'
                         }`}>
                         {isTimeUp ? <AlertTriangle size={20} className="animate-bounce" /> : <Lock size={18} className="opacity-50" />}
                         {isTimeUp ? '00:00:00 (LOCKED)' : formattedTime}
@@ -229,7 +213,7 @@ const CodeArena = ({ roundId = 'mock_round_id', language = 'javascript' }) => {
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             className={`relative w-full max-w-md overflow-hidden rounded-2xl bg-[#0d0d14] border shadow-2xl ${isTimeUp ? 'border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.15)]'
-                                    : 'border-cyan-500/30 shadow-[0_0_40px_rgba(6,182,212,0.15)]'
+                                : 'border-cyan-500/30 shadow-[0_0_40px_rgba(6,182,212,0.15)]'
                                 }`}
                         >
                             <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isTimeUp ? 'from-transparent via-red-500 to-transparent' : 'from-transparent via-cyan-400 to-transparent'}`}></div>

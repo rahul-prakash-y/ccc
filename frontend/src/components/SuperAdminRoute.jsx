@@ -1,13 +1,13 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * SuperAdminRoute Wrapper
  * Only allows SUPER_ADMIN role through. All others are redirected.
  */
 const SuperAdminRoute = () => {
-    const { user } = useAuth();
+    const { user } = useAuthStore();
 
     if (!user) {
         return <Navigate to="/login" replace />;

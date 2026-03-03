@@ -1,0 +1,62 @@
+import { create } from 'zustand';
+import axios from 'axios';
+
+// Create a configured axios instance for the application
+export const api = axios.create({
+    baseURL: 'http://localhost:5000/api', // General API base
+});
+
+// Interceptor to auto-inject the Auth token if it exists in Zustand state
+api.interceptors.request.use((config) => {
+    const token = useAuthStore.getState().token;
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+}, (error) => Promise.reject(error));
+
+export const useAuthStore = create((set, get) => ({
+    user: null,
+    token: null,
+    loading: true,
+
+    // Initialization: pull directly from LocalStorage on refresh
+    initialize: () => {
+        const token = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+
+        if (token && storedUser) {
+            try {
+                set({ user: JSON.parse(storedUser), token, loading: false });
+                return;
+            } catch (error) {
+                console.error("Failed to parse stored user data:", error);
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+            }
+        }
+        set({ user: null, token: null, loading: false });
+    },
+
+    login: (token, userData) => {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        set({ user: userData, token });
+    },
+
+    logout: async () => {
+        const { token } = get();
+        if (token) {
+            try {
+                // Ping backend to trace organic logout
+                await api.post('/auth/logout');
+            } catch (err) {
+                console.error('Logout request failed:', err);
+            }
+        }
+
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        set({ user: null, token: null });
+    }
+}));

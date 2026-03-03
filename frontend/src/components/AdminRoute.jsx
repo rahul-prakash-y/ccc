@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * AdminRoute Wrapper
@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
  * Students who try predicting the URL will be booted back to their dashboard.
  */
 const AdminRoute = () => {
-    const { user } = useAuth();
+    const { user } = useAuthStore();
 
     if (!user) {
         return <Navigate to="/login" replace />;

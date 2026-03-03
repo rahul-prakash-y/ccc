@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { api } from '../store/authStore';
 
 /**
  * Custom hook for debounced automatic saving during the active session.
@@ -21,16 +22,7 @@ export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => 
 
         try {
             // API call to Express/Fastify backend to silently upsert the draft
-            /*
-            await fetch(`/api/rounds/${roundId}/autosave`, {
-              method: 'POST',
-              headers: { 
-                 'Content-Type': 'application/json',
-                 'Authorization': `Bearer ${localStorage.getItem('token')}`
-              },
-              body: JSON.stringify({ codeContent: content })
-            });
-            */
+            await api.post(`/rounds/${roundId}/autosave`, { codeContent: content });
 
             // Fallback: Persistent Local Storage Draft in case of complete network outtage
             localStorage.setItem(`draft_${roundId}`, content);
@@ -53,7 +45,6 @@ export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => 
         }
 
         if (isLocked) {
-            setSaveStatus('LOCKED');
             return;
         }
 
@@ -70,7 +61,9 @@ export const useAutoSave = (code, roundId, delayMs = 5000, isLocked = false) => 
         return () => clearTimeout(syncTimerRef.current);
     }, [code, delayMs, isLocked, performSave]);
 
-    return { saveStatus, performSave };
+    const statusToReturn = isLocked ? 'LOCKED' : saveStatus;
+
+    return { saveStatus: statusToReturn, performSave };
 };
 
 export default useAutoSave;

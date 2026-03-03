@@ -1,16 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Clock, Play, CheckCircle, LogOut } from 'lucide-react';
 import OtpGate from './OtpGate';
-import { useAuth } from '../context/AuthContext';
-
-const roundsData = [
-    { id: 1, name: 'SQL Contest', status: 'COMPLETED' },
-    { id: 2, name: 'HTML/CSS Quiz', status: 'RUNNING' },
-    { id: 3, name: 'UI/UX Challenge', status: 'WAITING_FOR_OTP' },
-    { id: 4, name: 'Debug Challenge', status: 'LOCKED' },
-    { id: 5, name: 'Mini Hackathon', status: 'LOCKED' }
-];
+import { useAuthStore, api } from '../store/authStore';
+import { useNavigate } from 'react-router-dom';
 
 const statusConfig = {
     LOCKED: { icon: Lock, color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-500 border-gray-200', label: 'Locked' },
@@ -20,23 +13,42 @@ const statusConfig = {
 };
 
 const StudentDashboard = () => {
-    const { user, logout } = useAuth();
-    const [rounds, setRounds] = useState(roundsData);
+    const navigate = useNavigate();
+    const { user, logout } = useAuthStore();
+    const [rounds, setRounds] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
+
+    const fetchRounds = useCallback(async () => {
+        try {
+            const res = await api.get('/rounds');
+            setRounds(res.data.data || []);
+        } catch (e) {
+            console.error('Failed to fetch rounds:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchRounds();
+    }, [fetchRounds]);
 
     const handleRoundClick = (round) => {
         if (round.status === 'WAITING_FOR_OTP') {
             setSelectedRound(round);
             setIsOtpOpen(true);
         } else if (round.status === 'RUNNING') {
-            console.log(`Resume ${round.name}...`);
+            navigate(`/arena/${round._id}`);
         }
     };
 
     const handleOtpUnlock = () => {
-        setRounds(rounds.map(r => r.id === selectedRound.id ? { ...r, status: 'RUNNING' } : r));
         setIsOtpOpen(false);
+        if (selectedRound) {
+            navigate(`/arena/${selectedRound._id}`);
+        }
         setSelectedRound(null);
     };
 
@@ -66,58 +78,71 @@ const StudentDashboard = () => {
             <main className="max-w-6xl mx-auto px-6 py-10 space-y-8">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-1">Mission Objectives</h2>
-                    <p className="text-gray-400 text-sm">Click on an available round to enter.</p>
+                    <p className="text-gray-400 text-sm">
+                        {loading ? 'Analyzing active environments...' : 'Click on an available round to enter.'}
+                    </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {rounds.map((round, index) => {
-                        const config = statusConfig[round.status];
-                        const Icon = config.icon;
-                        const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                ) : rounds.length === 0 ? (
+                    <div className="text-center py-20 text-gray-400 font-mono border-2 border-dashed border-gray-200 rounded-3xl">
+                        NO ACTIVE ROUNDS FOUND. AWAIT COMMAND.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {rounds.map((round, index) => {
+                            const config = statusConfig[round.status];
+                            const Icon = config.icon;
+                            const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
 
-                        return (
-                            <motion.div
-                                key={round.id}
-                                initial={{ opacity: 0, y: 16 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.07 }}
-                                whileHover={isInteractable ? { y: -4, scale: 1.015 } : {}}
-                                onClick={() => handleRoundClick(round)}
-                                className={`relative overflow-hidden rounded-2xl p-6 border-2 transition-all duration-300 bg-white
+                            return (
+                                <motion.div
+                                    key={round._id}
+                                    initial={{ opacity: 0, y: 16 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.07 }}
+                                    whileHover={isInteractable ? { y: -4, scale: 1.015 } : {}}
+                                    onClick={() => handleRoundClick(round)}
+                                    className={`relative overflow-hidden rounded-2xl p-6 border-2 transition-all duration-300 bg-white
                                     ${config.border}
                                     ${isInteractable ? 'cursor-pointer hover:shadow-lg' : 'opacity-70 cursor-default'}
                                 `}
-                            >
-                                {/* Top accent line matching status */}
-                                <div className={`absolute top-0 left-0 right-0 h-1 ${round.status === 'RUNNING' ? 'bg-emerald-400' :
+                                >
+                                    {/* Top accent line matching status */}
+                                    <div className={`absolute top-0 left-0 right-0 h-1 ${round.status === 'RUNNING' ? 'bg-emerald-400' :
                                         round.status === 'WAITING_FOR_OTP' ? 'bg-amber-400' :
                                             round.status === 'COMPLETED' ? 'bg-indigo-400' : 'bg-gray-200'
-                                    }`} />
+                                        }`} />
 
-                                <div className="flex justify-between items-start mb-6 mt-1">
-                                    <div className={`p-2.5 rounded-xl border ${config.bg} ${config.border} ${config.color}`}>
-                                        <Icon size={20} />
+                                    <div className="flex justify-between items-start mb-6 mt-1">
+                                        <div className={`p-2.5 rounded-xl border ${config.bg} ${config.border} ${config.color}`}>
+                                            <Icon size={20} />
+                                        </div>
+                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${config.badge}`}>
+                                            {config.label}
+                                        </span>
                                     </div>
-                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${config.badge}`}>
-                                        {config.label}
-                                    </span>
-                                </div>
 
-                                <h3 className="text-lg font-bold text-gray-800 mb-1">{round.name}</h3>
-                                <p className="text-sm text-gray-400">
-                                    {round.status === 'LOCKED' ? 'Access denied. Await admin signal.' :
-                                        round.status === 'COMPLETED' ? 'Mission accomplished.' :
-                                            round.status === 'WAITING_FOR_OTP' ? 'Enter OTP to unlock.' :
-                                                'In progress — click to resume.'}
-                                </p>
-                            </motion.div>
-                        );
-                    })}
-                </div>
+                                    <h3 className="text-lg font-bold text-gray-800 mb-1">{round.name}</h3>
+                                    <p className="text-sm text-gray-400">
+                                        {round.status === 'LOCKED' ? 'Access denied. Await admin signal.' :
+                                            round.status === 'COMPLETED' ? 'Mission accomplished.' :
+                                                round.status === 'WAITING_FOR_OTP' ? 'Enter OTP to unlock.' :
+                                                    'In progress — click to resume.'}
+                                    </p>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                )}
             </main>
 
             <OtpGate
                 isOpen={isOtpOpen}
+                roundId={selectedRound?._id}
                 roundName={selectedRound?.name}
                 onClose={() => setIsOtpOpen(false)}
                 onUnlock={handleOtpUnlock}
