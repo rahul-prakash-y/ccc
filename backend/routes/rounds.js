@@ -394,13 +394,23 @@ module.exports = async function (fastify, opts) {
                 // Fisher-Yates shuffle seeded by student ID (consistent per student)
                 if (round.shuffleQuestions !== false) {
                     const seed = studentId.toString();
-                    let h = 0;
-                    for (let i = 0; i < seed.length; i++) {
-                        h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+                    // cyrb53 hash for better avalanche on small string seeds like "1" and "2"
+                    let h1 = 0xdeadbeef ^ seed.length, h2 = 0x41c6ce57 ^ seed.length;
+                    for (let i = 0, ch; i < seed.length; i++) {
+                        ch = seed.charCodeAt(i);
+                        h1 = Math.imul(h1 ^ ch, 2654435761);
+                        h2 = Math.imul(h2 ^ ch, 1597334677);
                     }
+                    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+                    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+                    let h = 4294967296 * (2097151 & h2) + (h1 >>> 0); // 53-bit hash
+
                     const rand = () => {
-                        h ^= h << 13; h ^= h >> 17; h ^= h << 5;
-                        return (h >>> 0) / 4294967296;
+                        // Mulberry32 PRNG
+                        h = h + 1831565813 | 0;
+                        let t = Math.imul(h ^ h >>> 15, 1 | h);
+                        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+                        return ((t ^ t >>> 14) >>> 0) / 4294967296;
                     };
                     for (let i = selected.length - 1; i > 0; i--) {
                         const j = Math.floor(rand() * (i + 1));

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Split from 'react-split';
 import Editor from '@monaco-editor/react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Terminal, Lock, Send, AlertTriangle, Save, Loader2,
     ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Code2, LogOut,
@@ -38,52 +38,52 @@ const CodeArena = ({ language = 'javascript' }) => {
     const otpRefs = useRef([]);
 
     // --- Anti-Cheat Logic ---
-    const handleCheatDetected = useCallback(async (cheatEvent) => {
-        try {
-            const res = await api.post(`/rounds/${roundId}/report-cheat`, cheatEvent);
-            if (res.data.banned) {
-                setIsBanned(true);
-                setBanReason(res.data.reason);
-                updateUser({ isBanned: true, banReason: res.data.reason });
-            }
-        } catch (err) {
-            console.error("Anti-cheat sync failed:", err);
-            if (err.response?.status === 403) {
-                const reason = err.response?.data?.error || "Access Revoked";
-                setIsBanned(true);
-                setBanReason(reason);
-                updateUser({ isBanned: true, banReason: reason });
-            }
-        }
-    }, [roundId, updateUser]);
+    // const handleCheatDetected = useCallback(async (cheatEvent) => {
+    //     try {
+    //         const res = await api.post(`/rounds/${roundId}/report-cheat`, cheatEvent);
+    //         if (res.data.banned) {
+    //             setIsBanned(true);
+    //             setBanReason(res.data.reason);
+    //             updateUser({ isBanned: true, banReason: res.data.reason });
+    //         }
+    //     } catch (err) {
+    //         console.error("Anti-cheat sync failed:", err);
+    //         if (err.response?.status === 403) {
+    //             const reason = err.response?.data?.error || "Access Revoked";
+    //             setIsBanned(true);
+    //             setBanReason(reason);
+    //             updateUser({ isBanned: true, banReason: reason });
+    //         }
+    //     }
+    // }, [roundId, updateUser]);
 
-    useEffect(() => {
-        const handlePaste = (e) => {
-            e.preventDefault();
-            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
-        };
-        const blockAction = (e) => e.preventDefault();
-        const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
-                e.preventDefault();
-                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
-            }
-        };
+    // useEffect(() => {
+    //     const handlePaste = (e) => {
+    //         e.preventDefault();
+    //         handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+    //     };
+    //     const blockAction = (e) => e.preventDefault();
+    //     const handleKeyDown = (e) => {
+    //         if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
+    //             e.preventDefault();
+    //             if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+    //         }
+    //     };
 
-        window.addEventListener('paste', handlePaste, { capture: true });
-        window.addEventListener('copy', blockAction, { capture: true });
-        window.addEventListener('cut', blockAction, { capture: true });
-        window.addEventListener('contextmenu', blockAction, { capture: true });
-        window.addEventListener('keydown', handleKeyDown, { capture: true });
+    //     window.addEventListener('paste', handlePaste, { capture: true });
+    //     window.addEventListener('copy', blockAction, { capture: true });
+    //     window.addEventListener('cut', blockAction, { capture: true });
+    //     window.addEventListener('contextmenu', blockAction, { capture: true });
+    //     window.addEventListener('keydown', handleKeyDown, { capture: true });
 
-        return () => {
-            window.removeEventListener('paste', handlePaste, { capture: true });
-            window.removeEventListener('copy', blockAction, { capture: true });
-            window.removeEventListener('cut', blockAction, { capture: true });
-            window.removeEventListener('contextmenu', blockAction, { capture: true });
-            window.removeEventListener('keydown', handleKeyDown, { capture: true });
-        };
-    }, [handleCheatDetected]);
+    //     return () => {
+    //         window.removeEventListener('paste', handlePaste, { capture: true });
+    //         window.removeEventListener('copy', blockAction, { capture: true });
+    //         window.removeEventListener('cut', blockAction, { capture: true });
+    //         window.removeEventListener('contextmenu', blockAction, { capture: true });
+    //         window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    //     };
+    // }, [handleCheatDetected]);
 
     // --- Data Loading ---
     useEffect(() => {
@@ -127,7 +127,7 @@ const CodeArena = ({ language = 'javascript' }) => {
         durationMinutes: roundInfo?.durationMinutes || 60,
         extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        onCheatDetected: handleCheatDetected
+        // onCheatDetected: handleCheatDetected
     });
 
     const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned, (responsePayload) => {

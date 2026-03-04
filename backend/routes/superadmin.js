@@ -278,6 +278,19 @@ module.exports = async function (fastify, opts) {
 
                 const students = submissions
                     .filter(sub => sub.round.toString() === qRoundId)
+                    .filter(sub => {
+                        // If the sub has assignedQuestions, only show the student if this question was mapped to them
+                        if (sub.assignedQuestions && sub.assignedQuestions.length > 0) {
+                            return sub.assignedQuestions.some(id => id.toString() === question._id.toString());
+                        }
+                        // Fallback for edge cases (older submissions before assignedQuestions existed):
+                        try {
+                            const parsed = JSON.parse(sub.codeContent || '{}');
+                            return parsed[question._id.toString()] !== undefined;
+                        } catch (_) {
+                            return true; // Keep older plaintext submissions just in case
+                        }
+                    })
                     .map(sub => {
                         // Parse the student's answer for this specific question from codeContent JSON
                         // CodeArena stores: { [questionId]: answerString, ... }
