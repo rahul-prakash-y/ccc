@@ -62,6 +62,15 @@ const questionSchema = new mongoose.Schema({
     correctAnswer: {
         type: String, // For automated grading (MCQs, etc)
         default: ''
+    },
+    isManualEvaluation: {
+        type: Boolean,
+        default: false
+    },
+    assignedAdmin: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
     }
 }, {
     timestamps: true

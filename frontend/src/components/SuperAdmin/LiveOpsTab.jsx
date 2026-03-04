@@ -1,368 +1,336 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { RefreshCw, PlayCircle, Eye, Loader2, StopCircle, Clock, CheckCircle2, Plus, AlertTriangle, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  RefreshCw, PlayCircle, Eye, Loader2, StopCircle, 
+  Clock, CheckCircle2, Plus, AlertTriangle, Trash2, X 
+} from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
 
 const LiveOpsTab = () => {
-    const [rounds, setRounds] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [projectorRound, setProjectorRound] = useState(null);
-    const [busy, setBusy] = useState({});
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [newRound, setNewRound] = useState({ name: '', durationMinutes: 60, type: 'GENERAL' });
-    const [adding, setAdding] = useState(false);
+  const [rounds, setRounds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [projectorRound, setProjectorRound] = useState(null);
+  const [busy, setBusy] = useState({});
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newRound, setNewRound] = useState({ name: '', durationMinutes: 60, type: 'GENERAL' });
 
-    // Universal confirmation modal state
-    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null });
+  // Confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState({ 
+    isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null 
+  });
 
-    const fetchRounds = useCallback(async () => {
-        try {
-            const res = await api.get(`${API}/rounds`);
-            setRounds(res.data.data || []);
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    }, []);
-
-    useEffect(() => {
-        fetchRounds();
-        const t = setInterval(fetchRounds, 15000); // Poll every 15s to keep stats fresh
-        return () => clearInterval(t);
-    }, [fetchRounds]);
-
-    const act = async (roundId, action, reqMethod = 'PATCH', body = {}) => {
-        setBusy(b => ({ ...b, [`${roundId}-${action}`]: true }));
-        try {
-            const path = action === 'generate-otp' ? `/rounds/${roundId}/generate-otp` : `/rounds/${roundId}/status`;
-            const resolvedMethod = action === 'generate-otp' ? 'post' : reqMethod.toLowerCase();
-
-            const res = await api({
-                method: resolvedMethod,
-                url: `${API}${path}`,
-                data: body
-            });
-            const data = res.data;
-            setRounds(prev => prev.map(r => r._id === roundId ? { ...r, ...data.data } : r));
-            if (projectorRound && projectorRound._id === roundId) {
-                setProjectorRound({ ...projectorRound, ...data.data }); // update projector if open
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setBusy(b => ({ ...b, [`${roundId}-${action}`]: false }));
-        }
-    };
-
-    const handleGenerateOtp = (round) => act(round._id, 'generate-otp');
-    const handleStart = (round) => act(round._id, 'status', 'PATCH', { status: 'RUNNING' });
-
-    const handleForceEnd = (round) => {
-        setConfirmDialog({
-            isOpen: true,
-            title: `Force End ${round.name}?`,
-            message: 'Are you sure you want to force end this round? This will permanently lock out all active students and end the test immediately.',
-            actionLabel: 'Force End Test',
-            isDestructive: true,
-            onConfirm: () => {
-                act(round._id, 'status', 'PATCH', { status: 'COMPLETED', isOtpActive: false });
-                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            }
-        });
-    };
-
-    const handleDeleteRound = (round) => {
-        setConfirmDialog({
-            isOpen: true,
-            title: `Delete ${round.name}?`,
-            message: 'WARNING: This will permanently wipe this round, all its custom questions, and all student submissions connected to it. This cannot be undone.',
-            actionLabel: 'Delete Test',
-            isDestructive: true,
-            onConfirm: async () => {
-                setBusy(b => ({ ...b, [`${round._id}-delete`]: true }));
-                try {
-                    await api.delete(`${API}/rounds/${round._id}`);
-                    setRounds(prev => prev.filter(r => r._id !== round._id));
-                } catch (e) { console.error(e); }
-                finally {
-                    setBusy(b => ({ ...b, [`${round._id}-delete`]: false }));
-                    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-                }
-            }
-        });
-    };
-    const handleAddTime = (round) => {
-        const newLim = Number(prompt('Enter new duration limit in minutes:', round.durationMinutes + 5));
-        if (newLim && !isNaN(newLim)) {
-            act(round._id, 'status', 'PATCH', { durationMinutes: newLim });
-        }
-    };
-
-    const handleAddRound = async (e) => {
-        e.preventDefault();
-        if (!newRound.name.trim()) return;
-        setAdding(true);
-        try {
-            await api.post(`${API}/rounds`, newRound);
-            setShowAddModal(false);
-            setNewRound({ name: '', durationMinutes: 60, type: 'GENERAL' });
-            fetchRounds();
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setAdding(false);
-        }
-    };
-
-    if (loading && rounds.length === 0) {
-        return <div className="flex justify-center py-20"><Loader2 size={36} className="text-violet-500 animate-spin" /></div>;
+  const fetchRounds = useCallback(async () => {
+    try {
+      const res = await api.get(`${API}/rounds`);
+      setRounds(res.data.data || []);
+    } catch (e) {
+      console.error("Fetch Error:", e);
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
+  useEffect(() => {
+    fetchRounds();
+    const t = setInterval(fetchRounds, 15000);
+    return () => clearInterval(t);
+  }, [fetchRounds]);
+
+  const act = async (roundId, action, reqMethod = 'PATCH', body = {}) => {
+    setBusy(b => ({ ...b, [`${roundId}-${action}`]: true }));
+    try {
+      const path = action === 'generate-otp' ? `/rounds/${roundId}/generate-otp` : `/rounds/${roundId}/status`;
+      const resolvedMethod = action === 'generate-otp' ? 'post' : reqMethod.toLowerCase();
+
+      const res = await api({
+        method: resolvedMethod,
+        url: `${API}${path}`,
+        data: body
+      });
+      
+      const updatedRound = res.data.data;
+      setRounds(prev => prev.map(r => r._id === roundId ? { ...r, ...updatedRound } : r));
+      
+      if (projectorRound && projectorRound._id === roundId) {
+        setProjectorRound({ ...projectorRound, ...updatedRound });
+      }
+    } catch (e) {
+      console.error(`Action ${action} failed:`, e);
+    } finally {
+      setBusy(b => ({ ...b, [`${roundId}-${action}`]: false }));
+    }
+  };
+
+  const handleGenerateOtp = (round) => act(round._id, 'generate-otp');
+  const handleStart = (round) => act(round._id, 'status', 'PATCH', { status: 'RUNNING' });
+
+  const handleForceEnd = (round) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: `Force End ${round.name}?`,
+      message: 'This will permanently lock out all active students and end the test immediately.',
+      actionLabel: 'Force End Test',
+      isDestructive: true,
+      onConfirm: () => {
+        act(round._id, 'status', 'PATCH', { status: 'COMPLETED', isOtpActive: false });
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleDeleteRound = (round) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: `Delete ${round.name}?`,
+      message: 'WARNING: This will permanently wipe this round and all student submissions. This cannot be undone.',
+      actionLabel: 'Delete Test',
+      isDestructive: true,
+      onConfirm: async () => {
+        setBusy(b => ({ ...b, [`${round._id}-delete`]: true }));
+        try {
+          await api.delete(`${API}/rounds/${round._id}`);
+          setRounds(prev => prev.filter(r => r._id !== round._id));
+        } catch (e) { console.error(e); }
+        finally {
+          setBusy(b => ({ ...b, [`${round._id}-delete`]: false }));
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
+  };
+
+  const handleAddTime = (round) => {
+    const newLim = Number(prompt('Enter new duration limit in minutes:', round.durationMinutes + 5));
+    if (newLim && !isNaN(newLim)) {
+      act(round._id, 'status', 'PATCH', { durationMinutes: newLim });
+    }
+  };
+
+  const handleAddRound = async (e) => {
+    e.preventDefault();
+    if (!newRound.name.trim()) return;
+    setAdding(true);
+    try {
+      await api.post(`${API}/rounds`, newRound);
+      setShowAddModal(false);
+      setNewRound({ name: '', durationMinutes: 60, type: 'GENERAL' });
+      fetchRounds();
+    } catch (err) { console.error(err); }
+    finally { setAdding(false); }
+  };
+
+  if (loading && rounds.length === 0) {
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg font-bold text-gray-700 uppercase tracking-widest">Live Testing Operations</h2>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm"
-                >
-                    <Plus size={16} /> Add Test / Round
-                </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {rounds.map(round => (
-                    <div key={round._id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                        <div className="p-6 flex-1">
-                            <div className="flex justify-between items-start mb-5">
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-900">{round.name}</h3>
-                                    <p className="text-xs text-gray-400 mt-1 font-mono">{round.durationMinutes} minutes allowed</p>
-                                </div>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border bg-gray-50 bg-opacity-50 ${STATUS_COLORS[round.status] || 'text-gray-500 border-gray-200'}`}>
-                                    {round.status.replace(/_/g, ' ')}
-                                </span>
-                            </div>
-
-                            <div className="flex gap-4 mb-6">
-                                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-4">
-                                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Start OTP</p>
-                                    <p className="text-2xl font-mono font-bold text-gray-800 tracking-widest">{round.startOtp || '——————'}</p>
-                                </div>
-                                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-4">
-                                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">End OTP</p>
-                                    <p className="text-2xl font-mono font-bold text-violet-600 tracking-widest">{round.endOtp || '——————'}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 border-t border-gray-100 p-4 flex flex-wrap gap-2">
-                            {round.status === 'LOCKED' && (
-                                <div className="flex w-full gap-2">
-                                    <button onClick={() => handleGenerateOtp(round)} disabled={busy[`${round._id}-generate-otp`]}
-                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-50"
-                                    >
-                                        {busy[`${round._id}-generate-otp`] ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Generate OTPs
-                                    </button>
-                                    <button onClick={() => handleDeleteRound(round)} disabled={busy[`${round._id}-delete`]}
-                                        className="px-4 py-2.5 bg-white hover:bg-red-50 border border-red-100 text-red-500 rounded-xl transition-colors font-bold text-sm disabled:opacity-50 flex items-center gap-2"
-                                        title="Delete Test/Round"
-                                    >
-                                        {busy[`${round._id}-delete`] ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                    </button>
-                                </div>
-                            )}
-
-                            {round.status === 'WAITING_FOR_OTP' && (
-                                <button onClick={() => handleStart(round)} disabled={busy[`${round._id}-status`]}
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-50"
-                                >
-                                    <PlayCircle size={16} /> Mark as Running
-                                </button>
-                            )}
-
-                            {(round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && (
-                                <button onClick={() => setProjectorRound(round)}
-                                    className="px-4 py-2.5 bg-white hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-xl transition-colors font-bold text-sm"
-                                    title="Projector Mode (Full Screen OTP)"
-                                >
-                                    <Eye size={16} />
-                                </button>
-                            )}
-
-                            {round.status === 'RUNNING' && (
-                                <>
-                                    <button onClick={() => handleAddTime(round)} disabled={busy[`${round._id}-status`]}
-                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 bg-white"
-                                    >
-                                        <Clock size={14} /> Adjust Time
-                                    </button>
-                                    <button onClick={() => handleForceEnd(round)} disabled={busy[`${round._id}-status`]}
-                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-red-200 hover:bg-red-50 text-red-600 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 bg-white"
-                                    >
-                                        <StopCircle size={14} /> Force End
-                                    </button>
-                                </>
-                            )}
-
-                            {round.status === 'COMPLETED' && (
-                                <div className="flex w-full items-center justify-between">
-                                    <div className="flex text-gray-400 font-bold text-sm gap-2 items-center px-4">
-                                        <CheckCircle2 size={16} /> Test Completed & Locked
-                                    </div>
-                                    <button onClick={() => handleDeleteRound(round)} disabled={busy[`${round._id}-delete`]}
-                                        className="px-4 py-2 bg-white hover:bg-red-50 border border-red-100 text-red-500 rounded-xl transition-colors font-bold text-sm disabled:opacity-50 flex items-center gap-2"
-                                        title="Delete Test/Round"
-                                    >
-                                        {busy[`${round._id}-delete`] ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Add Round Modal */}
-            <AnimatePresence>
-                {showAddModal && (
-                    <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-                            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                                <h3 className="font-bold text-lg text-gray-900">Add New Test / Round</h3>
-                                <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">×</button>
-                            </div>
-                            <form onSubmit={handleAddRound} className="p-6 space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Test Name (e.g. SQL Contest)</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none"
-                                        value={newRound.name}
-                                        onChange={e => setNewRound({ ...newRound, name: e.target.value })}
-                                        placeholder="Enter test name"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Duration (Minutes)</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        min="1"
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none"
-                                        value={newRound.durationMinutes}
-                                        onChange={e => setNewRound({ ...newRound, durationMinutes: Number(e.target.value) })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Test Type</label>
-                                    <select
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none bg-white"
-                                        value={newRound.type}
-                                        onChange={e => setNewRound({ ...newRound, type: e.target.value })}
-                                    >
-                                        <option value="GENERAL">General Challenge</option>
-                                        <option value="SQL_CONTEST">SQL Contest</option>
-                                        <option value="HTML_CSS_QUIZ">HTML & CSS Quiz</option>
-                                        <option value="UI_UX_CHALLENGE">UI/UX Challenge</option>
-                                        <option value="HTML_CSS_DEBUG">HTML/CSS Debug Challenge</option>
-                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
-                                    </select>
-                                </div>
-                                <div className="pt-2 flex gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAddModal(false)}
-                                        className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={adding || !newRound.name.trim()}
-                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
-                                    >
-                                        {adding ? <Loader2 size={16} className="animate-spin" /> : 'Create Test'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Confirmation Modal */}
-            <AnimatePresence>
-                {confirmDialog.isOpen && (
-                    <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
-                            <div className={`p-6 border-b ${confirmDialog.isDestructive ? 'border-red-100' : 'border-gray-100'} flex gap-4 items-start`}>
-                                <div className={`p-3 rounded-full shrink-0 ${confirmDialog.isDestructive ? 'bg-red-100 text-red-600' : 'bg-violet-100 text-violet-600'}`}>
-                                    {confirmDialog.isDestructive ? <AlertTriangle size={24} /> : <CheckCircle2 size={24} />}
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg text-gray-900">{confirmDialog.title}</h3>
-                                    <p className="text-gray-500 text-sm mt-1 leading-relaxed">{confirmDialog.message}</p>
-                                </div>
-                            </div>
-                            <div className="p-4 bg-gray-50 flex gap-3 justify-end">
-                                <button
-                                    onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
-                                    className="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 font-bold rounded-xl transition-colors text-sm"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmDialog.onConfirm}
-                                    className={`px-5 py-2.5 font-bold rounded-xl transition-colors text-sm text-white ${confirmDialog.isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-violet-600 hover:bg-violet-700'}`}
-                                >
-                                    {confirmDialog.actionLabel}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Projector Mode Modal (Dark Theme purposefully retained for projector contrast) */}
-            <AnimatePresence>
-                {projectorRound && (
-                    <div
-                        className="fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-8 backdrop-blur-md"
-                    >
-                        <button onClick={() => setProjectorRound(null)}
-                            className="absolute top-8 right-8 text-gray-400 hover:text-white transition-colors uppercase font-bold tracking-widest text-sm"
-                        >
-                            [ CLOSE ]
-                        </button>
-
-                        <div className="text-center w-full max-w-5xl">
-                            <div className="flex items-center justify-center gap-3 mb-4">
-                                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                                <p className="text-red-400 font-bold tracking-widest uppercase text-sm">Testing Environment Active</p>
-                            </div>
-                            <h2 className="text-5xl md:text-7xl font-black text-white mb-20 tracking-tight">{projectorRound.name}</h2>
-
-                            <div className="flex flex-col md:flex-row gap-12 justify-center items-center">
-                                <div className="text-center w-full">
-                                    <p className="text-gray-400 font-bold tracking-widest uppercase mb-5 text-lg">START OTP</p>
-                                    <div className="text-8xl md:text-[9rem] font-mono font-black text-white tracking-widest border-2 border-white/10 rounded-3xl py-12 px-8 bg-white/5 shadow-2xl">
-                                        {projectorRound.startOtp}
-                                    </div>
-                                </div>
-                                <div className="text-center w-full">
-                                    <p className="text-violet-400 font-bold tracking-widest uppercase mb-5 text-lg">END / SUBMIT OTP</p>
-                                    <div className="text-8xl md:text-[9rem] font-mono font-black text-violet-300 tracking-widest border-2 border-violet-500/30 rounded-3xl py-12 px-8 bg-violet-950/40 shadow-2xl">
-                                        {projectorRound.endOtp}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </AnimatePresence>
-        </div>
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <Loader2 size={40} className="text-indigo-500 animate-spin" />
+        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Initializing Control Panel...</p>
+      </div>
     );
+  }
+
+  return (
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* Header Section */}
+      <div className="flex justify-between items-end border-b border-slate-100 pb-4">
+        <div>
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Overlord</h2>
+          <p className="text-xl font-bold text-slate-800">Live Operations</p>
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+        >
+          <Plus size={18} /> Create Round
+        </button>
+      </div>
+
+      {/* Rounds Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {rounds.map(round => (
+          <motion.div 
+            layout 
+            key={round._id} 
+            className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-indigo-300 transition-colors shadow-sm"
+          >
+            <div className="p-5">
+              <div className="flex justify-between items-start mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-slate-900 truncate uppercase tracking-tight">{round.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Clock size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">{round.durationMinutes} MIN</span>
+                  </div>
+                </div>
+                <div className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter border ${STATUS_COLORS[round.status] || 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                  {round.status.replace(/_/g, ' ')}
+                </div>
+              </div>
+
+              {/* OTP Display Blocks */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start OTP</p>
+                  <p className="text-lg font-mono font-bold text-slate-700 tracking-widest">{round.startOtp || '------'}</p>
+                </div>
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-center">
+                  <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">End OTP</p>
+                  <p className="text-lg font-mono font-bold text-indigo-600 tracking-widest">{round.endOtp || '------'}</p>
+                </div>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
+                {round.status === 'LOCKED' && (
+                  <button 
+                    onClick={() => handleGenerateOtp(round)} 
+                    disabled={busy[`${round._id}-generate-otp`]}
+                    className="flex-1 h-9 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                  >
+                    {busy[`${round._id}-generate-otp`] ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} 
+                    Init Keys
+                  </button>
+                )}
+
+                {round.status === 'WAITING_FOR_OTP' && (
+                  <button 
+                    onClick={() => handleStart(round)}
+                    className="flex-1 h-9 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    <PlayCircle size={16} /> Activate Round
+                  </button>
+                )}
+
+                {round.status === 'RUNNING' && (
+                  <div className="flex-1 flex gap-2">
+                    <button 
+                      onClick={() => handleAddTime(round)}
+                      className="flex-1 h-9 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
+                    >
+                      + Time
+                    </button>
+                    <button 
+                      onClick={() => handleForceEnd(round)}
+                      className="flex-1 h-9 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
+                    >
+                      <StopCircle size={14} /> Kill
+                    </button>
+                  </div>
+                )}
+
+                {(round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && (
+                  <button 
+                    onClick={() => setProjectorRound(round)}
+                    className="h-9 w-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors"
+                    title="Projector Mode"
+                  >
+                    <Eye size={16} />
+                  </button>
+                )}
+
+                <button 
+                  onClick={() => handleDeleteRound(round)}
+                  disabled={busy[`${round._id}-delete`]}
+                  className="h-9 w-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                >
+                  {busy[`${round._id}-delete`] ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* MODALS */}
+      <AnimatePresence>
+        {/* Create Round Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-slate-800">New Operation</h3>
+                <button onClick={() => setShowAddModal(false)}><X size={20} className="text-slate-400" /></button>
+              </div>
+              <form onSubmit={handleAddRound} className="p-6 space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Round Name</label>
+                  <input required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-medium" 
+                    value={newRound.name} onChange={e => setNewRound({...newRound, name: e.target.value})} placeholder="e.g. Finals Phase 1" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Duration (Min)</label>
+                    <input type="number" required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold" 
+                      value={newRound.durationMinutes} onChange={e => setNewRound({...newRound, durationMinutes: Number(e.target.value)})} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Type</label>
+                    <select className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none"
+                      value={newRound.type} onChange={e => setNewRound({...newRound, type: e.target.value})}>
+                      <option value="GENERAL">General</option>
+                      <option value="SQL_CONTEST">SQL</option>
+                      <option value="MINI_HACKATHON">Hackathon</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" disabled={adding} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2">
+                  {adding ? <Loader2 className="animate-spin" /> : 'Deploy Round'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Global Confirmation Dialog */}
+        {confirmDialog.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-8 text-center">
+              <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${confirmDialog.isDestructive ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-500'}`}>
+                {confirmDialog.isDestructive ? <AlertTriangle size={32} /> : <CheckCircle2 size={32} />}
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">{confirmDialog.title}</h3>
+              <p className="text-slate-500 text-sm mb-8 leading-relaxed">{confirmDialog.message}</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDialog({...confirmDialog, isOpen: false})} className="flex-1 py-3 font-bold text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+                <button onClick={confirmDialog.onConfirm} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 ${confirmDialog.isDestructive ? 'bg-red-500 shadow-red-200' : 'bg-indigo-600 shadow-indigo-200'}`}>
+                  {confirmDialog.actionLabel}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Projector Mode (OTP Fullscreen) */}
+        {projectorRound && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-10">
+            <button onClick={() => setProjectorRound(null)} className="absolute top-10 right-10 text-slate-500 hover:text-white font-black tracking-[0.3em] text-xs transition-colors">[ ESC / CLOSE ]</button>
+            <div className="text-center w-full max-w-6xl">
+              <div className="flex items-center justify-center gap-3 mb-8">
+                <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]" />
+                <p className="text-red-400 font-black tracking-[0.4em] uppercase text-sm">Operation Underway</p>
+              </div>
+              <h2 className="text-6xl md:text-8xl font-black text-white mb-24 tracking-tighter">{projectorRound.name}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                <div className="space-y-6">
+                  <p className="text-slate-500 font-black tracking-widest text-xl uppercase">Entry Access Key</p>
+                  <div className="bg-white/5 border-2 border-white/10 rounded-[40px] py-16 text-[10rem] font-mono font-black text-white leading-none shadow-2xl">
+                    {projectorRound.startOtp}
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <p className="text-indigo-400 font-black tracking-widest text-xl uppercase">Submission Key</p>
+                  <div className="bg-indigo-500/10 border-2 border-indigo-500/20 rounded-[40px] py-16 text-[10rem] font-mono font-black text-indigo-400 leading-none shadow-2xl shadow-indigo-500/10">
+                    {projectorRound.endOtp}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 };
 
 export default LiveOpsTab;

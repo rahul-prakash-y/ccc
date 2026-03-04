@@ -55,7 +55,17 @@ const submissionSchema = new mongoose.Schema({
     disqualificationReason: {
         type: String,
         default: null
-    }
+    },
+    // Manual evaluation scores per question
+    manualScores: [
+        {
+            questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question' },
+            adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            score: { type: Number, default: 0 },
+            feedback: { type: String, default: '' },
+            evaluatedAt: { type: Date, default: Date.now }
+        }
+    ]
 }, {
     timestamps: true
 });

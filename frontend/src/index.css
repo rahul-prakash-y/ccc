@@ -1,1 +1,14 @@
+@import url("https://fonts.googleapis.com/css2?family=Sen:wght@400..800&display=swap");
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Sen", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    font-family: "Sen", ui-sans-serif, system-ui, sans-serif;
+  }
+}

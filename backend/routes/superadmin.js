@@ -122,11 +122,16 @@ module.exports = async function (fastify, opts) {
             const {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
-                order, type, category, options, correctAnswer
+                order, type, category, options, correctAnswer,
+                isManualEvaluation, assignedAdmin
             } = request.body;
 
             if (!title || !description) {
                 return reply.code(400).send({ error: 'Title and description are required' });
+            }
+
+            if (isManualEvaluation && !assignedAdmin) {
+                return reply.code(400).send({ error: 'A question marked for manual evaluation must be assigned to an admin' });
             }
 
             const round = await Round.findById(roundId);
@@ -145,7 +150,9 @@ module.exports = async function (fastify, opts) {
                 type: type || 'CODE',
                 category: category || 'GENERAL',
                 options: options || [],
-                correctAnswer: correctAnswer || ''
+                correctAnswer: correctAnswer || '',
+                isManualEvaluation: isManualEvaluation || false,
+                assignedAdmin: isManualEvaluation ? assignedAdmin : null
             });
 
             await question.save();
@@ -174,6 +181,15 @@ module.exports = async function (fastify, opts) {
             const { questionId } = request.params;
             const updates = request.body;
 
+            // If turning off manual evaluation, clear the assigned admin
+            if (updates.isManualEvaluation === false) {
+                updates.assignedAdmin = null;
+            }
+            // If manual evaluation is on, ensure an admin is assigned
+            if (updates.isManualEvaluation === true && !updates.assignedAdmin) {
+                return reply.code(400).send({ error: 'A question marked for manual evaluation must be assigned to an admin' });
+            }
+
             const question = await Question.findByIdAndUpdate(questionId, updates, { new: true, runValidators: true });
             if (!question) return reply.code(404).send({ error: 'Question not found' });
 
@@ -188,6 +204,153 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to update question' });
+        }
+    });
+
+    /**
+     * GET /api/superadmin/manual-evaluations
+     * Returns all submissions that have answers for questions assigned to this admin for manual evaluation.
+     * Each entry contains: question info, student info, their answer, and existing manualScores.
+     */
+    fastify.get('/manual-evaluations', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const mongoose = require('mongoose');
+            const adminId = request.user.userId;
+
+            // Find all questions assigned to this admin for manual evaluation
+            const questions = await Question.find({ isManualEvaluation: true, assignedAdmin: adminId })
+                .populate('round', 'name')
+                .lean();
+
+            if (questions.length === 0) {
+                return reply.code(200).send({ success: true, data: [] });
+            }
+
+            // Collect unique round ObjectIds (must be ObjectId instances, not strings, for $in to work)
+            const roundObjectIds = [
+                ...new Map(questions.map(q => [q.round._id.toString(), q.round._id])).values()
+            ];
+
+            // Find all submissions for those rounds (any status - autosaved answers count too)
+            const submissions = await Submission.find({ round: { $in: roundObjectIds } })
+                .populate('student', 'studentId name')
+                .lean();
+
+            // Build result: for each question, list all students and their answer + score
+            const result = questions.map(question => {
+                const qRoundId = question.round._id.toString();
+
+                const students = submissions
+                    .filter(sub => sub.round.toString() === qRoundId)
+                    .map(sub => {
+                        // Parse the student's answer for this specific question from codeContent JSON
+                        // CodeArena stores: { [questionId]: answerString, ... }
+                        let answer = null;
+                        try {
+                            const parsed = JSON.parse(sub.codeContent || '{}');
+                            const rawAnswer = parsed[question._id.toString()];
+                            answer = rawAnswer !== undefined ? rawAnswer : null;
+                        } catch (_) {
+                            // Fallback: codeContent is a plain string (older format)
+                            answer = sub.codeContent || null;
+                        }
+
+                        // Check if a manual score already exists for this question in this submission
+                        const existingScore = (sub.manualScores || []).find(
+                            ms => ms.questionId && ms.questionId.toString() === question._id.toString()
+                        );
+
+                        return {
+                            submissionId: sub._id,
+                            student: sub.student,
+                            submissionStatus: sub.status,
+                            answer,
+                            existingScore: existingScore || null
+                        };
+                    });
+
+                return {
+                    question: {
+                        _id: question._id,
+                        title: question.title,
+                        description: question.description,
+                        points: question.points,
+                        type: question.type,
+                        round: question.round
+                    },
+                    students
+                };
+            });
+
+            return reply.code(200).send({ success: true, data: result });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch manual evaluations' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/manual-evaluations/:submissionId/score
+     * Admin submits or updates a manual score for a specific question in a student's submission.
+     * Body: { questionId, score, feedback }
+     */
+    fastify.post('/manual-evaluations/:submissionId/score', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { submissionId } = request.params;
+            const { questionId, score, feedback } = request.body;
+            const adminId = request.user.userId;
+
+            if (!questionId || score === undefined) {
+                return reply.code(400).send({ error: 'questionId and score are required' });
+            }
+
+            // Verify the question is actually assigned to this admin
+            const question = await Question.findOne({ _id: questionId, isManualEvaluation: true, assignedAdmin: adminId });
+            if (!question) {
+                return reply.code(403).send({ error: 'You are not authorized to evaluate this question' });
+            }
+
+            const submission = await Submission.findById(submissionId);
+            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+
+            // Upsert the manual score entry for this question
+            const existingIndex = submission.manualScores.findIndex(
+                ms => ms.questionId && ms.questionId.toString() === questionId.toString()
+            );
+
+            if (existingIndex >= 0) {
+                submission.manualScores[existingIndex].score = score;
+                submission.manualScores[existingIndex].feedback = feedback || '';
+                submission.manualScores[existingIndex].evaluatedAt = new Date();
+                submission.manualScores[existingIndex].adminId = adminId;
+            } else {
+                submission.manualScores.push({
+                    questionId,
+                    adminId,
+                    score,
+                    feedback: feedback || '',
+                    evaluatedAt: new Date()
+                });
+            }
+
+            // Recalculate total score as sum of all manual scores
+            const totalManualScore = submission.manualScores.reduce((sum, ms) => sum + (ms.score || 0), 0);
+            submission.score = totalManualScore;
+
+            await submission.save();
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Submission', id: submissionId, label: `Manual score for question ${questionId}` },
+                metadata: { questionId, score, feedback },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: { score: submission.score, manualScores: submission.manualScores } });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to save evaluation score' });
         }
     });
 
