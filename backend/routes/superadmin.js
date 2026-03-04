@@ -792,6 +792,40 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * PATCH /api/superadmin/submissions/:submissionId/extra-time
+     * Grants additional time (in minutes) to a specific student's active submission.
+     */
+    fastify.patch('/submissions/:submissionId/extra-time', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { submissionId } = request.params;
+            const { addMinutes } = request.body;
+
+            if (!addMinutes || isNaN(addMinutes) || addMinutes <= 0) {
+                return reply.code(400).send({ error: 'Valid minutes to add are required' });
+            }
+
+            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+
+            submission.extraTimeMinutes = (submission.extraTimeMinutes || 0) + Number(addMinutes);
+            await submission.save();
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Submission', id: submissionId, label: `Granted +${addMinutes} mins extra time to ${submission.student?.name}` },
+                metadata: { extraTimeMinutes: submission.extraTimeMinutes },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, extraTimeMinutes: submission.extraTimeMinutes, message: `Added ${addMinutes} minutes successfully` });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to grant extra time' });
+        }
+    });
+
 
     // PATCH /api/superadmin/students/:studentId/force-logout — invalidate all sessions
     fastify.patch('/students/:studentId/force-logout', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {

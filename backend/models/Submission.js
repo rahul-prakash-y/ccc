@@ -38,6 +38,11 @@ const submissionSchema = new mongoose.Schema({
         type: Number,
         default: null // Graded later
     },
+    // Time extension granted by Admin/SuperAdmin for this student
+    extraTimeMinutes: {
+        type: Number,
+        default: 0
+    },
 
     // Anti-Cheat tracking
     cheatFlags: {

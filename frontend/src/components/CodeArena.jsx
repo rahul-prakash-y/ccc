@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Split from 'react-split';
 import Editor from '@monaco-editor/react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     Terminal, Lock, Send, AlertTriangle, Save, Loader2,
     ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Code2, LogOut,
@@ -23,6 +23,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [activeIdx, setActiveIdx] = useState(0);
     const [answers, setAnswers] = useState({});
     const [roundInfo, setRoundInfo] = useState(null);
+    const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
     // Anti-Cheat State
@@ -91,6 +92,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                 const res = await api.get(`/rounds/${roundId}/questions`);
                 setQuestions(res.data.data.questions);
                 setRoundInfo(res.data.data.round);
+                setExtraTimeMinutes(res.data.data.round.extraTimeMinutes || 0);
 
                 const draft = localStorage.getItem(`draft_${roundId}`);
                 if (draft) {
@@ -123,11 +125,16 @@ const CodeArena = ({ language = 'javascript' }) => {
         roundId,
         serverStartTime: roundInfo?.startTime,
         durationMinutes: roundInfo?.durationMinutes || 60,
+        extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
         onCheatDetected: handleCheatDetected
     });
 
-    const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned);
+    const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned, (responsePayload) => {
+        if (responsePayload.extraTimeMinutes !== undefined && responsePayload.extraTimeMinutes !== extraTimeMinutes) {
+            setExtraTimeMinutes(responsePayload.extraTimeMinutes);
+        }
+    });
 
     const handleAnswerChange = (questionId, value) => {
         if (!isTimeUp && !isBanned) setAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -270,8 +277,8 @@ const CodeArena = ({ language = 'javascript' }) => {
 
                     {/* Timer */}
                     <div className={`flex items-center gap-3 px-4 py-2 rounded-xl font-mono text-lg font-black border transition-colors shadow-sm ${isTimeUp ? 'bg-red-50 border-red-200 text-red-600' :
-                            isDangerZone ? 'bg-orange-50 border-orange-200 text-orange-600 animate-pulse' :
-                                'bg-white border-slate-200 text-slate-800'
+                        isDangerZone ? 'bg-orange-50 border-orange-200 text-orange-600 animate-pulse' :
+                            'bg-white border-slate-200 text-slate-800'
                         }`}>
                         {isTimeUp ? <AlertTriangle size={18} className="animate-bounce" /> : <Clock size={18} className={isDangerZone ? '' : 'text-slate-400'} />}
                         {isTimeUp ? '00:00:00 (LOCKED)' : formattedTime}

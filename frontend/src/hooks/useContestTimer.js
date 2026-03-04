@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * @param {string} options.roundId - The ID of the current round.
  * @param {Date|string} options.serverStartTime - The server-persisted start time.
  * @param {number} options.durationMinutes - Total duration limit in minutes (default 60).
+ * @param {number} options.extraTimeMinutes - Total extra time granted in minutes (default 0).
  * @param {Function} options.onTimeUp - Callback when time reaches 0.
  * @param {Function} options.onCheatDetected - Callback to alert backend of cheat event.
  */
@@ -14,6 +15,7 @@ export const useContestTimer = ({
     roundId,
     serverStartTime,
     durationMinutes = 60,
+    extraTimeMinutes = 0,
     onTimeUp,
     onCheatDetected
 }) => {
@@ -29,13 +31,13 @@ export const useContestTimer = ({
 
         // Convert to MS
         const startMs = new Date(serverStartTime).getTime();
-        const durationMs = durationMinutes * 60 * 1000;
+        const durationMs = (durationMinutes + extraTimeMinutes) * 60 * 1000;
         const endMs = startMs + durationMs;
         const nowMs = Date.now();
 
         const remaining = Math.max(0, Math.floor((endMs - nowMs) / 1000));
         return remaining;
-    }, [serverStartTime, durationMinutes]);
+    }, [serverStartTime, durationMinutes, extraTimeMinutes]);
 
     // Handle countdown
     useEffect(() => {

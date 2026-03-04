@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle } from 'lucide-react';
+import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -8,7 +8,7 @@ const AuditLogsTab = ({ rounds }) => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState('');
-    
+
     // Search States
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -29,8 +29,8 @@ const AuditLogsTab = ({ rounds }) => {
     }, []);
 
     // 2. Initial Mount & Dependency Fetch
-    useEffect(() => { 
-        fetchLogs(selectedRound); 
+    useEffect(() => {
+        fetchLogs(selectedRound);
     }, [selectedRound, fetchLogs]);
 
     // 3. Debounce Input Logic
@@ -66,9 +66,31 @@ const AuditLogsTab = ({ rounds }) => {
         }
     };
 
+    const handleAddTime = async (submissionId, studentName) => {
+        const mins = window.prompt(`How many extra minutes do you want to grant to ${studentName}?`);
+        if (!mins) return;
+
+        const numericMins = parseInt(mins, 10);
+        if (isNaN(numericMins) || numericMins <= 0) {
+            alert("Please enter a valid positive number.");
+            return;
+        }
+
+        setBusy(b => ({ ...b, [submissionId]: true }));
+        try {
+            await api.patch(`${API}/submissions/${submissionId}/extra-time`, { addMinutes: numericMins });
+            alert(`Successfully added ${numericMins} minutes to ${studentName}. It will sync to their screen shortly.`);
+            // Optionally refresh logs, but not strictly needed unless we display extraTimeMinutes
+        } catch (e) {
+            alert(e.response?.data?.error || "Failed to grant extra time.");
+        } finally {
+            setBusy(b => ({ ...b, [submissionId]: false }));
+        }
+    };
+
     return (
         <div className="space-y-4 h-full flex flex-col">
-            
+
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/60">
                 <div className="relative flex-1">
@@ -81,7 +103,7 @@ const AuditLogsTab = ({ rounds }) => {
                         className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
                     />
                 </div>
-                
+
                 <div className="relative min-w-[200px]">
                     <div className="absolute left-3.5 top-1/2 -translate-y-1/2 p-1 bg-slate-100 rounded border border-slate-200 pointer-events-none text-slate-500">
                         <Filter size={12} />
@@ -127,10 +149,10 @@ const AuditLogsTab = ({ rounds }) => {
                                 {filtered.map(log => {
                                     const isBanned = log.student?.isBanned;
                                     const isAnomalous = log.cheatFlags > 0 || log.tabSwitches > 0;
-                                    
+
                                     return (
                                         <tr key={log._id} className={`hover:bg-slate-50/80 transition-colors group ${isBanned ? 'bg-red-50/20' : ''}`}>
-                                            
+
                                             {/* Student Column */}
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2">
@@ -178,14 +200,26 @@ const AuditLogsTab = ({ rounds }) => {
 
                                             {/* Actions Column */}
                                             <td className="px-4 py-3 text-right">
-                                                <button
-                                                    onClick={() => handleDeleteSubmission(log._id)}
-                                                    disabled={busy[log._id]}
-                                                    title="Wipe Submission Record"
-                                                    className="inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50"
-                                                >
-                                                    {busy[log._id] ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                                </button>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {log.status === 'IN_PROGRESS' && (
+                                                        <button
+                                                            onClick={() => handleAddTime(log._id, log.student?.name || 'Student')}
+                                                            disabled={busy[log._id]}
+                                                            title="Grant Extra Time"
+                                                            className="inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-all disabled:opacity-50"
+                                                        >
+                                                            {busy[log._id] ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleDeleteSubmission(log._id)}
+                                                        disabled={busy[log._id]}
+                                                        title="Wipe Submission Record"
+                                                        className="inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50"
+                                                    >
+                                                        {busy[log._id] ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -195,7 +229,7 @@ const AuditLogsTab = ({ rounds }) => {
                     </div>
                 )}
             </div>
-            
+
             {/* Footer Summary */}
             <div className="flex justify-between items-center px-1 pt-2 border-t border-slate-100">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">

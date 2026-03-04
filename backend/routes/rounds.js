@@ -229,10 +229,10 @@ module.exports = async function (fastify, opts) {
                 return reply.code(400).send({ error: 'Round already submitted' });
             }
 
-            // Enforce the 1-hour time limit (+ 2 min buffer for network latency)
+            // Enforce the time limit (+ 2 min buffer for network latency) + extra time
             const now = new Date();
             const elapsedMinutes = (now - new Date(submission.startTime)) / 1000 / 60;
-            const bufferedDuration = round.durationMinutes + 2;
+            const bufferedDuration = round.durationMinutes + (submission.extraTimeMinutes || 0) + 2;
 
             if (elapsedMinutes > bufferedDuration) {
                 // Automatically disqualify for timing out completely and skipping front-end guards
@@ -433,6 +433,7 @@ module.exports = async function (fastify, opts) {
                         durationMinutes: round.durationMinutes,
                         status: round.status,
                         startTime: submission.startTime,
+                        extraTimeMinutes: submission.extraTimeMinutes || 0,
                         totalRounds,
                         roundNumber
                     },
@@ -483,7 +484,7 @@ module.exports = async function (fastify, opts) {
             }
 
             await submission.save();
-            return reply.code(200).send({ success: true });
+            return reply.code(200).send({ success: true, extraTimeMinutes: submission.extraTimeMinutes });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to autosave' });

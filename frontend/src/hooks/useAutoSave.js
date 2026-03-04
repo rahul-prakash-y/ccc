@@ -10,7 +10,7 @@ import { api } from '../store/authStore';
  * @param {boolean} isLocked - Stops saving if true.
  * @returns {string} The auto-save status (e.g., 'SAVED', 'SAVING', 'ERROR').
  */
-export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false) => {
+export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false, onSaveSuccess = null) => {
     const [saveStatus, setSaveStatus] = useState('SAVED'); // 'SAVED' | 'SAVING' | 'ERROR'
     const isFirstRender = useRef(true);
     const syncTimerRef = useRef(null);
@@ -24,7 +24,11 @@ export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false) => 
             // API call to Express/Fastify backend to silently upsert the draft
             // If it's an object, we send it as 'answers', otherwise as 'codeContent'
             const payload = typeof content === 'object' ? { answers: content } : { codeContent: content };
-            await api.post(`/rounds/${roundId}/autosave`, payload);
+            const response = await api.post(`/rounds/${roundId}/autosave`, payload);
+
+            if (onSaveSuccess && response.data) {
+                onSaveSuccess(response.data);
+            }
 
             // Fallback: Persistent Local Storage Draft in case of complete network outtage
             const stringified = typeof content === 'object' ? JSON.stringify(content) : content;
@@ -38,7 +42,7 @@ export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false) => 
             console.error('AutoSave failed:', error);
             setSaveStatus('ERROR');
         }
-    }, [roundId, isLocked]);
+    }, [roundId, isLocked, onSaveSuccess]);
 
     useEffect(() => {
         // Prevent auto-save on initial mount mounting
