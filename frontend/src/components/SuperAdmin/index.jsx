@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
-  Activity, UserCog, Users, PlayCircle, ClipboardCheck
+  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy
 } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from './constants';
@@ -15,6 +15,7 @@ import AdminManagerTab from './AdminManagerTab';
 import AuditLogsTab from './AuditLogsTab';
 import QuestionManagerTab from './QuestionManagerTab';
 import EvaluationTab from './EvaluationTab';
+import StudentScoreDashboard from './StudentScoreDashboard';
 
 const TABS = [
   { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
   { id: 'questions', label: 'Questions', icon: BookOpen },
   { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
+  { id: 'scores', label: 'Student Scores', icon: Trophy },
 ];
 
 const SuperAdminDashboard = () => {
@@ -150,6 +152,7 @@ const SuperAdminDashboard = () => {
                 {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                 {activeTab === 'evaluations' && <EvaluationTab />}
+                {activeTab === 'scores' && <StudentScoreDashboard />}
               </div>
             </div>
 

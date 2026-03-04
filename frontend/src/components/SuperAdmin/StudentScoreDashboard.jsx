@@ -1,0 +1,267 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp,
+    User, BarChart2, Calendar, Medal, RefreshCw
+} from 'lucide-react';
+import { api } from '../../store/authStore';
+import { API } from './constants';
+
+// ─── Rank medal helper ────────────────────────────────────────────────────────
+const RankBadge = ({ rank }) => {
+    if (rank === 1) return <span className="text-lg">🥇</span>;
+    if (rank === 2) return <span className="text-lg">🥈</span>;
+    if (rank === 3) return <span className="text-lg">🥉</span>;
+    return (
+        <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-[11px] font-black flex items-center justify-center">
+            {rank}
+        </span>
+    );
+};
+
+// ─── Day-wise score row ───────────────────────────────────────────────────────
+const DayWiseTable = ({ dayWise }) => {
+    if (!dayWise || dayWise.length === 0) {
+        return <p className="text-xs text-slate-400 italic py-2">No day-wise data available.</p>;
+    }
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="border-b border-slate-100">
+                        <th className="text-left text-[9px] font-black text-slate-400 uppercase tracking-widest py-1.5 pr-4">
+                            <Calendar size={9} className="inline mr-1" />Date
+                        </th>
+                        <th className="text-right text-[9px] font-black text-slate-400 uppercase tracking-widest py-1.5">Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {dayWise.map(({ date, score }) => (
+                        <tr key={date} className="border-b border-slate-50 last:border-0">
+                            <td className="py-1.5 pr-4 font-mono text-slate-600">{date}</td>
+                            <td className="py-1.5 text-right font-bold text-indigo-600">{score}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+// ─── Round score pills ────────────────────────────────────────────────────────
+const RoundPills = ({ rounds }) => (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+        {rounds.map((r, i) => (
+            <span
+                key={i}
+                className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-700"
+            >
+                {r.roundName}: <span className="text-indigo-900 font-black">{r.score}</span>
+            </span>
+        ))}
+    </div>
+);
+
+// ─── Single student row (expandable) ─────────────────────────────────────────
+const StudentRow = ({ entry, maxScore }) => {
+    const [expanded, setExpanded] = useState(false);
+    const pct = maxScore > 0 ? Math.min((entry.totalScore / maxScore) * 100, 100) : 0;
+
+    return (
+        <div className={`border rounded-2xl overflow-hidden transition-all ${entry.rank === 1 ? 'border-amber-200 bg-amber-50/30' :
+                entry.rank === 2 ? 'border-slate-200 bg-slate-50/30' :
+                    entry.rank === 3 ? 'border-orange-200 bg-orange-50/20' :
+                        'border-slate-100 bg-white'
+            }`}>
+            {/* Summary row */}
+            <button
+                onClick={() => setExpanded(e => !e)}
+                className="w-full flex items-center gap-4 p-4 text-left hover:bg-white/60 transition-colors"
+            >
+                {/* Rank */}
+                <div className="shrink-0 w-8 flex items-center justify-center">
+                    <RankBadge rank={entry.rank} />
+                </div>
+
+                {/* Student info */}
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <User size={14} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-slate-900 truncate">{entry.student?.name || '—'}</p>
+                        <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">{entry.student?.studentId}</p>
+                    </div>
+                </div>
+
+                {/* Progress bar + score */}
+                <div className="hidden sm:flex flex-col gap-1 min-w-[140px]">
+                    <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Score</span>
+                        <span className="text-sm font-black text-slate-900">{entry.totalScore}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all ${entry.rank === 1 ? 'bg-amber-400' :
+                                    entry.rank === 2 ? 'bg-slate-400' :
+                                        entry.rank === 3 ? 'bg-orange-400' :
+                                            'bg-indigo-400'
+                                }`}
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* Mobile score */}
+                <span className="sm:hidden font-black text-slate-900 text-sm shrink-0">{entry.totalScore} pts</span>
+
+                {expanded
+                    ? <ChevronUp size={15} className="text-slate-400 shrink-0" />
+                    : <ChevronDown size={15} className="text-slate-400 shrink-0" />
+                }
+            </button>
+
+            {/* Expanded detail */}
+            <AnimatePresence>
+                {expanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden border-t border-slate-100"
+                    >
+                        <div className="p-4 grid sm:grid-cols-2 gap-4 bg-slate-50/40">
+                            {/* Round breakdown */}
+                            <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                    <BarChart2 size={9} /> Score by Round
+                                </p>
+                                {entry.rounds.length > 0
+                                    ? <RoundPills rounds={entry.rounds} />
+                                    : <p className="text-xs text-slate-400 italic">No round scores yet.</p>
+                                }
+                            </div>
+
+                            {/* Day-wise breakdown */}
+                            <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                    <Calendar size={9} /> Day-wise Score
+                                </p>
+                                <DayWiseTable dayWise={entry.dayWise} />
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// ─── Main component ────────────────────────────────────────────────────────────
+const StudentScoreDashboard = () => {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
+
+    const fetchScores = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const res = await api.get(`${API}/student-scores`);
+            setData(res.data.data || []);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to load student scores');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchScores();
+    }, [fetchScores]);
+
+    const filtered = data.filter(entry =>
+        !search ||
+        entry.student?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        entry.student?.studentId?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const maxScore = filtered.length > 0 ? filtered[0].totalScore : 1;
+    const totalStudents = data.length;
+    const evaluated = data.filter(e => e.totalScore > 0).length;
+
+    return (
+        <div className="space-y-4 h-full flex flex-col">
+
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-600 rounded-xl text-white">
+                        <Trophy size={18} />
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">Student Score Dashboard</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">
+                            {loading ? 'Loading...' : `${evaluated} of ${totalStudents} students evaluated`}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {/* Search */}
+                    <input
+                        type="text"
+                        placeholder="Search student..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="px-3 py-2 text-xs font-bold bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400/40 w-44 placeholder:text-slate-300"
+                    />
+                    <button
+                        onClick={fetchScores}
+                        disabled={loading}
+                        className="p-2 rounded-xl bg-white border border-indigo-200 text-indigo-500 hover:bg-indigo-50 transition-all disabled:opacity-50"
+                        title="Refresh"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Leaderboard */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 pb-4">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-24">
+                        <Loader2 size={36} className="text-indigo-400 animate-spin mb-4" />
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Scores...</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-red-200 rounded-2xl bg-red-50">
+                        <AlertTriangle size={36} className="text-red-300 mb-3" />
+                        <p className="text-sm font-bold text-red-500">{error}</p>
+                        <button onClick={fetchScores} className="mt-3 text-xs font-bold text-red-600 underline">Try Again</button>
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-200 rounded-2xl">
+                        <Medal size={48} className="text-slate-200 mb-3" />
+                        <p className="text-sm font-bold text-slate-500">
+                            {search ? 'No students match your search.' : 'No evaluated submissions yet.'}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
+                            Scores appear here after admins manually grade student submissions in the Evaluations tab.
+                        </p>
+                    </div>
+                ) : (
+                    filtered.map(entry => (
+                        <StudentRow
+                            key={entry.student?._id}
+                            entry={entry}
+                            maxScore={maxScore}
+                        />
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default StudentScoreDashboard;

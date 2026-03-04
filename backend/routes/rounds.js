@@ -37,6 +37,54 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * 1a. GET /api/rounds/:roundId/refresh-otp
+     * Auto-rotates OTPs every 60s. Admin UI polls this every ~5s to show live countdown.
+     * Auth: requireAdmin
+     */
+    fastify.get('/:roundId/refresh-otp', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+
+        try {
+            let round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const OTP_TTL_MS = 60 * 1000; // 1 minute
+            const now = new Date();
+            const issuedAt = round.otpIssuedAt ? new Date(round.otpIssuedAt) : null;
+            const age = issuedAt ? now - issuedAt : Infinity;
+
+            // Auto-rotate if OTP is expired or was never issued
+            if (!round.startOtp || !round.endOtp || age >= OTP_TTL_MS) {
+                const startOtp = generateOtp();
+                const endOtp = generateOtp();
+                round = await Round.findByIdAndUpdate(
+                    roundId,
+                    { startOtp, endOtp, otpIssuedAt: now },
+                    { new: true }
+                );
+            }
+
+            const freshIssuedAt = new Date(round.otpIssuedAt);
+            const expiresAt = new Date(freshIssuedAt.getTime() + OTP_TTL_MS);
+            const secondsLeft = Math.max(0, Math.ceil((expiresAt - new Date()) / 1000));
+
+            return reply.code(200).send({
+                success: true,
+                data: {
+                    startOtp: round.startOtp,
+                    endOtp: round.endOtp,
+                    otpIssuedAt: round.otpIssuedAt,
+                    expiresAt,
+                    secondsLeft
+                }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to refresh OTP' });
+        }
+    });
+
+    /**
      * 1. Admin OTP Generation (POST /api/rounds/:roundId/generate-otp)
      * Auth: Must use the requireAdmin hook.
      */
@@ -49,7 +97,7 @@ module.exports = async function (fastify, opts) {
 
             const round = await Round.findByIdAndUpdate(
                 roundId,
-                { startOtp, endOtp, status: 'WAITING_FOR_OTP', isOtpActive: true },
+                { startOtp, endOtp, otpIssuedAt: new Date(), status: 'WAITING_FOR_OTP', isOtpActive: true },
                 { new: true }
             );
 
@@ -328,7 +376,53 @@ module.exports = async function (fastify, opts) {
             }
 
             const Question = require('../models/Question');
-            const questions = await Question.find({ round: roundId }).sort({ order: 1 });
+            let assignedQuestions;
+
+            if (submission.assignedQuestions && submission.assignedQuestions.length > 0) {
+                // Student already has an assigned set — return it in the saved order
+                const qMap = {};
+                const allQ = await Question.find({ _id: { $in: submission.assignedQuestions } });
+                allQ.forEach(q => { qMap[q._id.toString()] = q; });
+                assignedQuestions = submission.assignedQuestions
+                    .map(id => qMap[id.toString()])
+                    .filter(Boolean);
+            } else {
+                // First load: build and persist the student's question set
+                const allQuestions = await Question.find({ round: roundId }).sort({ order: 1 });
+                let selected = [...allQuestions];
+
+                // Fisher-Yates shuffle seeded by student ID (consistent per student)
+                if (round.shuffleQuestions !== false) {
+                    const seed = studentId.toString();
+                    let h = 0;
+                    for (let i = 0; i < seed.length; i++) {
+                        h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+                    }
+                    const rand = () => {
+                        h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+                        return (h >>> 0) / 4294967296;
+                    };
+                    for (let i = selected.length - 1; i > 0; i--) {
+                        const j = Math.floor(rand() * (i + 1));
+                        [selected[i], selected[j]] = [selected[j], selected[i]];
+                    }
+                }
+
+                // Trim to questionCount if set
+                if (round.questionCount && round.questionCount > 0 && round.questionCount < selected.length) {
+                    selected = selected.slice(0, round.questionCount);
+                }
+
+                // Persist the assignment so reconnects return the same set
+                submission.assignedQuestions = selected.map(q => q._id);
+                await submission.save();
+                assignedQuestions = selected;
+            }
+
+            // Count total rounds so student can see "Round X of Y"
+            const totalRounds = await Round.countDocuments({});
+            const allRounds = await Round.find({}, '_id').sort({ createdAt: 1 }).lean();
+            const roundNumber = allRounds.findIndex(r => r._id.toString() === roundId) + 1;
 
             return reply.code(200).send({
                 success: true,
@@ -338,9 +432,11 @@ module.exports = async function (fastify, opts) {
                         type: round.type,
                         durationMinutes: round.durationMinutes,
                         status: round.status,
-                        startTime: submission.startTime
+                        startTime: submission.startTime,
+                        totalRounds,
+                        roundNumber
                     },
-                    questions: questions.map(q => ({
+                    questions: assignedQuestions.map(q => ({
                         _id: q._id,
                         title: q.title,
                         description: q.description,
@@ -352,7 +448,7 @@ module.exports = async function (fastify, opts) {
                         points: q.points,
                         type: q.type,
                         category: q.category,
-                        options: q.options // Only sent if MCQ, but safe to include
+                        options: q.options
                     }))
                 }
             });

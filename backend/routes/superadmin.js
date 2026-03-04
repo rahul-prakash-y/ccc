@@ -98,6 +98,42 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * 2b. PATCH /api/superadmin/rounds/:roundId/question-settings
+     * Update questionCount and shuffleQuestions for a round.
+     * Clears previously assigned question sets so the new config takes effect.
+     */
+    fastify.patch('/rounds/:roundId/question-settings', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const { questionCount, shuffleQuestions } = request.body;
+
+            const updateFields = {};
+            if (questionCount !== undefined) updateFields.questionCount = questionCount === '' ? null : Number(questionCount) || null;
+            if (shuffleQuestions !== undefined) updateFields.shuffleQuestions = Boolean(shuffleQuestions);
+
+            const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true });
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Clear previously assigned question sets so students get re-assigned on next load
+            await Submission.updateMany({ round: roundId }, { $set: { assignedQuestions: [] } });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: `${round.name} question settings` },
+                metadata: { questionCount: round.questionCount, shuffleQuestions: round.shuffleQuestions },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update question settings' });
+        }
+    });
+
+
+    /**
      * 3. GET /api/superadmin/questions/:roundId
      * Returns all questions for a given round.
      */
@@ -351,6 +387,91 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to save evaluation score' });
+        }
+    });
+
+    /**
+     * GET /api/superadmin/student-scores
+     * Returns per-student score summary: overall total, per-round scores, and day-wise breakdown.
+     */
+    fastify.get('/student-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            // Fetch all submissions that have been evaluated (manualScores not empty)
+            const submissions = await Submission.find({ 'manualScores.0': { $exists: true } })
+                .populate('student', 'studentId name')
+                .populate('round', 'name')
+                .lean();
+
+            // Also include submissions with a numeric score (auto-scored)
+            const allSubmissions = await Submission.find({
+                $or: [
+                    { 'manualScores.0': { $exists: true } },
+                    { score: { $ne: null } }
+                ]
+            })
+                .populate('student', 'studentId name')
+                .populate('round', 'name')
+                .lean();
+
+            // Build per-student map
+            const studentMap = {};
+
+            for (const sub of allSubmissions) {
+                if (!sub.student) continue;
+                const sid = sub.student._id.toString();
+
+                if (!studentMap[sid]) {
+                    studentMap[sid] = {
+                        student: sub.student,
+                        totalScore: 0,
+                        rounds: [],       // [{ roundName, score, evaluatedAt }]
+                        dayWise: {}       // { 'YYYY-MM-DD': totalScoreForDay }
+                    };
+                }
+
+                const entry = studentMap[sid];
+
+                // Sum manual scores for this submission
+                const manualTotal = (sub.manualScores || []).reduce((s, ms) => s + (ms.score || 0), 0);
+                const submissionScore = manualTotal > 0 ? manualTotal : (sub.score || 0);
+
+                entry.totalScore += submissionScore;
+                entry.rounds.push({
+                    roundId: sub.round?._id,
+                    roundName: sub.round?.name || 'Unknown Round',
+                    score: submissionScore,
+                    status: sub.status,
+                    evaluatedAt: sub.updatedAt
+                });
+
+                // Build day-wise: use the latest evaluatedAt from manualScores, fallback to updatedAt
+                const evalDates = (sub.manualScores || []).map(ms => ms.evaluatedAt).filter(Boolean);
+                const dates = evalDates.length > 0 ? evalDates : [sub.updatedAt];
+
+                for (const d of dates) {
+                    if (!d) continue;
+                    const dayKey = new Date(d).toISOString().slice(0, 10); // YYYY-MM-DD
+                    entry.dayWise[dayKey] = (entry.dayWise[dayKey] || 0) + submissionScore;
+                }
+            }
+
+            // Convert to sorted array, highest scorer first
+            const result = Object.values(studentMap)
+                .sort((a, b) => b.totalScore - a.totalScore)
+                .map((entry, rank) => ({
+                    rank: rank + 1,
+                    student: entry.student,
+                    totalScore: entry.totalScore,
+                    rounds: entry.rounds,
+                    dayWise: Object.entries(entry.dayWise)
+                        .map(([date, score]) => ({ date, score }))
+                        .sort((a, b) => a.date.localeCompare(b.date))
+                }));
+
+            return reply.code(200).send({ success: true, data: result });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch student scores' });
         }
     });
 

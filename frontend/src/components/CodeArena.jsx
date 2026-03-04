@@ -17,14 +17,14 @@ const CodeArena = ({ language = 'javascript' }) => {
     const { roundId } = useParams();
     const navigate = useNavigate();
     const { updateUser } = useAuthStore();
-    
+
     // Core State
     const [questions, setQuestions] = useState([]);
     const [activeIdx, setActiveIdx] = useState(0);
     const [answers, setAnswers] = useState({});
     const [roundInfo, setRoundInfo] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    
+
     // Anti-Cheat State
     const [isBanned, setIsBanned] = useState(false);
     const [banReason, setBanReason] = useState('');
@@ -208,7 +208,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     if (isLoading) {
         return (
             <div className="h-screen w-full bg-[#f8fafc] flex flex-col items-center justify-center text-indigo-600 gap-4 font-mono font-bold tracking-widest">
-                <Loader2 className="animate-spin" size={40} /> 
+                <Loader2 className="animate-spin" size={40} />
                 <p className="uppercase text-xs text-indigo-400">Constructing Environment...</p>
             </div>
         );
@@ -222,7 +222,7 @@ const CodeArena = ({ language = 'javascript' }) => {
             {/* Top Command Bar (Light Theme) */}
             <header className="h-16 shrink-0 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-10 shadow-sm relative">
                 {isDangerZone && <div className="absolute top-0 left-0 right-0 h-0.5 bg-red-500 animate-pulse" />}
-                
+
                 <div className="flex items-center gap-4">
                     <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 shadow-inner">
                         <Code2 size={20} />
@@ -231,10 +231,29 @@ const CodeArena = ({ language = 'javascript' }) => {
                         <h1 className="text-sm font-black text-slate-900 tracking-tight">
                             {roundInfo?.name || 'Active Assessment'}
                         </h1>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                            Question {activeIdx + 1} of {questions.length}
-                            <span className="text-slate-300 mx-1">|</span>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                            {/* Round X of Y */}
+                            {roundInfo?.roundNumber && roundInfo?.totalRounds && (
+                                <>
+                                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-black text-[10px] uppercase tracking-wide">
+                                        Round {roundInfo.roundNumber} of {roundInfo.totalRounds}
+                                    </span>
+                                    <span className="text-slate-300">|</span>
+                                </>
+                            )}
+                            {/* Question X of N */}
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                Q {activeIdx + 1} of {questions.length}
+                            </span>
+                            <span className="text-slate-300">|</span>
+                            {/* Marks for current question */}
+                            {questions[activeIdx]?.points !== undefined && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-black text-[10px] uppercase tracking-wide">
+                                    {questions[activeIdx].points} pts
+                                </span>
+                            )}
+                            <span className="text-slate-300">|</span>
                             <span className="uppercase tracking-widest font-bold">{roundInfo?.type?.replace(/_/g, ' ')}</span>
                         </div>
                     </div>
@@ -250,11 +269,10 @@ const CodeArena = ({ language = 'javascript' }) => {
                     </div>
 
                     {/* Timer */}
-                    <div className={`flex items-center gap-3 px-4 py-2 rounded-xl font-mono text-lg font-black border transition-colors shadow-sm ${
-                        isTimeUp ? 'bg-red-50 border-red-200 text-red-600' :
-                        isDangerZone ? 'bg-orange-50 border-orange-200 text-orange-600 animate-pulse' :
-                        'bg-white border-slate-200 text-slate-800'
-                    }`}>
+                    <div className={`flex items-center gap-3 px-4 py-2 rounded-xl font-mono text-lg font-black border transition-colors shadow-sm ${isTimeUp ? 'bg-red-50 border-red-200 text-red-600' :
+                            isDangerZone ? 'bg-orange-50 border-orange-200 text-orange-600 animate-pulse' :
+                                'bg-white border-slate-200 text-slate-800'
+                        }`}>
                         {isTimeUp ? <AlertTriangle size={18} className="animate-bounce" /> : <Clock size={18} className={isDangerZone ? '' : 'text-slate-400'} />}
                         {isTimeUp ? '00:00:00 (LOCKED)' : formattedTime}
                     </div>
@@ -263,9 +281,8 @@ const CodeArena = ({ language = 'javascript' }) => {
                     <button
                         onClick={() => setIsSubmitModalOpen(true)}
                         disabled={isSubmitting}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-50 ${
-                            isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                        }`}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-50 ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                            }`}
                     >
                         <Send size={16} />
                         <span className="hidden sm:inline">{isTimeUp ? 'FORCE SUBMIT' : 'Finalize'}</span>
@@ -285,7 +302,7 @@ const CodeArena = ({ language = 'javascript' }) => {
             >
                 {/* Left Side: Question Pane */}
                 <div className="flex flex-col h-full bg-white border-r border-slate-200 overflow-hidden relative">
-                    
+
                     {/* Navigation Strip */}
                     <div className="flex items-center justify-between p-3 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-10">
                         <button
@@ -295,7 +312,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                         >
                             <ChevronLeft size={18} />
                         </button>
-                        
+
                         <div className="flex justify-center gap-1.5 px-4 overflow-x-auto no-scrollbar items-center">
                             {questions.map((_, i) => {
                                 const isAns = answers[questions[i]._id];
@@ -305,15 +322,15 @@ const CodeArena = ({ language = 'javascript' }) => {
                                         onClick={() => setActiveIdx(i)}
                                         className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-black transition-all border shadow-sm
                                             ${activeIdx === i ? 'bg-indigo-600 border-indigo-700 text-white scale-110 shadow-indigo-200' :
-                                            isAns ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                                            'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}
+                                                isAns ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                                    'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}
                                     >
                                         {i + 1}
                                     </button>
                                 );
                             })}
                         </div>
-                        
+
                         <button
                             disabled={activeIdx === questions.length - 1}
                             onClick={() => setActiveIdx(prev => prev + 1)}
@@ -336,8 +353,8 @@ const CodeArena = ({ language = 'javascript' }) => {
                             <div className="flex items-center gap-2 mb-4">
                                 <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border
                                     ${q?.difficulty === 'HARD' ? 'bg-red-50 text-red-600 border-red-100' :
-                                    q?.difficulty === 'MEDIUM' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                                    'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                        q?.difficulty === 'MEDIUM' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                            'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
                                     {q.difficulty}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
@@ -347,9 +364,9 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     {q.points} Pts
                                 </span>
                             </div>
-                            
+
                             <h2 className="text-2xl font-black text-slate-900 mb-6 tracking-tight leading-tight">{q.title}</h2>
-                            
+
                             <div className="prose prose-slate max-w-none text-sm font-medium leading-relaxed whitespace-pre-wrap mb-8">
                                 {q.description}
                             </div>
@@ -394,105 +411,105 @@ const CodeArena = ({ language = 'javascript' }) => {
                     </AnimatePresence>
                 </div>
 
-               {/* Right Side: Answer Input UI (Light Theme IDE) */}
-<div className="h-full flex flex-col bg-white overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.03)] border-l border-slate-200">
-    
-    {/* IDE Header */}
-    <div className="h-10 bg-slate-50/80 border-b border-slate-200 flex items-end px-4 shrink-0">
-        {/* Active Tab */}
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-t-lg border-t border-x border-slate-200 border-b-0 text-xs font-mono font-bold text-indigo-600 relative top-[1px]">
-            <Terminal size={14} className="text-indigo-400" />
-            <span>{q.type === 'MCQ' ? 'Selection_Matrix.exe' : q.type === 'CODE' ? `solution.${language}` : 'Text_Buffer.txt'}</span>
-        </div>
-    </div>
+                {/* Right Side: Answer Input UI (Light Theme IDE) */}
+                <div className="h-full flex flex-col bg-white overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.03)] border-l border-slate-200">
 
-    <div className="flex-1 relative overflow-hidden bg-slate-50/30">
-        {/* Lock Overlay (Frosted Glass) */}
-        <AnimatePresence>
-            {isTimeUp && (
-                <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-20 bg-white/60 backdrop-blur-md flex items-center justify-center"
-                >
-                    <div className="px-8 py-8 bg-white border border-red-100 rounded-3xl flex flex-col items-center gap-2 shadow-[0_20px_60px_-15px_rgba(239,68,68,0.2)] text-center">
-                        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-2 animate-pulse">
-                            <Lock size={32} />
+                    {/* IDE Header */}
+                    <div className="h-10 bg-slate-50/80 border-b border-slate-200 flex items-end px-4 shrink-0">
+                        {/* Active Tab */}
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-t-lg border-t border-x border-slate-200 border-b-0 text-xs font-mono font-bold text-indigo-600 relative top-[1px]">
+                            <Terminal size={14} className="text-indigo-400" />
+                            <span>{q.type === 'MCQ' ? 'Selection_Matrix.exe' : q.type === 'CODE' ? `solution.${language}` : 'Text_Buffer.txt'}</span>
                         </div>
-                        <p className="text-slate-900 font-black tracking-tight text-xl uppercase">Input Locked</p>
-                        <p className="text-sm text-slate-500 font-medium">Session time has expired.</p>
                     </div>
-                </motion.div>
-            )}
-        </AnimatePresence>
 
-        {q.type === 'MCQ' ? (
-            <div className="p-8 h-full overflow-y-auto custom-scrollbar">
-                <div className="max-w-xl mx-auto space-y-4 pt-4">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Select optimal solution</h3>
-                    {q.options?.map((opt, i) => (
-                        <button
-                            key={i}
-                            disabled={isTimeUp}
-                            onClick={() => handleAnswerChange(q._id, opt)}
-                            className={`w-full p-5 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 group
+                    <div className="flex-1 relative overflow-hidden bg-slate-50/30">
+                        {/* Lock Overlay (Frosted Glass) */}
+                        <AnimatePresence>
+                            {isTimeUp && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="absolute inset-0 z-20 bg-white/60 backdrop-blur-md flex items-center justify-center"
+                                >
+                                    <div className="px-8 py-8 bg-white border border-red-100 rounded-3xl flex flex-col items-center gap-2 shadow-[0_20px_60px_-15px_rgba(239,68,68,0.2)] text-center">
+                                        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-2 animate-pulse">
+                                            <Lock size={32} />
+                                        </div>
+                                        <p className="text-slate-900 font-black tracking-tight text-xl uppercase">Input Locked</p>
+                                        <p className="text-sm text-slate-500 font-medium">Session time has expired.</p>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {q.type === 'MCQ' ? (
+                            <div className="p-8 h-full overflow-y-auto custom-scrollbar">
+                                <div className="max-w-xl mx-auto space-y-4 pt-4">
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Select optimal solution</h3>
+                                    {q.options?.map((opt, i) => (
+                                        <button
+                                            key={i}
+                                            disabled={isTimeUp}
+                                            onClick={() => handleAnswerChange(q._id, opt)}
+                                            className={`w-full p-5 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 group
                                 ${currentAnswer === opt ?
-                                    'bg-indigo-50/80 border-indigo-400 text-indigo-900 shadow-[0_8px_30px_-4px_rgba(79,70,229,0.15)]' :
-                                    'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:shadow-md hover:shadow-slate-200/50'}
+                                                    'bg-indigo-50/80 border-indigo-400 text-indigo-900 shadow-[0_8px_30px_-4px_rgba(79,70,229,0.15)]' :
+                                                    'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:shadow-md hover:shadow-slate-200/50'}
                                 ${isTimeUp && currentAnswer !== opt ? 'opacity-40 grayscale-[0.5]' : ''}`}
-                        >
-                            <div className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors
+                                        >
+                                            <div className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors
                                 ${currentAnswer === opt ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 group-hover:border-indigo-400'}`}>
-                                {currentAnswer === opt && <CheckCircle size={14} strokeWidth={3} />}
+                                                {currentAnswer === opt && <CheckCircle size={14} strokeWidth={3} />}
+                                            </div>
+                                            <span className={`text-sm font-medium leading-relaxed ${currentAnswer === opt ? 'font-bold' : ''}`}>{opt}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <span className={`text-sm font-medium leading-relaxed ${currentAnswer === opt ? 'font-bold' : ''}`}>{opt}</span>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        ) : (q.type === 'CODE' || q.type === 'DEBUG') ? (
-            <Editor
-                height="100%"
-                language={q.category === 'SQL' ? 'sql' : language}
-                theme="light" // Switched to Monaco's built-in light theme
-                value={currentAnswer || (q.type === 'DEBUG' ? q.sampleInput : '')}
-                onChange={(val) => handleAnswerChange(q._id, val)}
-                options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-                    lineHeight: 24,
-                    padding: { top: 24 },
-                    scrollBeyondLastLine: false,
-                    smoothScrolling: true,
-                    cursorBlinking: "smooth",
-                    readOnly: isTimeUp,
-                    renderLineHighlight: "all",
-                    hideCursorInOverviewRuler: true
-                }}
-                loading={
-                    <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-3 font-mono text-sm font-bold tracking-widest uppercase">
-                        <Loader2 className="animate-spin" size={28} /> Booting IDE...
+                        ) : (q.type === 'CODE' || q.type === 'DEBUG') ? (
+                            <Editor
+                                height="100%"
+                                language={q.category === 'SQL' ? 'sql' : language}
+                                theme="light" // Switched to Monaco's built-in light theme
+                                value={currentAnswer || (q.type === 'DEBUG' ? q.sampleInput : '')}
+                                onChange={(val) => handleAnswerChange(q._id, val)}
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 14,
+                                    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                                    lineHeight: 24,
+                                    padding: { top: 24 },
+                                    scrollBeyondLastLine: false,
+                                    smoothScrolling: true,
+                                    cursorBlinking: "smooth",
+                                    readOnly: isTimeUp,
+                                    renderLineHighlight: "all",
+                                    hideCursorInOverviewRuler: true
+                                }}
+                                loading={
+                                    <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-3 font-mono text-sm font-bold tracking-widest uppercase">
+                                        <Loader2 className="animate-spin" size={28} /> Booting IDE...
+                                    </div>
+                                }
+                            />
+                        ) : (
+                            <div className="p-6 h-full flex flex-col max-w-4xl mx-auto w-full">
+                                <textarea
+                                    disabled={isTimeUp}
+                                    placeholder="// Initialize text stream here..."
+                                    className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 text-slate-700 font-mono text-sm focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 resize-none leading-relaxed transition-all shadow-sm custom-scrollbar disabled:bg-slate-50 disabled:text-slate-400"
+                                    value={currentAnswer}
+                                    onChange={(e) => handleAnswerChange(q._id, e.target.value)}
+                                />
+                                <div className="mt-4 flex items-center justify-end gap-2 text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest">
+                                    Size: <span className="text-indigo-600 text-xs">{currentAnswer.length}</span> bytes
+                                </div>
+                            </div>
+                        )}
                     </div>
-                }
-            />
-        ) : (
-            <div className="p-6 h-full flex flex-col max-w-4xl mx-auto w-full">
-                <textarea
-                    disabled={isTimeUp}
-                    placeholder="// Initialize text stream here..."
-                    className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 text-slate-700 font-mono text-sm focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 resize-none leading-relaxed transition-all shadow-sm custom-scrollbar disabled:bg-slate-50 disabled:text-slate-400"
-                    value={currentAnswer}
-                    onChange={(e) => handleAnswerChange(q._id, e.target.value)}
-                />
-                <div className="mt-4 flex items-center justify-end gap-2 text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest">
-                    Size: <span className="text-indigo-600 text-xs">{currentAnswer.length}</span> bytes
                 </div>
-            </div>
-        )}
-    </div>
-</div>
             </Split>
 
             {/* Submission Modal */}
@@ -504,7 +521,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                             className={`relative w-full max-w-md overflow-hidden rounded-3xl bg-white border shadow-2xl ${isTimeUp ? 'border-red-200' : 'border-indigo-200'}`}
                         >
                             <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isTimeUp ? 'from-transparent via-red-500 to-transparent' : 'from-transparent via-indigo-500 to-transparent'}`}></div>
-                            
+
                             <div className="p-8">
                                 <div className="flex items-center gap-4 mb-6">
                                     <div className={`p-4 rounded-2xl ${isTimeUp ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -515,11 +532,11 @@ const CodeArena = ({ language = 'javascript' }) => {
                                         <p className={`text-[10px] font-black uppercase tracking-widest ${isTimeUp ? 'text-red-500' : 'text-indigo-500'}`}>FINAL AUTHORIZATION</p>
                                     </div>
                                 </div>
-                                
+
                                 <p className="text-slate-500 text-sm mb-6 leading-relaxed font-medium">
                                     {isTimeUp ? "Session closed. Enter the Proctor's End Key to securely flush data to the server." : "Ready to commit? Enter the End Key provided by the Proctor to finalize your submission."}
                                 </p>
-                                
+
                                 <form onSubmit={handleFinalSubmit} className="space-y-6">
                                     <div>
                                         <div className="flex justify-between gap-2" onPaste={handleOtpPaste}>
@@ -546,7 +563,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                             <AlertTriangle size={14} className="shrink-0" />{submitError}
                                         </motion.p>
                                     )}
-                                    
+
                                     <div className="flex gap-3 pt-2">
                                         {!isTimeUp && <button type="button" onClick={() => setIsSubmitModalOpen(false)} disabled={isSubmitting} className="flex-1 px-4 py-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold transition-all shadow-sm">Cancel</button>}
                                         <button type="submit" disabled={isSubmitting || endOtp.join('').length !== 6} className={`flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}>
@@ -561,7 +578,8 @@ const CodeArena = ({ language = 'javascript' }) => {
             </AnimatePresence>
 
             {/* Custom Gutter Styling */}
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .gutter { background-color: #f1f5f9; border-left: 1px solid #e2e8f0; border-right: 1px solid #1e1e2e; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; } 
                 .gutter:hover { background-color: #cbd5e1; } 
                 .gutter.gutter-horizontal { cursor: col-resize; position: relative;}

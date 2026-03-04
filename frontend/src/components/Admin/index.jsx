@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -9,12 +9,14 @@ import LiveOpsTab from '../SuperAdmin/LiveOpsTab';
 import StudentManagerTab from '../SuperAdmin/StudentManagerTab';
 import QuestionManagerTab from '../SuperAdmin/QuestionManagerTab';
 import EvaluationTab from '../SuperAdmin/EvaluationTab';
+import StudentScoreDashboard from '../SuperAdmin/StudentScoreDashboard';
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'questions', label: 'Questions', icon: BookOpen },
     { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
+    { id: 'scores', label: 'Student Scores', icon: Trophy },
 ];
 
 const AdminDashboard = () => {
@@ -141,6 +143,7 @@ const AdminDashboard = () => {
                                 {activeTab === 'students' && <StudentManagerTab />}
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
+                                {activeTab === 'scores' && <StudentScoreDashboard />}
                             </div>
                         </div>
 

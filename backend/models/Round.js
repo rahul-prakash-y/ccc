@@ -19,6 +19,10 @@ const roundSchema = new mongoose.Schema({
         length: 6,
         default: null // Generated live by admin
     },
+    otpIssuedAt: {
+        type: Date,
+        default: null // Tracks when OTP was last generated for 1-min rotation
+    },
     durationMinutes: {
         type: Number,
         required: true,
@@ -38,6 +42,15 @@ const roundSchema = new mongoose.Schema({
         type: String,
         enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL'],
         default: 'GENERAL'
+    },
+    // Question pool settings
+    questionCount: {
+        type: Number,
+        default: null // null = all questions; set to N to give each student N random questions
+    },
+    shuffleQuestions: {
+        type: Boolean,
+        default: true // When true, each student gets questions in a different order
     }
 }, {
     timestamps: true

@@ -65,6 +65,10 @@ const submissionSchema = new mongoose.Schema({
             feedback: { type: String, default: '' },
             evaluatedAt: { type: Date, default: Date.now }
         }
+    ],
+    // Shuffled question IDs assigned to this student for this round
+    assignedQuestions: [
+        { type: mongoose.Schema.Types.ObjectId, ref: 'Question' }
     ]
 }, {
     timestamps: true
