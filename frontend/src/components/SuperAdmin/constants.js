@@ -18,8 +18,8 @@ export const ACTION_STYLES = {
     DELETED: { color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
     BULK_UPLOAD: { color: 'text-violet-700', bg: 'bg-violet-50 border-violet-200' },
     OTP_GENERATED: { color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
-    ROUND_STARTED: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
-    ROUND_SUBMITTED: { color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200' },
+    SECTION_STARTED: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+    SECTION_SUBMITTED: { color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200' },
     DISQUALIFIED: { color: 'text-red-500', bg: 'bg-red-950/50 border-red-700' },
 };
 

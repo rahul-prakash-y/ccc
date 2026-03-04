@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion   } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy
@@ -13,6 +13,7 @@ import ActivityLogsTab from './ActivityLogsTab';
 import StudentManagerTab from './StudentManagerTab';
 import AdminManagerTab from './AdminManagerTab';
 import AuditLogsTab from './AuditLogsTab';
+import QuestionBankTab from './QuestionBankTab';
 import QuestionManagerTab from './QuestionManagerTab';
 import EvaluationTab from './EvaluationTab';
 import StudentScoreDashboard from './StudentScoreDashboard';
@@ -23,7 +24,8 @@ const TABS = [
   { id: 'students', label: 'Students', icon: Users },
   { id: 'admins', label: 'Admins', icon: UserCog },
   { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
-  { id: 'questions', label: 'Questions', icon: BookOpen },
+  { id: 'question-bank', label: 'Question Bank', icon: BookOpen },
+  { id: 'questions', label: 'Test Questions', icon: ClipboardCheck },
   { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
   { id: 'scores', label: 'Student Scores', icon: Trophy },
 ];
@@ -54,7 +56,7 @@ const SuperAdminDashboard = () => {
           {/* Identity Section */}
           <div className="flex items-center gap-4">
             <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
+              <div className="absolute -inset-1 bg-linear-to-tr from-indigo-600 to-violet-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
               <div className="relative p-2.5 bg-white border border-slate-100 rounded-xl">
                 <ShieldCheck size={22} className="text-indigo-600" />
               </div>
@@ -150,6 +152,7 @@ const SuperAdminDashboard = () => {
                 {activeTab === 'students' && <StudentManagerTab />}
                 {activeTab === 'admins' && <AdminManagerTab />}
                 {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
+                {activeTab === 'question-bank' && <QuestionBankTab />}
                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                 {activeTab === 'evaluations' && <EvaluationTab />}
                 {activeTab === 'scores' && <StudentScoreDashboard />}
@@ -157,7 +160,7 @@ const SuperAdminDashboard = () => {
             </div>
 
             {/* Bottom Gradient Overlay (Depth Indicator) */}
-            <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-20" />
+            <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-t from-white via-white/80 to-transparent pointer-events-none z-20" />
           </motion.div>
         </AnimatePresence>
       </main>

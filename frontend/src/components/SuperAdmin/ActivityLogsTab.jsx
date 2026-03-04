@@ -1,37 +1,24 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Search, Loader2, ChevronDown, RefreshCw } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, ACTION_STYLES, ALL_ACTIONS } from './constants';
+import Pagination from './components/Pagination';
 
 const ActivityLogsTab = () => {
-    // 1. Data Source State
-    const [allLogs, setAllLogs] = useState([]);
+    // 1. Data Source & Pagination State
+    const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(20);
+    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
     // 2. Filter States
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [actionFilter, setActionFilter] = useState('');
 
-    // Fetch ONLY on mount or explicit refresh. Ignore filter changes.
-    const fetchLogs = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await api.get(`${API}/activity-logs`);
-            setAllLogs(res.data.data || []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { 
-        fetchLogs(); 
-    }, [fetchLogs]);
-
-    // 3. Debounced Search Effect 
-    // Wait for the user to stop typing for 300ms before triggering the heavy array map.
-    const [debouncedSearch, setDebouncedSearch] = useState('');
+    // Debounce search input
     useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedSearch(search);
@@ -39,25 +26,36 @@ const ActivityLogsTab = () => {
         return () => clearTimeout(handler);
     }, [search]);
 
+    // Reset page to 1 whenever filters change
+    useEffect(() => {
+        setPage(1);
+    }, [actionFilter, debouncedSearch, limit]);
 
-    // 4. Mamoized Filter Logic (Applies both Action and Search filters)
-    const filtered = useMemo(() => {
-         const q = debouncedSearch.toLowerCase();
-         return allLogs.filter(l => {
-             // A. Check Action Filter First (it's faster)
-             if (actionFilter && l.action !== actionFilter) return false;
-             
-             // B. Check Search Filter
-             if (!q) return true; // if no search term, keep the log
-             
-             return (
-                l.performedBy?.studentId?.toLowerCase().includes(q) ||
-                l.performedBy?.name?.toLowerCase().includes(q) ||
-                l.target?.label?.toLowerCase().includes(q) ||
-                l.target?.type?.toLowerCase().includes(q)
-             );
-         });
-    }, [allLogs, actionFilter, debouncedSearch]);
+    // Fetch Logs Master Effect
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({
+                page: page,
+                limit: limit
+            });
+            if (actionFilter) params.append('action', actionFilter);
+            if (debouncedSearch) params.append('search', debouncedSearch);
+
+            const res = await api.get(`${API}/activity-logs?${params.toString()}`);
+            setLogs(res.data.data || []);
+            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
+        } catch (e) {
+            console.error('Failed to fetch activity logs:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, [page, limit, actionFilter, debouncedSearch]);
+
+    // Call fetchLogs on any dependency change
+    useEffect(() => {
+        fetchLogs();
+    }, [fetchLogs]);
 
     return (
         <div className="space-y-5 h-full flex flex-col">
@@ -85,8 +83,8 @@ const ActivityLogsTab = () => {
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
-                <button 
-                    onClick={fetchLogs} 
+                <button
+                    onClick={fetchLogs}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm group"
                     title="Refresh Logs"
                 >
@@ -100,7 +98,7 @@ const ActivityLogsTab = () => {
                     <Loader2 size={40} className="text-indigo-500 animate-spin mb-4" />
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Compiling System Logs...</p>
                 </div>
-            ) : filtered.length === 0 ? (
+            ) : logs.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 min-h-[400px] border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
                     <Filter size={48} className="text-gray-300 mb-4" />
                     <p className="text-sm font-bold text-gray-500">No matching activities found</p>
@@ -119,7 +117,7 @@ const ActivityLogsTab = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filtered.map(log => {
+                            {logs.map(log => {
                                 const style = ACTION_STYLES[log.action] || { color: 'text-gray-600', bg: 'bg-gray-100 border-gray-300' };
                                 return (
                                     <tr key={log._id} className="hover:bg-slate-50/80 transition-colors group">
@@ -142,8 +140,8 @@ const ActivityLogsTab = () => {
                                             {log.target?.label || '—'}
                                         </td>
                                         <td className="px-5 py-3 text-gray-400 whitespace-nowrap font-mono text-xs">
-                                            {new Date(log.createdAt).toLocaleString(undefined, { 
-                                                month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', second:'2-digit' 
+                                            {new Date(log.createdAt).toLocaleString(undefined, {
+                                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
                                             })}
                                         </td>
                                         <td className="px-5 py-3 text-gray-400 font-mono text-xs group-hover:text-gray-600 transition-colors">
@@ -156,15 +154,21 @@ const ActivityLogsTab = () => {
                     </table>
                 </div>
             )}
-            
-            {/* Footer Summary */}
-            <div className="flex justify-between items-center px-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                    Live Monitor
-                </p>
-                <p className="text-xs text-gray-400 font-mono">
-                    <span className="font-bold text-gray-600">{filtered.length}</span> Records
-                </p>
+
+            {/* Pagination & Footer Summary */}
+            <div className="flex flex-col sm:flex-row justify-between items-center px-2 py-2 gap-4 border-t border-gray-100 mt-2">
+                <span className="text-gray-500 font-mono hidden sm:inline">
+                    Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.totalRecords)} of {pagination.totalRecords} Records
+                </span>
+                <Pagination
+                    currentPage={page}
+                    totalPages={pagination.totalPages}
+                    onPageChange={setPage}
+                    totalRecords={pagination.totalRecords}
+                    limit={limit}
+                    onLimitChange={setLimit}
+                    showLimitSelection={true}
+                />
             </div>
         </div>
     );

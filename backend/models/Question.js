@@ -4,7 +4,12 @@ const questionSchema = new mongoose.Schema({
     round: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Round',
-        required: true,
+        // Optional because Question Bank questions don't belong to a round
+        index: true
+    },
+    isBank: {
+        type: Boolean,
+        default: false,
         index: true
     },
     title: {

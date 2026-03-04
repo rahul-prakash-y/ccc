@@ -89,6 +89,10 @@ const CodeArena = ({ language = 'javascript' }) => {
     useEffect(() => {
         const load = async () => {
             try {
+                // Attempt an auto-join first. If this is Round 2+, it inherits the clock and validates.
+                // If this is Round 1, it will safely fail (403) and we proceed to load logic because StudentDashboard already unlocked it.
+                await api.post(`/rounds/${roundId}/start`, { isAutoJoin: true }).catch(() => { });
+
                 const res = await api.get(`/rounds/${roundId}/questions`);
                 setQuestions(res.data.data.questions);
                 setRoundInfo(res.data.data.round);
@@ -168,17 +172,27 @@ const CodeArena = ({ language = 'javascript' }) => {
 
     const handleFinalSubmit = async (e) => {
         if (e) e.preventDefault();
-        const otpString = endOtp.join('');
-        if (otpString.length !== 6) {
-            setSubmitError('Authorization sequence incomplete.');
-            return;
+
+        // Only require End OTP if there is NO next round
+        let otpString = '';
+        if (!roundInfo?.hasNextRound) {
+            otpString = endOtp.join('');
+            if (otpString.length !== 6) {
+                setSubmitError('Authorization sequence incomplete.');
+                return;
+            }
         }
+
         setIsSubmitting(true);
         setSubmitError(null);
         try {
-            await api.post(`/rounds/${roundId}/submit`, { endOtp: otpString, answers });
-            alert("Transmission Successful. Disconnecting from Arena.");
-            navigate('/dashboard');
+            const res = await api.post(`/rounds/${roundId}/submit`, { endOtp: otpString, answers });
+            if (res.data.nextRoundId) {
+                navigate(`/arena/${res.data.nextRoundId}`);
+            } else {
+                alert("Transmission Successful. Disconnecting from Arena.");
+                navigate('/dashboard');
+            }
         } catch (err) {
             setSubmitError(err.response?.data?.error || 'Link failed. Verify code and retry.');
             setEndOtp(['', '', '', '', '', '']);
@@ -239,11 +253,11 @@ const CodeArena = ({ language = 'javascript' }) => {
                             {roundInfo?.name || 'Active Assessment'}
                         </h1>
                         <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
-                            {/* Round X of Y */}
+                            {/* Section X of Y */}
                             {roundInfo?.roundNumber && roundInfo?.totalRounds && (
                                 <>
                                     <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-black text-[10px] uppercase tracking-wide">
-                                        Round {roundInfo.roundNumber} of {roundInfo.totalRounds}
+                                        Section {roundInfo.roundNumber} of {roundInfo.totalRounds}
                                     </span>
                                     <span className="text-slate-300">|</span>
                                 </>
@@ -532,38 +546,46 @@ const CodeArena = ({ language = 'javascript' }) => {
                             <div className="p-8">
                                 <div className="flex items-center gap-4 mb-6">
                                     <div className={`p-4 rounded-2xl ${isTimeUp ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                                        {isTimeUp ? <AlertTriangle size={28} /> : <CheckCircle size={28} />}
+                                        {isTimeUp ? <AlertTriangle size={28} /> : (roundInfo?.hasNextRound ? <ArrowRight size={28} /> : <CheckCircle size={28} />)}
                                     </div>
                                     <div>
-                                        <h2 className="text-2xl font-black tracking-tight text-slate-900 mb-1">{isTimeUp ? 'Time Expired' : 'Secure Transmission'}</h2>
-                                        <p className={`text-[10px] font-black uppercase tracking-widest ${isTimeUp ? 'text-red-500' : 'text-indigo-500'}`}>FINAL AUTHORIZATION</p>
+                                        <h2 className="text-2xl font-black tracking-tight text-slate-900 mb-1">{isTimeUp ? 'Time Expired' : (roundInfo?.hasNextRound ? 'Section Complete' : 'Secure Transmission')}</h2>
+                                        <p className={`text-[10px] font-black uppercase tracking-widest ${isTimeUp ? 'text-red-500' : 'text-indigo-500'}`}>
+                                            {roundInfo?.hasNextRound ? 'SEQUENCE CONTINUES' : 'FINAL AUTHORIZATION'}
+                                        </p>
                                     </div>
                                 </div>
 
                                 <p className="text-slate-500 text-sm mb-6 leading-relaxed font-medium">
-                                    {isTimeUp ? "Session closed. Enter the Proctor's End Key to securely flush data to the server." : "Ready to commit? Enter the End Key provided by the Proctor to finalize your submission."}
+                                    {isTimeUp
+                                        ? "Session closed. Enter the Proctor's End Key to securely flush data to the server."
+                                        : (roundInfo?.hasNextRound
+                                            ? "You are about to submit this section. The timer will continue seamlessly into the next section. Ready to proceed?"
+                                            : "Ready to commit? Enter the End Key provided by the Proctor to finalize your test submission.")}
                                 </p>
 
                                 <form onSubmit={handleFinalSubmit} className="space-y-6">
-                                    <div>
-                                        <div className="flex justify-between gap-2" onPaste={handleOtpPaste}>
-                                            {endOtp.map((digit, index) => (
-                                                <input
-                                                    key={index}
-                                                    ref={el => otpRefs.current[index] = el}
-                                                    type="text"
-                                                    maxLength={1}
-                                                    value={digit}
-                                                    onChange={(e) => handleOtpChange(index, e.target.value)}
-                                                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                                                    disabled={isSubmitting}
-                                                    autoComplete="off"
-                                                    className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-black font-mono text-slate-900 bg-slate-50 border-2 rounded-xl focus:bg-white transition-all outline-none disabled:opacity-50 selection:bg-indigo-100
-                                                        ${isTimeUp ? 'border-slate-200 focus:border-red-500 focus:ring-4 focus:ring-red-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20'}`}
-                                                />
-                                            ))}
+                                    {(!roundInfo?.hasNextRound || isTimeUp) && (
+                                        <div>
+                                            <div className="flex justify-between gap-2" onPaste={handleOtpPaste}>
+                                                {endOtp.map((digit, index) => (
+                                                    <input
+                                                        key={index}
+                                                        ref={el => otpRefs.current[index] = el}
+                                                        type="text"
+                                                        maxLength={1}
+                                                        value={digit}
+                                                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                                                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                                                        disabled={isSubmitting}
+                                                        autoComplete="off"
+                                                        className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-black font-mono text-slate-900 bg-slate-50 border-2 rounded-xl focus:bg-white transition-all outline-none disabled:opacity-50 selection:bg-indigo-100
+                                                            ${isTimeUp ? 'border-slate-200 focus:border-red-500 focus:ring-4 focus:ring-red-500/20' : 'border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20'}`}
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     {submitError && (
                                         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 text-red-600 text-xs font-bold flex items-center justify-center gap-2 bg-red-50 py-3 rounded-xl border border-red-200">
@@ -573,8 +595,12 @@ const CodeArena = ({ language = 'javascript' }) => {
 
                                     <div className="flex gap-3 pt-2">
                                         {!isTimeUp && <button type="button" onClick={() => setIsSubmitModalOpen(false)} disabled={isSubmitting} className="flex-1 px-4 py-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold transition-all shadow-sm">Cancel</button>}
-                                        <button type="submit" disabled={isSubmitting || endOtp.join('').length !== 6} className={`flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}>
-                                            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Verifying</> : <><Send size={16} /> Confirm Sequence</>}
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmitting || ((!roundInfo?.hasNextRound || isTimeUp) && endOtp.join('').length !== 6)}
+                                            className={`flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
+                                        >
+                                            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Verifying</> : (roundInfo?.hasNextRound && !isTimeUp ? <><Send size={16} /> Proceed to Next</> : <><Send size={16} /> Confirm Sequence</>)}
                                         </button>
                                     </div>
                                 </form>

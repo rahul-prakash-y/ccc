@@ -1,149 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-    Plus, Pencil, Trash2, X, Check, Filter, Loader2,
-    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search
+    Plus, Pencil, Trash2, X, Check, Loader2,
+    Eye, EyeOff, BookOpen, ClipboardCheck, AlertTriangle, Search
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
 
-// ─── Import From Library Modal ──────────────────────────────────────────────────────
-const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
-    const [bankQuestions, setBankQuestions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedIds, setSelectedIds] = useState(new Set());
-    const [importing, setImporting] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        const fetchBank = async () => {
-            try {
-                const res = await api.get(`${API}/question-bank`);
-                setBankQuestions(res.data.data || []);
-            } catch {
-                setError('Failed to fetch library questions.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchBank();
-    }, []);
-
-    const toggleSelection = (id) => {
-        const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setSelectedIds(newSet);
-    };
-
-    const handleImport = async () => {
-        if (selectedIds.size === 0) return;
-        setImporting(true);
-        setError('');
-        try {
-            await api.post(`${API}/rounds/${roundId}/import-from-bank`, {
-                questionIds: Array.from(selectedIds)
-            });
-            onImportSuccess();
-        } catch (err) {
-            setError(err.response?.data?.error || 'Failed to import questions');
-            setImporting(false);
-        }
-    };
-
-    return (
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 py-8"
-                onClick={e => e.target === e.currentTarget && onClose()}
-            >
-                <motion.div
-                    initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
-                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl max-h-full flex flex-col shadow-2xl overflow-hidden"
-                >
-                    <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-emerald-50/50 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
-                                <Import size={18} />
-                            </div>
-                            <div>
-                                <h2 className="font-bold text-slate-900 text-lg">Import from Library</h2>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Select questions to copy into this round</p>
-                            </div>
-                        </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
-                            <X size={16} />
-                        </button>
-                    </div>
-
-                    <div className="overflow-y-auto custom-scrollbar p-6 flex-1 bg-slate-50/30">
-                        {loading ? (
-                            <div className="flex justify-center items-center py-10"><Loader2 className="animate-spin text-indigo-500" /></div>
-                        ) : error && bankQuestions.length === 0 ? (
-                            <div className="text-red-500 font-bold text-sm text-center py-10">{error}</div>
-                        ) : bankQuestions.length === 0 ? (
-                            <div className="text-slate-400 font-bold text-sm text-center py-10 flex flex-col items-center gap-2">
-                                <BookOpen size={30} className="text-slate-300" />
-                                No questions found in the Global Library.
-                            </div>
-                        ) : (
-                            <div className="grid gap-3">
-                                {bankQuestions.map(q => {
-                                    const isSelected = selectedIds.has(q._id);
-                                    return (
-                                        <div
-                                            key={q._id}
-                                            onClick={() => toggleSelection(q._id)}
-                                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex gap-4 items-center ${isSelected ? 'border-emerald-500 bg-emerald-50 flex-row-reverse' : 'border-slate-200 bg-white hover:border-slate-300'
-                                                }`}
-                                        >
-                                            <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'
-                                                }`}>
-                                                {isSelected && <Check size={14} />}
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="font-bold text-slate-900 text-sm mb-1">{q.title}</p>
-                                                <div className="flex gap-2 text-[10px] uppercase font-bold tracking-wider">
-                                                    <span className={`px-1.5 py-0.5 rounded border ${DIFFICULTY_COLORS[q.difficulty]}`}>{q.difficulty}</span>
-                                                    <span className="text-slate-500">{q.type}</span>
-                                                    <span className="text-emerald-600">{q.category}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="p-5 border-t border-slate-100 bg-white flex gap-3 shrink-0 items-center justify-between">
-                        <span className="text-xs font-bold text-slate-500">
-                            {selectedIds.size} selected
-                        </span>
-                        <div className="flex gap-3">
-                            <button type="button" onClick={onClose} className="px-5 py-2.5 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors font-bold text-sm bg-white">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleImport}
-                                disabled={importing || selectedIds.size === 0}
-                                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:hover:bg-emerald-600 rounded-xl text-white font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-200 active:scale-95 text-sm"
-                            >
-                                {importing ? <Loader2 size={16} className="animate-spin" /> : <Import size={16} />}
-                                Import Selected
-                            </button>
-                        </div>
-                    </div>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
-};
-
-// ─── Refined Question Form Modal ────────────────────────────────────────────────────────
-const QuestionModal = ({ question, roundId, onClose, onSave }) => {
+const QuestionModal = ({ question, onClose, onSave }) => {
     const isEdit = !!question;
     const [form, setForm] = useState({
         title: question?.title || '',
@@ -154,7 +19,6 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         sampleOutput: question?.sampleOutput || '',
         difficulty: question?.difficulty || 'MEDIUM',
         points: question?.points || 10,
-        order: question?.order || 0,
         type: question?.type || 'CODE',
         category: question?.category || 'GENERAL',
         options: question?.options || [],
@@ -167,7 +31,6 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
     const [admins, setAdmins] = useState([]);
     const [loadingAdmins, setLoadingAdmins] = useState(false);
 
-    // Fetch admin list when needed
     const fetchAdmins = useCallback(async () => {
         if (admins.length > 0) return;
         setLoadingAdmins(true);
@@ -181,26 +44,25 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         }
     }, [admins.length]);
 
-    // If editing an existing manual-eval question, pre-fetch admins on mount only
     const didInitFetch = React.useRef(false);
     useEffect(() => {
         if (!didInitFetch.current && form.isManualEvaluation) {
             didInitFetch.current = true;
             fetchAdmins();
         }
-    }); // intentionally no dep array — runs once after mount via ref guard
+    });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
         setError('');
         try {
-            const url = isEdit ? `${API}/questions/${question._id}` : `${API}/questions/${roundId}`;
+            const url = isEdit ? `${API}/questions/${question._id}` : `${API}/question-bank`;
             const method = isEdit ? 'put' : 'post';
             const res = await api({ method, url, data: form });
             onSave(res.data.data);
         } catch (err) {
-            setError(err.response?.data?.error || "Failed to save question.");
+            setError(err.response?.data?.error || "Failed to save bank question.");
         } finally {
             setSaving(false);
         }
@@ -230,7 +92,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                     type={type}
                     value={form[key]}
                     onChange={e => setForm(f => ({ ...f, [key]: type === 'number' ? Number(e.target.value) : e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 shadow-sm"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
                 />
             )}
         </div>
@@ -256,7 +118,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                             <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
                                 <BookOpen size={18} />
                             </div>
-                            <h2 className="font-bold text-slate-900 text-lg">{isEdit ? 'Edit Question Record' : 'Create New Question'}</h2>
+                            <h2 className="font-bold text-slate-900 text-lg">{isEdit ? 'Edit Bank Question' : 'Add Bank Question'}</h2>
                         </div>
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
                             <X size={16} />
@@ -406,7 +268,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-6">
+                            <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-6">
                                 <div>
                                     <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Difficulty</label>
                                     <select value={form.difficulty} onChange={e => setForm(f => ({ ...f, difficulty: e.target.value }))}
@@ -418,7 +280,6 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                     </select>
                                 </div>
                                 {field('Score/Points', 'points', 'number')}
-                                {field('Sort Order', 'order', 'number')}
                             </div>
 
                             {error && (
@@ -435,7 +296,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                         </button>
                         <button type="submit" form="question-form" disabled={saving} className="flex-2 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 active:scale-95 text-sm">
                             {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                            {isEdit ? 'Update Question' : 'Deploy Question'}
+                            {isEdit ? 'Update Question' : 'Save to Bank'}
                         </button>
                     </div>
                 </motion.div>
@@ -444,12 +305,10 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
     );
 };
 
-// ─── Main Question Manager Tab ──────────────────────────────────────────────────────
-const QuestionManagerTab = ({ rounds }) => {
-    const [selectedRound, setSelectedRound] = useState('');
+const QuestionBankTab = () => {
     const [questions, setQuestions] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [modal, setModal] = useState(null); // 'add', 'import', or Question object
+    const [loading, setLoading] = useState(true);
+    const [modal, setModal] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
 
     // Pagination & Search States
@@ -458,8 +317,7 @@ const QuestionManagerTab = ({ rounds }) => {
     const [limit] = useState(15);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
-    const fetchQuestions = useCallback(async (roundId) => {
-        if (!roundId) return;
+    const fetchQuestions = useCallback(async () => {
         setLoading(questions.length === 0);
         try {
             const params = new URLSearchParams();
@@ -467,43 +325,37 @@ const QuestionManagerTab = ({ rounds }) => {
             params.append('page', page);
             params.append('limit', limit);
 
-            const res = await api.get(`${API}/questions/${roundId}?${params.toString()}`);
+            const res = await api.get(`${API}/question-bank?${params.toString()}`);
             setQuestions(res.data.data || []);
             setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
         } catch (e) {
-            console.error("Failed to fetch questions:", e);
+            console.error("Failed to fetch question bank:", e);
         } finally {
             setLoading(false);
         }
     }, [search, page, limit, questions.length]);
 
-    // Reset page on search or round change
+    useEffect(() => {
+        fetchQuestions();
+    }, [fetchQuestions]);
+
+    // Reset page on search change
     useEffect(() => {
         setPage(1);
-    }, [search, selectedRound]);
-
-    // Fetch on round selection. 
-    // Removed the aggressive polling interval; admins editing questions don't need real-time syncing unless working concurrently.
-    useEffect(() => {
-        if (selectedRound) {
-            fetchQuestions(selectedRound);
-        } else {
-            setQuestions([]);
-        }
-    }, [selectedRound, fetchQuestions]);
+    }, [search]);
 
     const handleDelete = async (questionId) => {
-        if (!window.confirm('Delete this question permanently?')) return;
+        if (!window.confirm('Delete this question permanently from the bank?')) return;
         try {
             await api.delete(`${API}/questions/${questionId}`);
-            fetchQuestions(selectedRound);
+            fetchQuestions();
         } catch (e) {
             console.error(e);
         }
     };
 
-    const handleSave = () => {
-        fetchQuestions(selectedRound);
+    const handleSave = (savedQuestion) => {
+        fetchQuestions();
         setModal(null);
     };
 
@@ -511,76 +363,54 @@ const QuestionManagerTab = ({ rounds }) => {
         <div className="space-y-4 h-full flex flex-col">
 
             {/* Toolbar Area */}
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between bg-slate-50 p-2 rounded-2xl border border-slate-200/60">
-                <div className="relative min-w-[300px]">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 p-1 bg-slate-100 rounded border border-slate-200 pointer-events-none text-slate-500">
-                        <Filter size={12} />
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200/60">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                        <BookOpen size={18} />
                     </div>
-                    <select
-                        value={selectedRound}
-                        onChange={e => setSelectedRound(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-8 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none shadow-sm cursor-pointer"
-                    >
-                        <option value="">— Target Round —</option>
-                        {rounds.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <div className="hidden lg:block">
+                        <h2 className="font-bold text-slate-800 text-sm">Global Question Library</h2>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">All reusable test problems</p>
+                    </div>
                 </div>
 
-                <div className="relative flex-1 max-w-xs">
+                <div className="relative flex-1 max-w-sm">
                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="Search questions..."
+                        placeholder="Search title or category..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
                     />
                 </div>
 
-                <div className="flex items-center gap-4 px-2">
+                <div className="flex items-center gap-4 px-2 mt-2 sm:mt-0">
                     <div className="hidden sm:block text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Items</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Library</p>
                         <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Items</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setModal('import')}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 disabled:hover:bg-emerald-50 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
-                        >
-                            <Import size={16} /> <span className="hidden sm:inline">Import from Library</span>
-                        </button>
-                        <button
-                            onClick={() => setModal('add')}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-indigo-200 active:scale-95"
-                        >
-                            <Plus size={16} /> <span className="hidden sm:inline">Add Question</span>
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => setModal('add')}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-indigo-200 active:scale-95"
+                    >
+                        <Plus size={16} /> <span className="hidden sm:inline">Add to Library</span>
+                    </button>
                 </div>
             </div>
 
             {/* List Container */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
-
-                {!selectedRound ? (
-                    <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                        <BookOpen size={48} className="text-slate-300 mb-3" />
-                        <p className="text-sm font-bold text-slate-500">Target Environment Required</p>
-                        <p className="text-xs text-slate-400 mt-1">Select a round from the dropdown to access its question bank.</p>
-                    </div>
-                ) : loading ? (
+                {loading && questions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
                         <Loader2 size={36} className="text-indigo-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Retrieving Bank Data...</p>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Library...</p>
                     </div>
                 ) : questions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                         <BookOpen size={48} className="text-slate-300 mb-3" />
-                        <p className="text-sm font-bold text-slate-500">Repository Empty</p>
-                        <p className="text-xs text-slate-400 mt-1">There are no questions attached to this round.</p>
+                        <p className="text-sm font-bold text-slate-500">Library Empty</p>
+                        <p className="text-xs text-slate-400 mt-1">There are no reusable questions stored.</p>
                     </div>
                 ) : (
                     <>
@@ -594,7 +424,7 @@ const QuestionManagerTab = ({ rounds }) => {
                                     className="bg-white border border-slate-200 hover:border-indigo-300 transition-colors rounded-xl overflow-hidden shadow-sm flex flex-col"
                                 >
                                     {/* Header / Summary Bar */}
-                                    <div className="flex items-center gap-4 p-3 pr-4">
+                                    <div className="flex items-center gap-4 p-3 pr-4 shadow-sm">
                                         <div className="w-8 shrink-0 flex items-center justify-center">
                                             <span className="text-xs font-black text-slate-300 bg-slate-50 px-2 py-1 rounded-md">{(page - 1) * limit + idx + 1}</span>
                                         </div>
@@ -605,11 +435,9 @@ const QuestionManagerTab = ({ rounds }) => {
                                                     {q.difficulty}
                                                 </span>
                                                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{q.type}</span>
-                                                {q.isManualEvaluation && (
-                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-amber-50 border-amber-200 text-amber-700 flex items-center gap-1">
-                                                        <ClipboardCheck size={9} /> Manual
-                                                    </span>
-                                                )}
+                                                <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-emerald-50 border-emerald-200 text-emerald-700 ml-2">
+                                                    {q.category}
+                                                </span>
                                             </div>
                                         </div>
                                         <div className="shrink-0 text-right pr-4 border-r border-slate-100 hidden sm:block">
@@ -726,20 +554,9 @@ const QuestionManagerTab = ({ rounds }) => {
             </div>
 
             <AnimatePresence>
-                {modal === 'import' && (
-                    <ImportFromLibraryModal
-                        roundId={selectedRound}
-                        onClose={() => setModal(null)}
-                        onImportSuccess={() => {
-                            fetchQuestions(selectedRound); // refresh the list
-                            setModal(null);
-                        }}
-                    />
-                )}
-                {modal && modal !== 'import' && (
+                {modal && (
                     <QuestionModal
                         question={modal === 'add' ? null : modal}
-                        roundId={selectedRound}
                         onClose={() => setModal(null)}
                         onSave={handleSave}
                     />
@@ -749,4 +566,5 @@ const QuestionManagerTab = ({ rounds }) => {
     );
 };
 
-export default QuestionManagerTab;
+export default QuestionBankTab;
+

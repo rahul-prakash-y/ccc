@@ -6,21 +6,21 @@ import { useAuthStore, api } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 
 const statusConfig = {
-    LOCKED: { 
-        icon: Lock, color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', 
-        badge: 'bg-slate-100 text-slate-500 border-slate-200', label: 'Classified' 
+    LOCKED: {
+        icon: Lock, color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200',
+        badge: 'bg-slate-100 text-slate-500 border-slate-200', label: 'Classified'
     },
-    WAITING_FOR_OTP: { 
-        icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', 
-        badge: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Awaiting Auth' 
+    WAITING_FOR_OTP: {
+        icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200',
+        badge: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Awaiting Auth'
     },
-    RUNNING: { 
-        icon: Play, color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', 
-        badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Arena Live' 
+    RUNNING: {
+        icon: Play, color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200',
+        badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Arena Live'
     },
-    COMPLETED: { 
-        icon: CheckCircle, color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', 
-        badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Mission Accomplished' 
+    COMPLETED: {
+        icon: CheckCircle, color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200',
+        badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Mission Accomplished'
     }
 };
 
@@ -47,6 +47,45 @@ const StudentDashboard = () => {
         fetchRounds();
     }, [fetchRounds]);
 
+    const displayRounds = React.useMemo(() => {
+        const groups = {};
+        const singles = [];
+
+        rounds.forEach(r => {
+            if (r.testGroupId) {
+                if (!groups[r.testGroupId]) groups[r.testGroupId] = [];
+                groups[r.testGroupId].push(r);
+            } else {
+                singles.push(r);
+            }
+        });
+
+        const result = [...singles];
+
+        Object.values(groups).forEach(groupRounds => {
+            groupRounds.sort((a, b) => (a.roundOrder || 1) - (b.roundOrder || 1));
+
+            // The "Active" round is the first one they haven't completed
+            let activeRound = groupRounds[groupRounds.length - 1];
+            for (const r of groupRounds) {
+                if (r.mySubmissionStatus !== 'COMPLETED') {
+                    activeRound = r;
+                    break;
+                }
+            }
+
+            const displayName = activeRound.name.split(' - Section')[0] || activeRound.name;
+
+            result.push({
+                ...activeRound,
+                name: displayName,
+                totalSections: groupRounds.length
+            });
+        });
+
+        return result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }, [rounds]);
+
     const handleRoundClick = (round) => {
         if (round.status === 'WAITING_FOR_OTP' || (round.status === 'RUNNING' && !round.mySubmissionStatus)) {
             setSelectedRound(round);
@@ -66,47 +105,47 @@ const StudentDashboard = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-700 relative overflow-hidden">
-            
+
             {/* Ambient Background Glows for "Arena" feel */}
             <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
             {/* Glassmorphism Header */}
             <header className="bg-white/70 backdrop-blur-xl border-b border-slate-200/60 sticky top-0 z-40 shadow-sm transition-all">
-                <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
                     <div>
-                        <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                             Code Circuit <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md text-sm border border-indigo-100">Fint & Friends</span>
                         </h1>
-                        <p className="text-xs text-slate-500 font-medium mt-1">
-                            Operative: <span className="font-mono font-bold text-slate-700">{user?.name || 'Unknown'}</span> ({user?.studentId})
+                        <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1">
+                            Student: <span className="font-mono font-bold text-slate-700">{user?.name || 'Unknown'}</span> ({user?.studentId})
                         </p>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="hidden sm:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="hidden md:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                             <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
                         </div>
-                        <button 
+                        <button
                             onClick={logout}
-                            className="group flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-red-600 bg-white border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-xl px-4 py-2 transition-all shadow-sm active:scale-95"
+                            className="group flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-red-600 bg-white border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-xl px-3 sm:px-4 py-2 transition-all shadow-sm active:scale-95"
                         >
-                            <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform" /> 
-                            <span className="hidden sm:inline">Disconnect</span>
+                            <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                            <span className="hidden xs:inline sm:inline">Disconnect</span>
                         </button>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-6 py-12 relative z-10 space-y-8">
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10 space-y-8">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
                             <Sparkles className="text-indigo-500" size={28} />
-                            Available Arenas
+                            Available Assessments
                         </h2>
                         <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
-                            {loading ? 'Scanning server nodes for active deployments...' : 'Select an active round to initialize your session. Ensure you have the required access keys.'}
+                            {loading ? 'Scanning server nodes for active deployments...' : 'Select an active assessment to initialize your session. Ensure you have the required access keys.'}
                         </p>
                     </div>
                 </div>
@@ -119,19 +158,19 @@ const StudentDashboard = () => {
                         </div>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Grid...</p>
                     </div>
-                ) : rounds.length === 0 ? (
-                    <motion.div 
+                ) : displayRounds.length === 0 ? (
+                    <motion.div
                         initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
                         className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-300 rounded-3xl bg-white/50 backdrop-blur-sm"
                     >
                         <Lock size={48} className="text-slate-300 mb-4" />
-                        <p className="text-lg font-black text-slate-600">NO ACTIVE ARENAS</p>
+                        <p className="text-lg font-black text-slate-600">NO ACTIVE ASSESSMENTS</p>
                         <p className="text-sm text-slate-400 mt-2">Stand by for administrator deployment.</p>
                     </motion.div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <AnimatePresence>
-                            {rounds.map((round, index) => {
+                            {displayRounds.map((round, index) => {
                                 const config = statusConfig[round.status];
                                 const Icon = config.icon;
                                 const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
@@ -167,10 +206,18 @@ const StudentDashboard = () => {
 
                                             <div className="space-y-2">
                                                 <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">{round.name}</h3>
-                                                
+
                                                 <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                                                     <Clock size={14} className="text-slate-400" />
-                                                    {round.durationMinutes} Minutes Limit
+                                                    {round.testDurationMinutes || round.durationMinutes} Minutes Limit
+                                                    {round.totalSections > 1 && (
+                                                        <>
+                                                            <span className="text-slate-300">|</span>
+                                                            <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
+                                                                {round.totalSections} Sections
+                                                            </span>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -181,11 +228,11 @@ const StudentDashboard = () => {
                                         `}>
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                                 {round.status === 'LOCKED' ? 'Access Restricted' :
-                                                 round.status === 'COMPLETED' ? 'Data Sealed' :
-                                                 round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
-                                                 'Session Ready'}
+                                                    round.status === 'COMPLETED' ? 'Data Sealed' :
+                                                        round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
+                                                            'Session Ready'}
                                             </p>
-                                            
+
                                             {isInteractable && (
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isLive ? 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white'}`}>
                                                     <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />

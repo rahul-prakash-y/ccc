@@ -4,6 +4,8 @@ const Round = require('../models/Round');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
+const bcrypt = require('bcryptjs');
+const XLSX = require('xlsx');
 
 module.exports = async function (fastify, opts) {
 
@@ -13,7 +15,11 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { name, description, durationMinutes, type } = request.body;
+            const {
+                name, description, durationMinutes, type,
+                questionCount, shuffleQuestions,
+                testGroupId, testDurationMinutes, roundOrder
+            } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
 
@@ -23,7 +29,12 @@ module.exports = async function (fastify, opts) {
                 durationMinutes: durationMinutes || 60,
                 status: 'LOCKED',
                 isOtpActive: false,
-                type: type || 'GENERAL'
+                type: type || 'GENERAL',
+                questionCount: questionCount === undefined ? null : (questionCount === '' ? null : Number(questionCount)),
+                shuffleQuestions: shuffleQuestions === undefined ? true : Boolean(shuffleQuestions),
+                testGroupId: testGroupId || null,
+                testDurationMinutes: testDurationMinutes || null,
+                roundOrder: roundOrder || 1
             });
 
             await round.save();
@@ -48,15 +59,60 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/audit-logs', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
-            const { roundId } = request.query;
-            const filter = roundId ? { round: roundId } : {};
+            const { roundId, search, page = 1, limit = 20 } = request.query;
 
-            const submissions = await Submission.find(filter)
-                .populate('student', 'studentId name role')
-                .populate('round', 'name status')
-                .sort({ createdAt: -1 });
+            let filter = {};
+            if (roundId) filter.round = roundId;
 
-            return reply.code(200).send({ success: true, data: submissions });
+            // If search is provided, we need to find students or rounds that match the search string
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                const [matchingStudents, matchingRounds] = await Promise.all([
+                    User.find({
+                        $or: [
+                            { studentId: searchRegex },
+                            { name: searchRegex }
+                        ]
+                    }).select('_id'),
+                    Round.find({ name: searchRegex }).select('_id')
+                ]);
+
+                const studentIds = matchingStudents.map(s => s._id);
+                const rIds = matchingRounds.map(r => r._id);
+
+                filter.$or = [
+                    { student: { $in: studentIds } },
+                    { round: { $in: rIds } }
+                ];
+            }
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [submissions, total] = await Promise.all([
+                Submission.find(filter)
+                    .populate('student', 'studentId name role')
+                    .populate('round', 'name status')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                Submission.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: submissions,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch audit logs' });
@@ -69,14 +125,44 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/activity-logs', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
-            const { action, limit = 200 } = request.query;
-            const filter = action ? { action } : {};
+            const { action, search, page = 1, limit = 20 } = request.query;
 
-            const logs = await ActivityLog.find(filter)
-                .sort({ createdAt: -1 })
-                .limit(Number(limit));
+            const filter = {};
+            if (action) filter.action = action;
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                filter.$or = [
+                    { 'performedBy.studentId': searchRegex },
+                    { 'performedBy.name': searchRegex },
+                    { 'target.type': searchRegex },
+                    { 'target.label': searchRegex }
+                ];
+            }
 
-            return reply.code(200).send({ success: true, data: logs });
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [logs, total] = await Promise.all([
+                ActivityLog.find(filter)
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                ActivityLog.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: logs,
+                pagination: {
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch activity logs' });
@@ -140,8 +226,43 @@ module.exports = async function (fastify, opts) {
     fastify.get('/questions/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
-            const questions = await Question.find({ round: roundId }).sort({ order: 1, createdAt: 1 });
-            return reply.code(200).send({ success: true, data: questions });
+            const { search, page = 1, limit = 50 } = request.query;
+
+            const filter = { round: roundId };
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                filter.$or = [
+                    { title: searchRegex },
+                    { description: searchRegex },
+                    { category: searchRegex }
+                ];
+            }
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [questions, total] = await Promise.all([
+                Question.find(filter)
+                    .sort({ order: 1, createdAt: 1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                Question.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: questions,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch questions' });
@@ -217,11 +338,12 @@ module.exports = async function (fastify, opts) {
             const { questionId } = request.params;
             const updates = request.body;
 
-            // If turning off manual evaluation, clear the assigned admin
+            // If it's a bank question, we don't care about the round constraint.
+            // But if it's not a bank question, it usually has a round. 
+            // The frontend shouldn't pass `round` for a bank question anyway.
             if (updates.isManualEvaluation === false) {
                 updates.assignedAdmin = null;
             }
-            // If manual evaluation is on, ensure an admin is assigned
             if (updates.isManualEvaluation === true && !updates.assignedAdmin) {
                 return reply.code(400).send({ error: 'A question marked for manual evaluation must be assigned to an admin' });
             }
@@ -244,30 +366,215 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * QUESTION BANK ROUTES
+     */
+
+    // 1. GET /api/superadmin/question-bank
+    fastify.get('/question-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { search, page = 1, limit = 50 } = request.query;
+
+            const filter = { isBank: true };
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                filter.$or = [
+                    { title: searchRegex },
+                    { description: searchRegex },
+                    { category: searchRegex }
+                ];
+            }
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [questions, total] = await Promise.all([
+                Question.find(filter)
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                Question.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: questions,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch question bank' });
+        }
+    });
+
+    // 2. POST /api/superadmin/question-bank
+    fastify.post('/question-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const {
+                title, description, inputFormat, outputFormat,
+                sampleInput, sampleOutput, difficulty, points,
+                type, category, options, correctAnswer,
+                isManualEvaluation, assignedAdmin
+            } = request.body;
+
+            if (!title || !description) {
+                return reply.code(400).send({ error: 'Title and description are required' });
+            }
+            if (isManualEvaluation && !assignedAdmin) {
+                return reply.code(400).send({ error: 'A question marked for manual evaluation must be assigned to an admin' });
+            }
+
+            const question = new Question({
+                isBank: true,
+                title, description,
+                inputFormat: inputFormat || '',
+                outputFormat: outputFormat || '',
+                sampleInput: sampleInput || '',
+                sampleOutput: sampleOutput || '',
+                difficulty: difficulty || 'MEDIUM',
+                points: points || 10,
+                type: type || 'CODE',
+                category: category || 'GENERAL',
+                options: options || [],
+                correctAnswer: correctAnswer || '',
+                isManualEvaluation: isManualEvaluation || false,
+                assignedAdmin: isManualEvaluation ? assignedAdmin : null
+            });
+
+            await question.save();
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question Bank', id: question._id.toString(), label: question.title },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: question });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create bank question' });
+        }
+    });
+
+    // 3. POST /api/superadmin/rounds/:roundId/import-from-bank
+    fastify.post('/rounds/:roundId/import-from-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const { questionIds } = request.body; // Array of Question Bank IDs
+
+            if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+                return reply.code(400).send({ error: 'Valid array of questionIds is required' });
+            }
+
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Fetch the questions to clone
+            const bankQuestions = await Question.find({ _id: { $in: questionIds }, isBank: true });
+
+            if (bankQuestions.length === 0) {
+                return reply.code(404).send({ error: 'No valid bank questions found for the provided IDs' });
+            }
+
+            // Figure out the current highest order in this round
+            const count = await Question.countDocuments({ round: roundId });
+            let startingOrder = count + 1;
+
+            const clonedQuestions = bankQuestions.map((q) => {
+                const cloned = new Question({
+                    round: roundId,
+                    isBank: false,
+                    title: q.title,
+                    description: q.description,
+                    inputFormat: q.inputFormat,
+                    outputFormat: q.outputFormat,
+                    sampleInput: q.sampleInput,
+                    sampleOutput: q.sampleOutput,
+                    difficulty: q.difficulty,
+                    points: q.points,
+                    order: startingOrder++,
+                    type: q.type,
+                    category: q.category,
+                    options: q.options,
+                    correctAnswer: q.correctAnswer,
+                    isManualEvaluation: q.isManualEvaluation,
+                    assignedAdmin: q.assignedAdmin
+                });
+                return cloned.save();
+            });
+
+            const savedQuestions = await Promise.all(clonedQuestions);
+
+            await logActivity({
+                action: 'IMPORTED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: `Imported ${savedQuestions.length} questions from Bank` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: `Successfully imported ${savedQuestions.length} questions.` });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to import questions from bank' });
+        }
+    });
+
+    /**
      * GET /api/superadmin/manual-evaluations
      * Returns all submissions that have answers for questions assigned to this admin for manual evaluation.
      * Each entry contains: question info, student info, their answer, and existing manualScores.
      */
     fastify.get('/manual-evaluations', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const mongoose = require('mongoose');
             const adminId = request.user.userId;
+            const { page = 1, limit = 10 } = request.query;
 
-            // Find all questions assigned to this admin for manual evaluation
-            const questions = await Question.find({ isManualEvaluation: true, assignedAdmin: adminId })
-                .populate('round', 'name')
-                .lean();
+            const filter = { isManualEvaluation: true, assignedAdmin: adminId };
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            // Find questions assigned to this admin with pagination
+            const [questions, total] = await Promise.all([
+                Question.find(filter)
+                    .populate('round', 'name')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum)
+                    .lean(),
+                Question.countDocuments(filter)
+            ]);
 
             if (questions.length === 0) {
-                return reply.code(200).send({ success: true, data: [] });
+                return reply.code(200).send({
+                    success: true,
+                    data: [],
+                    pagination: {
+                        totalRecords: total,
+                        total,
+                        page: pageNum,
+                        limit: limitNum,
+                        totalPages: Math.ceil(total / limitNum)
+                    }
+                });
             }
 
-            // Collect unique round ObjectIds (must be ObjectId instances, not strings, for $in to work)
+            // Collect unique round ObjectIds
             const roundObjectIds = [
                 ...new Map(questions.map(q => [q.round._id.toString(), q.round._id])).values()
             ];
 
-            // Find all submissions for those rounds (any status - autosaved answers count too)
+            // Find all submissions for those rounds
             const submissions = await Submission.find({ round: { $in: roundObjectIds } })
                 .populate('student', 'studentId name')
                 .lean();
@@ -279,32 +586,26 @@ module.exports = async function (fastify, opts) {
                 const students = submissions
                     .filter(sub => sub.round.toString() === qRoundId)
                     .filter(sub => {
-                        // If the sub has assignedQuestions, only show the student if this question was mapped to them
                         if (sub.assignedQuestions && sub.assignedQuestions.length > 0) {
                             return sub.assignedQuestions.some(id => id.toString() === question._id.toString());
                         }
-                        // Fallback for edge cases (older submissions before assignedQuestions existed):
                         try {
                             const parsed = JSON.parse(sub.codeContent || '{}');
                             return parsed[question._id.toString()] !== undefined;
                         } catch (_) {
-                            return true; // Keep older plaintext submissions just in case
+                            return true;
                         }
                     })
                     .map(sub => {
-                        // Parse the student's answer for this specific question from codeContent JSON
-                        // CodeArena stores: { [questionId]: answerString, ... }
                         let answer = null;
                         try {
                             const parsed = JSON.parse(sub.codeContent || '{}');
                             const rawAnswer = parsed[question._id.toString()];
                             answer = rawAnswer !== undefined ? rawAnswer : null;
                         } catch (_) {
-                            // Fallback: codeContent is a plain string (older format)
                             answer = sub.codeContent || null;
                         }
 
-                        // Check if a manual score already exists for this question in this submission
                         const existingScore = (sub.manualScores || []).find(
                             ms => ms.questionId && ms.questionId.toString() === question._id.toString()
                         );
@@ -319,14 +620,7 @@ module.exports = async function (fastify, opts) {
                     });
 
                 return {
-                    question: {
-                        _id: question._id,
-                        title: question.title,
-                        description: question.description,
-                        points: question.points,
-                        type: question.type,
-                        round: question.round
-                    },
+                    question,
                     students
                 };
             });
@@ -409,13 +703,9 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/student-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            // Fetch all submissions that have been evaluated (manualScores not empty)
-            const submissions = await Submission.find({ 'manualScores.0': { $exists: true } })
-                .populate('student', 'studentId name')
-                .populate('round', 'name')
-                .lean();
+            const { search, page = 1, limit = 20 } = request.query;
 
-            // Also include submissions with a numeric score (auto-scored)
+            // Fetch all submissions with a numeric score or manual scores
             const allSubmissions = await Submission.find({
                 $or: [
                     { 'manualScores.0': { $exists: true } },
@@ -431,20 +721,26 @@ module.exports = async function (fastify, opts) {
 
             for (const sub of allSubmissions) {
                 if (!sub.student) continue;
+
+                // If search is provided, filter students here
+                if (search) {
+                    const searchRegex = new RegExp(search, 'i');
+                    const matches = searchRegex.test(sub.student.studentId) || searchRegex.test(sub.student.name);
+                    if (!matches) continue;
+                }
+
                 const sid = sub.student._id.toString();
 
                 if (!studentMap[sid]) {
                     studentMap[sid] = {
                         student: sub.student,
                         totalScore: 0,
-                        rounds: [],       // [{ roundName, score, evaluatedAt }]
-                        dayWise: {}       // { 'YYYY-MM-DD': totalScoreForDay }
+                        rounds: [],
+                        dayWise: {}
                     };
                 }
 
                 const entry = studentMap[sid];
-
-                // Sum manual scores for this submission
                 const manualTotal = (sub.manualScores || []).reduce((s, ms) => s + (ms.score || 0), 0);
                 const submissionScore = manualTotal > 0 ? manualTotal : (sub.score || 0);
 
@@ -457,22 +753,24 @@ module.exports = async function (fastify, opts) {
                     evaluatedAt: sub.updatedAt
                 });
 
-                // Build day-wise: use the latest evaluatedAt from manualScores, fallback to updatedAt
                 const evalDates = (sub.manualScores || []).map(ms => ms.evaluatedAt).filter(Boolean);
                 const dates = evalDates.length > 0 ? evalDates : [sub.updatedAt];
 
                 for (const d of dates) {
                     if (!d) continue;
-                    const dayKey = new Date(d).toISOString().slice(0, 10); // YYYY-MM-DD
+                    const dayKey = new Date(d).toISOString().slice(0, 10);
                     entry.dayWise[dayKey] = (entry.dayWise[dayKey] || 0) + submissionScore;
                 }
             }
 
-            // Convert to sorted array, highest scorer first
-            const result = Object.values(studentMap)
+            // Convert to sorted array
+            let result = Object.values(studentMap)
                 .sort((a, b) => b.totalScore - a.totalScore)
-                .map((entry, rank) => ({
-                    rank: rank + 1,
+                .map((entry, index) => ({
+                    // We'll calculate rank AFTER pagination if we want global rank, 
+                    // or keep it here for absolute across all matching students.
+                    // Better to keep absolute rank.
+                    absoluteRank: index + 1,
                     student: entry.student,
                     totalScore: entry.totalScore,
                     rounds: entry.rounds,
@@ -481,7 +779,25 @@ module.exports = async function (fastify, opts) {
                         .sort((a, b) => a.date.localeCompare(b.date))
                 }));
 
-            return reply.code(200).send({ success: true, data: result });
+            const total = result.length;
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const totalPages = Math.ceil(total / limitNum);
+            const skip = (pageNum - 1) * limitNum;
+
+            const paginatedData = result.slice(skip, skip + limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: paginatedData,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch student scores' });
@@ -519,10 +835,43 @@ module.exports = async function (fastify, opts) {
     // GET /api/superadmin/admins — list all ADMIN users
     fastify.get('/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
-            const admins = await User.find({ role: 'ADMIN' })
-                .select('studentId name isBanned tokenIssuedAfter createdAt')
-                .sort({ createdAt: -1 });
-            return reply.code(200).send({ success: true, data: admins });
+            const { search, page = 1, limit = 20 } = request.query;
+
+            const filter = { role: 'ADMIN' };
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                filter.$or = [
+                    { studentId: searchRegex },
+                    { name: searchRegex }
+                ];
+            }
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [admins, total] = await Promise.all([
+                User.find(filter)
+                    .select('studentId name isBanned tokenIssuedAfter createdAt')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                User.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: admins,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch admins' });
@@ -670,19 +1019,43 @@ module.exports = async function (fastify, opts) {
     // GET /api/superadmin/students — list all STUDENT users
     fastify.get('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search = '' } = request.query;
+            const { search, page = 1, limit = 20 } = request.query;
+
             const filter = { role: 'STUDENT' };
             if (search) {
+                const searchRegex = new RegExp(search, 'i');
                 filter.$or = [
-                    { studentId: { $regex: search, $options: 'i' } },
-                    { name: { $regex: search, $options: 'i' } }
+                    { studentId: searchRegex },
+                    { name: searchRegex }
                 ];
             }
-            const students = await User.find(filter)
-                .select('studentId name isBanned tokenIssuedAfter createdAt')
-                .sort({ createdAt: -1 })
-                .limit(200);
-            return reply.code(200).send({ success: true, data: students });
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [students, total] = await Promise.all([
+                User.find(filter)
+                    .select('studentId name isBanned tokenIssuedAfter createdAt')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                User.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.code(200).send({
+                success: true,
+                data: students,
+                pagination: {
+                    totalRecords: total,
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch students' });
@@ -692,7 +1065,6 @@ module.exports = async function (fastify, opts) {
     // POST /api/superadmin/students — create a new STUDENT
     fastify.post('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const bcrypt = require('bcryptjs');
             const { studentId } = request.body;
             if (!studentId) {
                 return reply.code(400).send({ error: 'studentId is required' });
@@ -776,6 +1148,99 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to toggle block status' });
+        }
+    });
+    // GET /api/superadmin/students/upload-template - DOWNLOAD SAMPLE EXCEL
+    fastify.get('/students/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = [
+                { 'Roll No': '2024CS001' },
+                { 'Roll No': '2024CS002' },
+                { 'Roll No': '2024CS003' }
+            ];
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Students');
+            const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+            reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            reply.header('Content-Disposition', 'attachment; filename=student_upload_template.xlsx');
+            return reply.send(buffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate template' });
+        }
+    });
+
+    // POST /api/superadmin/students/upload - BULK CREATE STUDENTS VIA EXCEL
+    fastify.post('/students/upload', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data) return reply.code(400).send({ error: 'No file uploaded' });
+
+            const buffer = await data.toBuffer();
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            if (json.length === 0) {
+                return reply.code(400).send({ error: 'The uploaded file is empty' });
+            }
+
+            // Standardize keys (looking for "roll no" or "studentId")
+            const studentIds = json.map(row => {
+                const key = Object.keys(row).find(k =>
+                    k.toLowerCase().replace(/[\s_]/g, '') === 'rollno' ||
+                    k.toLowerCase() === 'studentid'
+                );
+                return key ? String(row[key]).trim() : null;
+            }).filter(Boolean);
+
+            if (studentIds.length === 0) {
+                return reply.code(400).send({ error: 'No "Roll No" or "StudentId" column found in Excel' });
+            }
+
+            let createdCount = 0;
+            let skippedCount = 0;
+            const defaultPassword = '123456';
+            const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+            for (const sId of studentIds) {
+                const exists = await User.findOne({ studentId: sId });
+                if (exists) {
+                    skippedCount++;
+                    continue;
+                }
+
+                const student = new User({
+                    studentId: sId,
+                    name: `Student ${sId}`,
+                    password: hashedPassword,
+                    role: 'STUDENT',
+                    isOnboarded: false
+                });
+                await student.save();
+                createdCount++;
+            }
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', label: `Bulk Upload: ${createdCount} created, ${skippedCount} skipped` },
+                metadata: { createdCount, skippedCount },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({
+                success: true,
+                message: `Bulk creation complete. ${createdCount} students created, ${skippedCount} skipped.`,
+                data: { createdCount, skippedCount }
+            });
+
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to process bulk upload' });
         }
     });
 

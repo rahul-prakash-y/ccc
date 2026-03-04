@@ -85,6 +85,87 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * 1b. Admin OTP Generation for Test Group (POST /api/rounds/test-groups/:testGroupId/generate-otp)
+     * Targets the FIRST section (roundOrder: 1) of the group.
+     * Auth: requireAdmin
+     */
+    fastify.post('/test-groups/:testGroupId/generate-otp', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { testGroupId } = request.params;
+
+        try {
+            // Find the first section of this test group
+            const firstRound = await Round.findOne({ testGroupId, roundOrder: 1 });
+            if (!firstRound) return reply.code(404).send({ error: 'Test group or first section not found' });
+
+            const startOtp = generateOtp();
+            const endOtp = generateOtp();
+
+            const round = await Round.findByIdAndUpdate(
+                firstRound._id,
+                { startOtp, endOtp, otpIssuedAt: new Date(), status: 'WAITING_FOR_OTP', isOtpActive: true },
+                { new: true }
+            );
+
+            // Log activity
+            await logActivity({
+                action: 'OTP_GENERATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'TestGroup', id: testGroupId, label: `OTP for ${round.name}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({
+                success: true,
+                message: 'Test keys generated successfully',
+                data: {
+                    roundName: round.name,
+                    startOtp: round.startOtp,
+                    endOtp: round.endOtp
+                }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate test keys' });
+        }
+    });
+
+    /**
+     * 1c. PATCH /api/rounds/test-groups/:testGroupId/status
+     * Updates the status of the first section in a test group.
+     * Auth: requireAdmin
+     */
+    fastify.patch('/test-groups/:testGroupId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { testGroupId } = request.params;
+        const { status, isOtpActive } = request.body;
+
+        try {
+            const firstRound = await Round.findOne({ testGroupId, roundOrder: 1 });
+            if (!firstRound) return reply.code(404).send({ error: 'Test group or first section not found' });
+
+            const round = await Round.findByIdAndUpdate(
+                firstRound._id,
+                {
+                    ...(status && { status }),
+                    ...(isOtpActive !== undefined && { isOtpActive })
+                },
+                { new: true }
+            );
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'TestGroup', id: testGroupId, label: `${round.name} status updated to ${status}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update test status' });
+        }
+    });
+
+    /**
      * 1. Admin OTP Generation (POST /api/rounds/:roundId/generate-otp)
      * Auth: Must use the requireAdmin hook.
      */
@@ -134,23 +215,26 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/:roundId/start', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { startOtp } = request.body;
+        const { startOtp, isAutoJoin } = request.body;
         const studentId = request.user.userId;
-
-        if (!startOtp) {
-            return reply.code(400).send({ error: 'startOtp is required' });
-        }
 
         try {
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
-            if (round.status === 'LOCKED' || !round.isOtpActive) {
-                return reply.code(403).send({ error: 'Round is currently locked by admin' });
-            }
-
-            if (round.startOtp !== startOtp) {
-                return reply.code(401).send({ error: 'Invalid Start OTP' });
+            // Ensure authorization: Auto-Join sequence OR manual OTP
+            if (isAutoJoin) {
+                if (!round.testGroupId || round.roundOrder === 1) {
+                    return reply.code(403).send({ error: 'Auto-join sequence invalid for this endpoint' });
+                }
+                const prevRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder - 1 });
+                if (!prevRound) return reply.code(403).send({ error: 'Sequence broken: Previous round not found' });
+                const prevSub = await Submission.findOne({ student: studentId, round: prevRound._id, status: { $in: ['SUBMITTED', 'DISQUALIFIED'] } });
+                if (!prevSub) return reply.code(403).send({ error: 'You must complete the previous section first' });
+            } else {
+                if (!startOtp) return reply.code(400).send({ error: 'startOtp is required' });
+                if (round.status === 'LOCKED' || !round.isOtpActive) return reply.code(403).send({ error: 'Round is currently locked by admin' });
+                if (round.startOtp !== startOtp) return reply.code(401).send({ error: 'Invalid Start OTP' });
             }
 
             // Check if student already has a submission for this round
@@ -164,8 +248,19 @@ module.exports = async function (fastify, opts) {
                 return reply.code(200).send({
                     success: true,
                     message: 'Round resumed successfully',
-                    startTime: submission.startTime
+                    startTime: submission.startTime,
+                    durationMinutes: round.testDurationMinutes || round.durationMinutes
                 });
+            }
+
+            // Determine if we should inherit the clock from Round 1 of the Test Group
+            let startTime = new Date();
+            if (round.testGroupId && round.roundOrder > 1) {
+                const firstRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: 1 });
+                if (firstRound) {
+                    const firstSub = await Submission.findOne({ student: studentId, round: firstRound._id });
+                    if (firstSub) startTime = firstSub.startTime;
+                }
             }
 
             // Create new submission tracking record
@@ -173,16 +268,16 @@ module.exports = async function (fastify, opts) {
                 student: studentId,
                 round: roundId,
                 status: 'IN_PROGRESS',
-                startTime: new Date()
+                startTime
             });
 
             await submission.save();
 
-            // Log round start
+            // Log section start
             await logActivity({
-                action: 'ROUND_STARTED',
+                action: 'SECTION_STARTED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Round', id: roundId, label: round.name },
+                target: { type: 'Section', id: roundId, label: round.name },
                 ip: request.ip
             });
 
@@ -190,7 +285,7 @@ module.exports = async function (fastify, opts) {
                 success: true,
                 message: 'Round unlocked successfully',
                 startTime: submission.startTime,
-                durationMinutes: round.durationMinutes
+                durationMinutes: round.testDurationMinutes || round.durationMinutes
             });
 
         } catch (error) {
@@ -208,16 +303,19 @@ module.exports = async function (fastify, opts) {
         const { endOtp, codeContent, pdfUrl, answers } = request.body;
         const studentId = request.user.userId;
 
-        if (!endOtp) {
-            return reply.code(400).send({ error: 'endOtp is required' });
-        }
-
         try {
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
-            if (round.endOtp !== endOtp) {
-                return reply.code(401).send({ error: 'Invalid End OTP' });
+            let nextRoundId = null;
+            if (round.testGroupId) {
+                const nextRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder + 1 });
+                if (nextRound) nextRoundId = nextRound._id;
+            }
+
+            if (!nextRoundId) {
+                if (!endOtp) return reply.code(400).send({ error: 'endOtp is required to finalize the test' });
+                if (round.endOtp !== endOtp) return reply.code(401).send({ error: 'Invalid End OTP' });
             }
 
             const submission = await Submission.findOne({ student: studentId, round: roundId });
@@ -232,7 +330,8 @@ module.exports = async function (fastify, opts) {
             // Enforce the time limit (+ 2 min buffer for network latency) + extra time
             const now = new Date();
             const elapsedMinutes = (now - new Date(submission.startTime)) / 1000 / 60;
-            const bufferedDuration = round.durationMinutes + (submission.extraTimeMinutes || 0) + 2;
+            const durationAllowed = round.testGroupId ? round.testDurationMinutes : round.durationMinutes;
+            const bufferedDuration = durationAllowed + (submission.extraTimeMinutes || 0) + 2;
 
             if (elapsedMinutes > bufferedDuration) {
                 // Automatically disqualify for timing out completely and skipping front-end guards
@@ -255,17 +354,18 @@ module.exports = async function (fastify, opts) {
 
             await submission.save();
 
-            // Log round submission
+            // Log section submission
             await logActivity({
-                action: 'ROUND_SUBMITTED',
+                action: 'SECTION_SUBMITTED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Round', id: roundId, label: round.name },
+                target: { type: 'Section', id: roundId, label: round.name },
                 ip: request.ip
             });
 
             return reply.code(200).send({
                 success: true,
-                message: 'Round successfully submitted'
+                message: 'Round successfully submitted',
+                nextRoundId // informs the frontend to move to the next section automatically
             });
 
         } catch (error) {
@@ -389,39 +489,64 @@ module.exports = async function (fastify, opts) {
             } else {
                 // First load: build and persist the student's question set
                 const allQuestions = await Question.find({ round: roundId }).sort({ order: 1 });
-                let selected = [...allQuestions];
 
-                // Fisher-Yates shuffle seeded by student ID (consistent per student)
-                if (round.shuffleQuestions !== false) {
-                    const seed = studentId.toString();
-                    // cyrb53 hash for better avalanche on small string seeds like "1" and "2"
-                    let h1 = 0xdeadbeef ^ seed.length, h2 = 0x41c6ce57 ^ seed.length;
-                    for (let i = 0, ch; i < seed.length; i++) {
-                        ch = seed.charCodeAt(i);
-                        h1 = Math.imul(h1 ^ ch, 2654435761);
-                        h2 = Math.imul(h2 ^ ch, 1597334677);
+                // Group the available questions by their type field
+                const groupedQuestions = {
+                    MCQ: [],
+                    CODE: [],
+                    SHORT_ANSWER: []
+                };
+
+                allQuestions.forEach(q => {
+                    const type = q.type;
+                    if (groupedQuestions[type]) {
+                        groupedQuestions[type].push(q);
                     }
-                    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-                    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-                    let h = 4294967296 * (2097151 & h2) + (h1 >>> 0); // 53-bit hash
+                });
 
-                    const rand = () => {
-                        // Mulberry32 PRNG
-                        h = h + 1831565813 | 0;
-                        let t = Math.imul(h ^ h >>> 15, 1 | h);
-                        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-                        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-                    };
-                    for (let i = selected.length - 1; i > 0; i--) {
-                        const j = Math.floor(rand() * (i + 1));
-                        [selected[i], selected[j]] = [selected[j], selected[i]];
+                // Helper for deterministic PRNG shuffle
+                const shuffleGroup = (group, type) => {
+                    let selectedGroup = [...group];
+
+                    if (round.shuffleQuestions !== false) {
+                        // Seed includes the roundId, studentId, and question.type
+                        const seed = `${roundId.toString()}_${studentId.toString()}_${type}`;
+
+                        // cyrb53 hash for better avalanche on small string seeds
+                        let h1 = 0xdeadbeef ^ seed.length, h2 = 0x41c6ce57 ^ seed.length;
+                        for (let i = 0, ch; i < seed.length; i++) {
+                            ch = seed.charCodeAt(i);
+                            h1 = Math.imul(h1 ^ ch, 2654435761);
+                            h2 = Math.imul(h2 ^ ch, 1597334677);
+                        }
+                        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+                        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+                        let h = 4294967296 * (2097151 & h2) + (h1 >>> 0); // 53-bit hash
+
+                        const rand = () => {
+                            // Mulberry32 PRNG
+                            h = h + 1831565813 | 0;
+                            let t = Math.imul(h ^ h >>> 15, 1 | h);
+                            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+                            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+                        };
+
+                        for (let i = selectedGroup.length - 1; i > 0; i--) {
+                            const j = Math.floor(rand() * (i + 1));
+                            [selectedGroup[i], selectedGroup[j]] = [selectedGroup[j], selectedGroup[i]];
+                        }
                     }
-                }
 
-                // Trim to questionCount if set
-                if (round.questionCount && round.questionCount > 0 && round.questionCount < selected.length) {
-                    selected = selected.slice(0, round.questionCount);
-                }
+                    return selectedGroup;
+                };
+
+                // Shuffle each group individually and slice exactly 10 questions from each
+                const mcqQuestions = shuffleGroup(groupedQuestions['MCQ'], 'MCQ').slice(0, 10);
+                const codeQuestions = shuffleGroup(groupedQuestions['CODE'], 'CODE').slice(0, 10);
+                const shortAnswerQuestions = shuffleGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER').slice(0, 10);
+
+                // Combine these 30 questions into a single array
+                let selected = [...mcqQuestions, ...codeQuestions, ...shortAnswerQuestions];
 
                 // Persist the assignment so reconnects return the same set
                 submission.assignedQuestions = selected.map(q => q._id);
@@ -430,9 +555,20 @@ module.exports = async function (fastify, opts) {
             }
 
             // Count total rounds so student can see "Round X of Y"
-            const totalRounds = await Round.countDocuments({});
-            const allRounds = await Round.find({}, '_id').sort({ createdAt: 1 }).lean();
-            const roundNumber = allRounds.findIndex(r => r._id.toString() === roundId) + 1;
+            let totalRounds = 1;
+            let roundNumber = 1;
+            let nextRoundId = null;
+
+            if (round.testGroupId) {
+                totalRounds = await Round.countDocuments({ testGroupId: round.testGroupId });
+                roundNumber = round.roundOrder;
+                const nextRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder + 1 });
+                if (nextRound) nextRoundId = nextRound._id;
+            } else {
+                totalRounds = await Round.countDocuments({});
+                const allRounds = await Round.find({}, '_id').sort({ createdAt: 1 }).lean();
+                roundNumber = allRounds.findIndex(r => r._id.toString() === roundId) + 1;
+            }
 
             return reply.code(200).send({
                 success: true,
@@ -440,12 +576,13 @@ module.exports = async function (fastify, opts) {
                     round: {
                         name: round.name,
                         type: round.type,
-                        durationMinutes: round.durationMinutes,
+                        durationMinutes: round.testGroupId ? round.testDurationMinutes : round.durationMinutes,
                         status: round.status,
                         startTime: submission.startTime,
                         extraTimeMinutes: submission.extraTimeMinutes || 0,
                         totalRounds,
-                        roundNumber
+                        roundNumber,
+                        hasNextRound: !!nextRoundId
                     },
                     questions: assignedQuestions.map(q => ({
                         _id: q._id,

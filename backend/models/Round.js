@@ -43,6 +43,19 @@ const roundSchema = new mongoose.Schema({
         enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL'],
         default: 'GENERAL'
     },
+    // Global test sequence grouping
+    testGroupId: {
+        type: String,
+        default: null // null if standalone round
+    },
+    testDurationMinutes: {
+        type: Number,
+        default: null // overriding duration shared across the test group
+    },
+    roundOrder: {
+        type: Number,
+        default: 1 // execution order within the test group
+    },
     // Question pool settings
     questionCount: {
         type: Number,

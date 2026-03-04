@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp,
     User, BarChart2, Calendar, Medal, RefreshCw
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
+import Pagination from './components/Pagination';
 
 // ─── Rank medal helper ────────────────────────────────────────────────────────
 const RankBadge = ({ rank }) => {
@@ -69,9 +70,9 @@ const StudentRow = ({ entry, maxScore }) => {
 
     return (
         <div className={`border rounded-2xl overflow-hidden transition-all ${entry.rank === 1 ? 'border-amber-200 bg-amber-50/30' :
-                entry.rank === 2 ? 'border-slate-200 bg-slate-50/30' :
-                    entry.rank === 3 ? 'border-orange-200 bg-orange-50/20' :
-                        'border-slate-100 bg-white'
+            entry.rank === 2 ? 'border-slate-200 bg-slate-50/30' :
+                entry.rank === 3 ? 'border-orange-200 bg-orange-50/20' :
+                    'border-slate-100 bg-white'
             }`}>
             {/* Summary row */}
             <button
@@ -103,9 +104,9 @@ const StudentRow = ({ entry, maxScore }) => {
                     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div
                             className={`h-full rounded-full transition-all ${entry.rank === 1 ? 'bg-amber-400' :
-                                    entry.rank === 2 ? 'bg-slate-400' :
-                                        entry.rank === 3 ? 'bg-orange-400' :
-                                            'bg-indigo-400'
+                                entry.rank === 2 ? 'bg-slate-400' :
+                                    entry.rank === 3 ? 'bg-orange-400' :
+                                        'bg-indigo-400'
                                 }`}
                             style={{ width: `${pct}%` }}
                         />
@@ -131,14 +132,14 @@ const StudentRow = ({ entry, maxScore }) => {
                         className="overflow-hidden border-t border-slate-100"
                     >
                         <div className="p-4 grid sm:grid-cols-2 gap-4 bg-slate-50/40">
-                            {/* Round breakdown */}
+                            {/* Section breakdown */}
                             <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                                    <BarChart2 size={9} /> Score by Round
+                                    <BarChart2 size={9} /> Score by Section
                                 </p>
                                 {entry.rounds.length > 0
                                     ? <RoundPills rounds={entry.rounds} />
-                                    : <p className="text-xs text-slate-400 italic">No round scores yet.</p>
+                                    : <p className="text-xs text-slate-400 italic">No section scores yet.</p>
                                 }
                             </div>
 
@@ -161,41 +162,49 @@ const StudentRow = ({ entry, maxScore }) => {
 const StudentScoreDashboard = () => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+
+    // Pagination & Search States
     const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [limit] = useState(20);
+    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
     const fetchScores = useCallback(async () => {
-        setLoading(true);
-        setError('');
+        setLoading(data.length === 0);
         try {
-            const res = await api.get(`${API}/student-scores`);
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            params.append('page', page);
+            params.append('limit', limit);
+
+            const res = await api.get(`${API}/student-scores?${params.toString()}`);
             setData(res.data.data || []);
+            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to load student scores');
+            console.error('Failed to load student scores:', err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [search, page, limit, data.length]);
+
+    // Reset page on search
+    useEffect(() => {
+        setPage(1);
+    }, [search]);
 
     useEffect(() => {
         fetchScores();
     }, [fetchScores]);
 
-    const filtered = data.filter(entry =>
-        !search ||
-        entry.student?.name?.toLowerCase().includes(search.toLowerCase()) ||
-        entry.student?.studentId?.toLowerCase().includes(search.toLowerCase())
-    );
-
-    const maxScore = filtered.length > 0 ? filtered[0].totalScore : 1;
-    const totalStudents = data.length;
-    const evaluated = data.filter(e => e.totalScore > 0).length;
+    const maxScore = data.length > 0 ? data[0].totalScore : 1;
+    const totalStudents = pagination.totalRecords;
+    const evaluated = data.filter(e => e.totalScore > 0).length; // This is only for the current page, which might be slightly misleading if we want global evaluated count, but let's stick to what's visible or what the API provides if it provides stats.
 
     return (
         <div className="space-y-4 h-full flex flex-col">
 
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-linear-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-4">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-600 rounded-xl text-white">
                         <Trophy size={18} />
@@ -234,13 +243,7 @@ const StudentScoreDashboard = () => {
                         <Loader2 size={36} className="text-indigo-400 animate-spin mb-4" />
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Scores...</p>
                     </div>
-                ) : error ? (
-                    <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-red-200 rounded-2xl bg-red-50">
-                        <AlertTriangle size={36} className="text-red-300 mb-3" />
-                        <p className="text-sm font-bold text-red-500">{error}</p>
-                        <button onClick={fetchScores} className="mt-3 text-xs font-bold text-red-600 underline">Try Again</button>
-                    </div>
-                ) : filtered.length === 0 ? (
+                ) : data.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-200 rounded-2xl">
                         <Medal size={48} className="text-slate-200 mb-3" />
                         <p className="text-sm font-bold text-slate-500">
@@ -251,7 +254,7 @@ const StudentScoreDashboard = () => {
                         </p>
                     </div>
                 ) : (
-                    filtered.map(entry => (
+                    data.map(entry => (
                         <StudentRow
                             key={entry.student?._id}
                             entry={entry}
@@ -260,6 +263,14 @@ const StudentScoreDashboard = () => {
                     ))
                 )}
             </div>
+
+            <Pagination
+                currentPage={page}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+                totalRecords={pagination.totalRecords}
+                limit={limit}
+            />
         </div>
     );
 };

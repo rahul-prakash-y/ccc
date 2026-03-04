@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     ClipboardCheck, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp,
-    User, BookOpen, Star
+    User, BookOpen, Star, Search
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
+import Pagination from './components/Pagination';
 
 // ─── Single student evaluation row ──────────────────────────────────────────
 const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
@@ -178,7 +179,7 @@ const QuestionEvalCard = ({ item, onScoreSaved }) => {
                         {/* Question prompt visible to admin */}
                         <div className="px-4 pt-4 pb-3 bg-indigo-50/60 border-b border-indigo-100">
                             <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                <BookOpen size={10} /> Question 
+                                <BookOpen size={10} /> Question
                             </p>
                             <h3 className="text-sm font-bold text-indigo-900 mb-1">{item.question.title}</h3>
                             <p className="text-xs text-indigo-700 leading-relaxed whitespace-pre-wrap">
@@ -216,18 +217,35 @@ const EvaluationTab = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
+    // Pagination & Search States
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [limit] = useState(10);
+    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+
     const fetchEvaluations = useCallback(async () => {
-        setLoading(true);
+        setLoading(data.length === 0);
         setError('');
         try {
-            const res = await api.get(`${API}/manual-evaluations`);
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            params.append('page', page);
+            params.append('limit', limit);
+
+            const res = await api.get(`${API}/manual-evaluations?${params.toString()}`);
             setData(res.data.data || []);
+            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to load evaluations');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [search, page, limit, data.length]);
+
+    // Reset page on search
+    useEffect(() => {
+        setPage(1);
+    }, [search]);
 
     useEffect(() => {
         fetchEvaluations();
@@ -252,12 +270,24 @@ const EvaluationTab = () => {
                         </p>
                     </div>
                 </div>
-                {!loading && (
-                    <div className="text-right hidden sm:block">
-                        <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Progress</p>
-                        <p className="text-sm font-bold text-amber-800">{totalGraded} / {totalStudents} graded</p>
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                        <input
+                            type="text"
+                            placeholder="Search questions or students..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="bg-white border border-amber-200 rounded-xl pl-9 pr-4 py-2 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm w-64 placeholder:text-amber-200"
+                        />
                     </div>
-                )}
+                    {!loading && (
+                        <div className="text-right hidden sm:block border-l border-amber-200 pl-4">
+                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Progress</p>
+                            <p className="text-sm font-bold text-amber-800">{totalGraded} / {totalStudents} graded</p>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Content */}
@@ -292,6 +322,14 @@ const EvaluationTab = () => {
                     ))
                 )}
             </div>
+
+            <Pagination
+                currentPage={page}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+                totalRecords={pagination.totalRecords}
+                limit={limit}
+            />
         </div>
     );
 };
