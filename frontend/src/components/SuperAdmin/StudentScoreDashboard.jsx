@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp,
     User, BarChart2, Calendar, Medal, RefreshCw
@@ -250,7 +250,7 @@ const StudentScoreDashboard = () => {
                             {search ? 'No students match your search.' : 'No evaluated submissions yet.'}
                         </p>
                         <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
-                            Scores appear here after admins manually grade student submissions in the Evaluations tab.
+                            Scores appear here for auto-graded MCQ tests or after admins manually grade submissions in the Evaluations tab.
                         </p>
                     </div>
                 ) : (

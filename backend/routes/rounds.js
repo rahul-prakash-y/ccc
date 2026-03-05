@@ -345,11 +345,38 @@ module.exports = async function (fastify, opts) {
             // Successful Submission
             submission.status = 'SUBMITTED';
             submission.endTime = now;
+
+            let parsedAnswers = {};
             if (answers) {
+                parsedAnswers = typeof answers === 'object' ? answers : {};
+                if (typeof answers === 'string') {
+                    try { parsedAnswers = JSON.parse(answers); } catch (e) { }
+                }
                 submission.codeContent = typeof answers === 'object' ? JSON.stringify(answers) : answers;
             } else if (codeContent) {
                 submission.codeContent = codeContent;
+                try { parsedAnswers = JSON.parse(codeContent); } catch (e) { }
             }
+
+            // --- Auto-evaluate MCQ questions ---
+            const Question = require('../models/Question');
+            let autoScore = 0;
+            const answeredIds = Object.keys(parsedAnswers).filter(id => mongoose.Types.ObjectId.isValid(id));
+
+            if (answeredIds.length > 0) {
+                const questionsToEval = await Question.find({ _id: { $in: answeredIds }, type: 'MCQ' });
+                for (const q of questionsToEval) {
+                    const studentAnswer = String(parsedAnswers[q._id.toString()] || '').trim();
+                    const correctAns = String(q.correctAnswer || '').trim();
+                    if (correctAns && studentAnswer === correctAns) {
+                        autoScore += (q.points || 0);
+                    }
+                }
+            }
+            submission.autoScore = autoScore;
+            const totalManualScore = (submission.manualScores || []).reduce((sum, ms) => sum + (ms.score || 0), 0);
+            submission.score = autoScore + totalManualScore;
+
             if (pdfUrl) submission.pdfUrl = pdfUrl;
 
             await submission.save();
@@ -471,7 +498,11 @@ module.exports = async function (fastify, opts) {
                 return reply.code(403).send({ error: 'ACCESS REVOKED: You have been disqualified for violating security protocols.' });
             }
 
-            if (submission.status !== 'IN_PROGRESS' && submission.status !== 'SUBMITTED') {
+            if (submission.status === 'SUBMITTED') {
+                return reply.code(403).send({ error: 'Access denied.', reason: 'SUBMITTED_BLOCK' });
+            }
+
+            if (submission.status !== 'IN_PROGRESS') {
                 return reply.code(403).send({ error: 'Access denied. Round session is not active.' });
             }
 
@@ -540,13 +571,18 @@ module.exports = async function (fastify, opts) {
                     return selectedGroup;
                 };
 
-                // Shuffle each group individually and slice exactly 10 questions from each
-                const mcqQuestions = shuffleGroup(groupedQuestions['MCQ'], 'MCQ').slice(0, 10);
-                const codeQuestions = shuffleGroup(groupedQuestions['CODE'], 'CODE').slice(0, 10);
-                const shortAnswerQuestions = shuffleGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER').slice(0, 10);
+                // Shuffle each group individually without hardcoded limits
+                const mcqQuestions = shuffleGroup(groupedQuestions['MCQ'], 'MCQ');
+                const codeQuestions = shuffleGroup(groupedQuestions['CODE'], 'CODE');
+                const shortAnswerQuestions = shuffleGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER');
 
-                // Combine these 30 questions into a single array
+                // Combine questions sequentially
                 let selected = [...mcqQuestions, ...codeQuestions, ...shortAnswerQuestions];
+
+                // Respect the questionCount limit if configured globally for the test
+                if (round.questionCount && round.questionCount > 0) {
+                    selected = selected.slice(0, round.questionCount);
+                }
 
                 // Persist the assignment so reconnects return the same set
                 submission.assignedQuestions = selected.map(q => q._id);

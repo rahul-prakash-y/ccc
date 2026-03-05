@@ -676,9 +676,9 @@ module.exports = async function (fastify, opts) {
                 });
             }
 
-            // Recalculate total score as sum of all manual scores
+            // Recalculate total score as sum of all manual scores + autoScore
             const totalManualScore = submission.manualScores.reduce((sum, ms) => sum + (ms.score || 0), 0);
-            submission.score = totalManualScore;
+            submission.score = (submission.autoScore || 0) + totalManualScore;
 
             await submission.save();
 
@@ -742,7 +742,8 @@ module.exports = async function (fastify, opts) {
 
                 const entry = studentMap[sid];
                 const manualTotal = (sub.manualScores || []).reduce((s, ms) => s + (ms.score || 0), 0);
-                const submissionScore = manualTotal > 0 ? manualTotal : (sub.score || 0);
+                // The total submission score is now autoScore + manualScores
+                const submissionScore = (sub.autoScore || 0) + manualTotal;
 
                 entry.totalScore += submissionScore;
                 entry.rounds.push({
@@ -1304,6 +1305,45 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * PATCH /api/superadmin/submissions/:submissionId/allow-reentry
+     * Allows a student to re-enter a test they have already submitted or been disqualified from.
+     */
+    fastify.patch('/submissions/:submissionId/allow-reentry', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { submissionId } = request.params;
+            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+
+            if (submission.status !== 'SUBMITTED' && submission.status !== 'DISQUALIFIED') {
+                return reply.code(400).send({ error: 'Re-entry can only be approved for submitted or disqualified tests' });
+            }
+
+            // Reset status so they can enter again
+            submission.status = 'IN_PROGRESS';
+
+            // Give them an extra 10 minutes by default so they can actually make changes before it auto-submits
+            submission.extraTimeMinutes = (submission.extraTimeMinutes || 0) + 10;
+
+            // Clear disqualification reason
+            submission.disqualificationReason = null;
+
+            await submission.save();
+
+            // Log activity
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Submission', id: submission._id, label: `Re-entry Approved for ${submission.student?.name}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Re-entry approved. Student granted 10 extra minutes.' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to approve re-entry' });
+        }
+    });
 
     // PATCH /api/superadmin/students/:studentId/force-logout — invalidate all sessions
     fastify.patch('/students/:studentId/force-logout', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {

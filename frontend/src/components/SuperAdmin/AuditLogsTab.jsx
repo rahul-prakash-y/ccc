@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock } from 'lucide-react';
+import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
 import Pagination from './components/Pagination';
@@ -56,6 +56,21 @@ const AuditLogsTab = ({ rounds }) => {
             fetchLogs(); // Refresh to update count and data
         } catch (e) {
             alert(e.response?.data?.error || "Delete failed");
+        } finally {
+            setBusy(b => ({ ...b, [submissionId]: false }));
+        }
+    };
+
+    const handleAllowReEntry = async (submissionId, studentName) => {
+        if (!window.confirm(`Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them 10 extra minutes to complete their changes.`)) return;
+
+        setBusy(b => ({ ...b, [submissionId]: true }));
+        try {
+            await api.patch(`${API}/submissions/${submissionId}/allow-reentry`);
+            alert(`Re-entry approved for ${studentName}. They can now refresh and re-enter the test.`);
+            fetchLogs();
+        } catch (e) {
+            alert(e.response?.data?.error || "Failed to approve re-entry.");
         } finally {
             setBusy(b => ({ ...b, [submissionId]: false }));
         }
@@ -205,6 +220,16 @@ const AuditLogsTab = ({ rounds }) => {
                                                                 className="inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-all disabled:opacity-50"
                                                             >
                                                                 {busy[log._id] ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />}
+                                                            </button>
+                                                        )}
+                                                        {(log.status === 'SUBMITTED' || log.status === 'DISQUALIFIED') && (
+                                                            <button
+                                                                onClick={() => handleAllowReEntry(log._id, log.student?.name || 'Student')}
+                                                                disabled={busy[log._id]}
+                                                                title="Approve Re-entry"
+                                                                className="inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-emerald-500 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all disabled:opacity-50"
+                                                            >
+                                                                {busy[log._id] ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
                                                             </button>
                                                         )}
                                                         <button

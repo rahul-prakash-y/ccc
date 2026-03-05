@@ -36,6 +36,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     // Anti-Cheat State
     const [isBanned, setIsBanned] = useState(false);
     const [banReason, setBanReason] = useState('');
+    const [isSubmittedBlock, setIsSubmittedBlock] = useState(false);
 
     // Submission State
     const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -121,8 +122,12 @@ const CodeArena = ({ language = 'javascript' }) => {
                 }
             } catch (err) {
                 if (err.response?.status === 403) {
-                    setIsBanned(true);
-                    setBanReason(err.response?.data?.reason || "Disqualified (Platform Security)");
+                    if (err.response?.data?.reason === 'SUBMITTED_BLOCK') {
+                        setIsSubmittedBlock(true);
+                    } else {
+                        setIsBanned(true);
+                        setBanReason(err.response?.data?.reason || "Disqualified (Platform Security)");
+                    }
                 }
             } finally {
                 setIsLoading(false);
@@ -207,6 +212,26 @@ const CodeArena = ({ language = 'javascript' }) => {
             setIsSubmitting(false);
         }
     };
+
+    // --- Submitted Block State Render ---
+    if (isSubmittedBlock) {
+        return (
+            <div className="h-screen w-full bg-slate-50 flex flex-col items-center justify-center font-sans p-10 text-center">
+                <div className="w-32 h-32 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-8 shadow-[0_0_60px_rgba(99,102,241,0.2)]">
+                    <CheckCircle size={64} />
+                </div>
+                <h1 className="text-5xl font-black tracking-tight text-slate-900 uppercase">Test Submitted</h1>
+                <div className="max-w-lg mt-6 space-y-6">
+                    <p className="text-slate-500 text-lg leading-relaxed">
+                        You have already submitted this assessment. If you need to re-enter, please request <b>Approval for Re-entry</b> from your administrator.
+                    </p>
+                </div>
+                <button onClick={() => navigate('/dashboard')} className="mt-10 px-8 py-4 bg-indigo-600 text-white font-black tracking-wide rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 active:scale-95">
+                    <LogOut size={18} /> Return to Dashboard
+                </button>
+            </div>
+        );
+    }
 
     // --- Banned State Render ---
     if (isBanned) {

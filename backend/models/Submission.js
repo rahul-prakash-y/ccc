@@ -36,7 +36,11 @@ const submissionSchema = new mongoose.Schema({
     },
     score: {
         type: Number,
-        default: null // Graded later
+        default: null // Graded later (Total score: autoScore + manualScores)
+    },
+    autoScore: {
+        type: Number,
+        default: 0 // Auto-evaluated score for MCQs
     },
     // Time extension granted by Admin/SuperAdmin for this student
     extraTimeMinutes: {
