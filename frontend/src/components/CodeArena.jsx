@@ -25,6 +25,13 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [roundInfo, setRoundInfo] = useState(null);
     const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Anti-Cheat State
     const [isBanned, setIsBanned] = useState(false);
@@ -244,45 +251,45 @@ const CodeArena = ({ language = 'javascript' }) => {
             <header className="h-16 shrink-0 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-10 shadow-sm relative">
                 {isDangerZone && <div className="absolute top-0 left-0 right-0 h-0.5 bg-red-500 animate-pulse" />}
 
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 shadow-inner">
-                        <Code2 size={20} />
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 shadow-inner">
+                        <Code2 size={18} className="sm:size-20" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-black text-slate-900 tracking-tight">
+                        <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
                             {roundInfo?.name || 'Active Assessment'}
                         </h1>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                        <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
                             {/* Section X of Y */}
                             {roundInfo?.roundNumber && roundInfo?.totalRounds && (
                                 <>
-                                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-black text-[10px] uppercase tracking-wide">
-                                        Section {roundInfo.roundNumber} of {roundInfo.totalRounds}
+                                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-black text-[9px] sm:text-[10px] uppercase tracking-wide">
+                                        S{roundInfo.roundNumber}/{roundInfo.totalRounds}
                                     </span>
-                                    <span className="text-slate-300">|</span>
+                                    <span className="text-slate-300 hidden xs:inline">|</span>
                                 </>
                             )}
                             {/* Question X of N */}
                             <span className="flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                Q {activeIdx + 1} of {questions.length}
+                                Q{activeIdx + 1}/{questions.length}
                             </span>
-                            <span className="text-slate-300">|</span>
+                            <span className="text-slate-300 hidden sm:inline">|</span>
                             {/* Marks for current question */}
                             {questions[activeIdx]?.points !== undefined && (
-                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-black text-[10px] uppercase tracking-wide">
+                                <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-black text-[10px] uppercase tracking-wide">
                                     {questions[activeIdx].points} pts
                                 </span>
                             )}
-                            <span className="text-slate-300">|</span>
-                            <span className="uppercase tracking-widest font-bold">{roundInfo?.type?.replace(/_/g, ' ')}</span>
+                            <span className="text-slate-300 hidden md:inline">|</span>
+                            <span className="hidden md:inline uppercase tracking-widest font-bold">{roundInfo?.type?.replace(/_/g, ' ')}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2 sm:gap-6">
                     {/* Sync Status */}
-                    <div className="hidden sm:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100">
+                    <div className="hidden lg:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100">
                         {saveStatus === 'SAVING' && <><Loader2 size={12} className="animate-spin text-indigo-500" /> <span className="text-indigo-600">Syncing</span></>}
                         {saveStatus === 'PENDING' && <><Save size={12} className="text-slate-400" /> <span className="text-slate-500">Unsaved</span></>}
                         {saveStatus === 'SAVED' && <><CheckCircle size={12} className="text-emerald-500" /> <span className="text-emerald-600">Draft Saved</span></>}
@@ -290,19 +297,19 @@ const CodeArena = ({ language = 'javascript' }) => {
                     </div>
 
                     {/* Timer */}
-                    <div className={`flex items-center gap-3 px-4 py-2 rounded-xl font-mono text-lg font-black border transition-colors shadow-sm ${isTimeUp ? 'bg-red-50 border-red-200 text-red-600' :
+                    <div className={`flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-lg font-black border transition-colors shadow-sm ${isTimeUp ? 'bg-red-50 border-red-200 text-red-600' :
                         isDangerZone ? 'bg-orange-50 border-orange-200 text-orange-600 animate-pulse' :
                             'bg-white border-slate-200 text-slate-800'
                         }`}>
-                        {isTimeUp ? <AlertTriangle size={18} className="animate-bounce" /> : <Clock size={18} className={isDangerZone ? '' : 'text-slate-400'} />}
-                        {isTimeUp ? '00:00:00 (LOCKED)' : formattedTime}
+                        {isTimeUp ? <AlertTriangle size={16} className="animate-bounce" /> : <Clock size={16} className={isDangerZone ? '' : 'text-slate-400'} />}
+                        <span className="whitespace-nowrap">{isTimeUp ? '00:00:00' : formattedTime}</span>
                     </div>
 
                     {/* Submit Button */}
                     <button
                         onClick={() => setIsSubmitModalOpen(true)}
                         disabled={isSubmitting}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-50 ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                        className={`flex items-center justify-center gap-2 px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-50 ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
                             }`}
                     >
                         <Send size={16} />
@@ -313,13 +320,13 @@ const CodeArena = ({ language = 'javascript' }) => {
 
             {/* Split UI */}
             <Split
-                sizes={[52, 48]}
-                minSize={[425, 375]}
+                sizes={isMobile ? [40, 60] : [52, 48]}
+                minSize={isMobile ? [200, 300] : [425, 375]}
                 gutterSize={6}
                 gutterAlign="center"
-                direction="horizontal"
-                className="flex-1 flex w-full overflow-hidden"
-                cursor="col-resize"
+                direction={isMobile ? "vertical" : "horizontal"}
+                className={`flex-1 flex w-full overflow-hidden ${isMobile ? 'flex-col' : 'flex-row'}`}
+                cursor={isMobile ? "row-resize" : "col-resize"}
             >
                 {/* Left Side: Question Pane */}
                 <div className="flex flex-col h-full bg-white border-r border-slate-200 overflow-hidden relative">
@@ -369,9 +376,9 @@ const CodeArena = ({ language = 'javascript' }) => {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
                             transition={{ duration: 0.15 }}
-                            className="flex-1 p-8 overflow-y-auto custom-scrollbar"
+                            className="flex-1 p-4 sm:p-8 overflow-y-auto custom-scrollbar"
                         >
-                            <div className="flex items-center gap-2 mb-4">
+                            <div className="flex items-center gap-2 mb-4 flex-wrap">
                                 <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border
                                     ${q?.difficulty === 'HARD' ? 'bg-red-50 text-red-600 border-red-100' :
                                         q?.difficulty === 'MEDIUM' ? 'bg-orange-50 text-orange-600 border-orange-100' :
@@ -386,7 +393,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                 </span>
                             </div>
 
-                            <h2 className="text-2xl font-black text-slate-900 mb-6 tracking-tight leading-tight">{q.title}</h2>
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-4 sm:mb-6 tracking-tight leading-tight">{q.title}</h2>
 
                             <div className="prose prose-slate max-w-none text-sm font-medium leading-relaxed whitespace-pre-wrap mb-8">
                                 {q.description}

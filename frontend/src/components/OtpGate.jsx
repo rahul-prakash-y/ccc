@@ -22,7 +22,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
     const handleChange = (index, value) => {
         // Only allow alphanumeric characters
         if (!/^[a-zA-Z0-9]*$/.test(value)) return;
-        
+
         const newOtp = [...otp];
         newOtp[index] = value.toUpperCase();
         setOtp(newOtp);
@@ -50,7 +50,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
             newOtp[i] = pastedData[i];
         }
         setOtp(newOtp);
-        
+
         // Focus the appropriate box after paste
         const focusIndex = pastedData.length < 6 ? pastedData.length : 5;
         inputRefs.current[focusIndex]?.focus();
@@ -59,7 +59,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         const otpString = otp.join('');
-        
+
         if (otpString.length !== 6) {
             setError('Access Key must be exactly 6 characters.');
             return;
@@ -122,7 +122,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
 
                         <form onSubmit={handleSubmit} className="space-y-8">
                             <div>
-                                <div className="flex justify-between gap-2" onPaste={handlePaste}>
+                                <div className="flex justify-center sm:justify-between gap-1 sm:gap-2" onPaste={handlePaste}>
                                     {otp.map((digit, index) => (
                                         <input
                                             key={index}
@@ -134,7 +134,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
                                             onKeyDown={(e) => handleKeyDown(index, e)}
                                             disabled={loading}
                                             autoComplete="off"
-                                            className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-black font-mono text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 selection:bg-indigo-100"
+                                            className="w-10 h-13 xs:w-12 xs:h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-black font-mono text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 selection:bg-indigo-100"
                                         />
                                     ))}
                                 </div>
@@ -185,7 +185,8 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
                 </motion.div>
 
                 {/* CSS Animation Keyframes for the scanner line */}
-                <style dangerouslySetInnerHTML={{__html: `
+                <style dangerouslySetInnerHTML={{
+                    __html: `
                     @keyframes scan {
                         0% { transform: translateX(-100%); }
                         50% { transform: translateX(100%); }

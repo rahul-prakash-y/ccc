@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion   } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy
@@ -52,24 +52,25 @@ const SuperAdminDashboard = () => {
     <div className=" bg-[#f8fafc] font-sans selection:bg-indigo-100 selection:text-indigo-700 overflow-hidden">
       {/* 1. GLASS-MORPHISM HEADER */}
       <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           {/* Identity Section */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="relative group">
               <div className="absolute -inset-1 bg-linear-to-tr from-indigo-600 to-violet-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
-              <div className="relative p-2.5 bg-white border border-slate-100 rounded-xl">
-                <ShieldCheck size={22} className="text-indigo-600" />
+              <div className="relative p-2 bg-white border border-slate-100 rounded-xl">
+                <ShieldCheck size={20} className="text-indigo-600" />
               </div>
             </div>
             <div className="flex flex-col">
-              <h1 className="font-bold text-slate-900 text-[15px] tracking-tight flex items-center gap-2">
-                Super Admin Panel
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-wider rounded-full border border-emerald-100 animate-pulse">
-                  System Live
+              <h1 className="font-bold text-slate-900 text-[13px] sm:text-[15px] tracking-tight flex items-center gap-2">
+                <span className="hidden xs:inline">Super Admin Panel</span>
+                <span className="xs:hidden">Admin</span>
+                <span className="px-1.5 sm:px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-full border border-emerald-100 animate-pulse">
+                  Live
                 </span>
               </h1>
-              <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest">
-                ID: {user?.studentId || "000-ADMIN"}
+              <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest">
+                {user?.studentId || "000-ADMIN"}
               </p>
             </div>
           </div>
@@ -77,10 +78,10 @@ const SuperAdminDashboard = () => {
           {/* Global Sign Out */}
           <button
             onClick={logout}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:text-red-600 bg-white hover:bg-red-50 rounded-lg transition-all border border-slate-200 hover:border-red-100 active:scale-95"
+            className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-500 hover:text-red-600 bg-white hover:bg-red-50 rounded-lg transition-all border border-slate-200 hover:border-red-100 active:scale-95"
           >
             <LogOut size={14} />
-            Sign Out
+            <span className="hidden xs:inline">Sign Out</span>
           </button>
         </div>
 
@@ -128,18 +129,18 @@ const SuperAdminDashboard = () => {
             <div className="h-full overflow-y-auto custom-scrollbar p-6">
 
               {/* Dynamic View Header */}
-              <div className="flex items-center justify-between mb-6 sticky top-0 bg-white/95 backdrop-blur-md z-30 pb-2 border-b border-slate-50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sticky top-0 bg-white/95 backdrop-blur-md z-30 pb-2 border-b border-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
                     {React.createElement(TABS.find(t => t.id === activeTab)?.icon, { size: 14 })}
                   </div>
-                  <h2 className="text-xs font-black text-slate-800 uppercase tracking-[0.15em]">
+                  <h2 className="text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-[0.15em]">
                     {TABS.find(t => t.id === activeTab)?.label} Control
                   </h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">
+                  <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">
                     Kernel: {activeTab}_v3.2
                   </span>
                 </div>

@@ -50,13 +50,13 @@ const Login = () => {
 
                 <div className="p-8">
                     {/* Logo */}
-                    <div className="flex items-center justify-center gap-3 mb-8">
-                        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-600">
-                            <Terminal size={26} />
+                    <div className="flex items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8 text-center sm:text-left">
+                        <div className="p-2 sm:p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-600">
+                            <Terminal size={22} className="sm:size-[26px]" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Code Circuit Club</h1>
-                            <p className="text-xs text-gray-400 font-mono tracking-widest uppercase mt-0.5">Participant Login</p>
+                            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-tight">Code Circuit Club</h1>
+                            <p className="text-[9px] sm:text-xs text-gray-400 font-mono tracking-widest uppercase mt-0.5">Participant Login</p>
                         </div>
                     </div>
 

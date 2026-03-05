@@ -203,9 +203,9 @@ const QuestionSettings = ({ section, onSave, busy }) => {
         <Settings2 size={10} className="text-violet-500" />
         <p className="text-[9px] font-black text-violet-500 uppercase tracking-widest">Question Pool Settings</p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {/* Questions per student */}
-        <div className="flex items-center gap-1.5 flex-1">
+        <div className="flex items-center gap-1.5 min-w-[120px]">
           <label className="text-[10px] font-bold text-slate-500 whitespace-nowrap">Qs per student</label>
           <input
             type="number"
@@ -219,7 +219,7 @@ const QuestionSettings = ({ section, onSave, busy }) => {
         {/* Shuffle toggle */}
         <button
           onClick={() => setShuffle(s => !s)}
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black border transition-all ${shuffle ? 'bg-violet-100 border-violet-200 text-violet-700' : 'bg-white border-slate-200 text-slate-400'
+          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black border transition-all ${shuffle ? 'bg-violet-100 border-violet-200 text-violet-700' : 'bg-white border-slate-200 text-slate-400'
             }`}
         >
           <Shuffle size={10} />
@@ -229,7 +229,7 @@ const QuestionSettings = ({ section, onSave, busy }) => {
         <button
           onClick={handleSave}
           disabled={busy}
-          className={`px-3 py-1 rounded-lg text-[10px] font-black border transition-all disabled:opacity-50 ${saved ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
+          className={`flex-1 px-3 py-1 rounded-lg text-[10px] font-black border transition-all disabled:opacity-50 ${saved ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
             }`}
         >
           {busy ? <Loader2 size={10} className="animate-spin" /> : saved ? '✓ Saved' : 'Save'}
@@ -307,7 +307,7 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
         />
 
         {/* Action Toolbar */}
-        <div className="mt-auto pt-4 border-t border-slate-50 flex items-center gap-2">
+        <div className="mt-auto pt-4 border-t border-slate-50 flex flex-wrap items-center gap-2">
           {section.status === 'LOCKED' && (
             <button
               onClick={() => onAct(section._id, 'generate-otp')}

@@ -258,7 +258,7 @@ const EvaluationTab = () => {
         <div className="space-y-4 h-full flex flex-col">
 
             {/* Header stats */}
-            <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-2xl p-4">
+            <div className="flex max-md:flex-col max-md:gap-3 items-center justify-between bg-amber-50 border border-amber-100 rounded-2xl p-4">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-amber-100 rounded-xl text-amber-600">
                         <Star size={18} />
