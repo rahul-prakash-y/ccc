@@ -7,6 +7,8 @@ import {
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import toast from 'react-hot-toast';
+import { useConfirm } from '../../store/confirmStore';
 
 // ─── Refined Add Admin Modal ───────────────────────────────────────────────────────────
 const AddAdminModal = ({ onClose, onCreated }) => {
@@ -192,6 +194,7 @@ const ResetPasswordModal = ({ admin, onClose }) => {
 
 // ─── Main Admin Manager Tab ─────────────────────────────────────────────────────────
 const AdminManagerTab = () => {
+    const showConfirm = useConfirm(state => state.showConfirm);
     const [admins, setAdmins] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -249,32 +252,58 @@ const AdminManagerTab = () => {
         }
     };
 
-    const handleForceLogout = async (admin) => {
-        if (!window.confirm(`Terminate session for ${admin.studentId}?`)) return;
-        const res = await act(admin._id, 'force-logout');
-        if (res) fetchAdmins();
+    const handleForceLogout = (admin) => {
+        showConfirm({
+            title: "Force Logout",
+            message: `Terminate session for ${admin.studentId}?`,
+            confirmLabel: "Force Logout",
+            onConfirm: async () => {
+                const res = await act(admin._id, 'force-logout');
+                if (res) {
+                    toast.success("Admin forcefully logged out.");
+                    fetchAdmins();
+                }
+            }
+        });
     };
 
-    const handleBlockToggle = async (admin) => {
+    const handleBlockToggle = (admin) => {
         const verb = admin.isBanned ? 'Unblock' : 'Block';
-        if (!window.confirm(`${verb} admin access for ${admin.studentId}?`)) return;
-        const res = await act(admin._id, 'block');
-        if (res) {
-            setAdmins(prev => prev.map(a => a._id === admin._id ? { ...a, isBanned: res.isBanned } : a));
-        }
+        showConfirm({
+            title: `${verb} Admin`,
+            message: `${verb} admin access for ${admin.studentId}?`,
+            confirmLabel: verb,
+            isDanger: !admin.isBanned,
+            onConfirm: async () => {
+                const res = await act(admin._id, 'block');
+                if (res) {
+                    toast.success(`Admin ${verb.toLowerCase()}ed successfully.`);
+                    setAdmins(prev => prev.map(a => a._id === admin._id ? { ...a, isBanned: res.isBanned } : a));
+                }
+            }
+        });
     };
 
-    const handleDelete = async (admin) => {
-        if (!window.confirm(`REVOKE ADMIN RIGHTS:\n\nPermanently delete ${admin.studentId}?\nThis cannot be undone.`)) return;
-        setBusy(b => ({ ...b, [`${admin._id}-delete`]: true }));
-        try {
-            await api.delete(`${API}/admins/${admin._id}`);
-            fetchAdmins();
-        } catch (e) {
-            setGlobalError(e.response?.data?.error || "Deletion failed.");
-        } finally {
-            setBusy(b => ({ ...b, [`${admin._id}-delete`]: false }));
-        }
+    const handleDelete = (admin) => {
+        showConfirm({
+            title: "Revoke Admin Access",
+            message: `REVOKE ADMIN RIGHTS:\n\nPermanently delete ${admin.studentId}?\nThis cannot be undone.`,
+            confirmLabel: "Delete Permanently",
+            isDanger: true,
+            onConfirm: async () => {
+                setBusy(b => ({ ...b, [`${admin._id}-delete`]: true }));
+                try {
+                    await api.delete(`${API}/admins/${admin._id}`);
+                    toast.success("Admin deleted successfully.");
+                    fetchAdmins();
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Deletion failed.");
+                    setGlobalError(e.response?.data?.error || "Deletion failed.");
+                } finally {
+                    setBusy(b => ({ ...b, [`${admin._id}-delete`]: false }));
+                }
+            }
+        });
     };
 
     return (

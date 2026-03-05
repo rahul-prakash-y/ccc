@@ -7,6 +7,8 @@ import {
 import { api } from '../../store/authStore';
 import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
+import toast from 'react-hot-toast';
+import { useConfirm } from '../../store/confirmStore';
 
 // ─── Import From Library Modal ──────────────────────────────────────────────────────
 const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
@@ -446,6 +448,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
 
 // ─── Main Question Manager Tab ──────────────────────────────────────────────────────
 const QuestionManagerTab = ({ rounds }) => {
+    const showConfirm = useConfirm(state => state.showConfirm);
     const [selectedRound, setSelectedRound] = useState('');
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -492,14 +495,23 @@ const QuestionManagerTab = ({ rounds }) => {
         }
     }, [selectedRound, fetchQuestions]);
 
-    const handleDelete = async (questionId) => {
-        if (!window.confirm('Delete this question permanently?')) return;
-        try {
-            await api.delete(`${API}/questions/${questionId}`);
-            fetchQuestions(selectedRound);
-        } catch (e) {
-            console.error(e);
-        }
+    const handleDelete = (questionId) => {
+        showConfirm({
+            title: "Delete Question",
+            message: "Delete this question permanently?",
+            confirmLabel: "Delete Permanently",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.delete(`${API}/questions/${questionId}`);
+                    toast.success("Question deleted successfully.");
+                    fetchQuestions(selectedRound);
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Deletion failed.");
+                    console.error(e);
+                }
+            }
+        });
     };
 
     const handleSave = () => {

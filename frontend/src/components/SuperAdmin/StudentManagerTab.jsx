@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence,motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload
@@ -7,6 +7,8 @@ import {
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import toast from 'react-hot-toast';
+import { useConfirm } from '../../store/confirmStore';
 
 // ─── Refined Add Student Modal ─────────────────────────────────────────────────────────
 const AddStudentModal = ({ onClose, onCreated }) => {
@@ -375,6 +377,7 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
 
 // ─── Main Student Manager Tab ───────────────────────────────────────────────────────
 const StudentManagerTab = () => {
+    const showConfirm = useConfirm(state => state.showConfirm);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -436,32 +439,58 @@ const StudentManagerTab = () => {
         }
     };
 
-    const handleForceLogout = async (student) => {
-        if (!window.confirm(`Force logout ${student.studentId}? They will be immediately disconnected.`)) return;
-        const res = await act(student._id, 'force-logout');
-        if (res) fetchStudents();
+    const handleForceLogout = (student) => {
+        showConfirm({
+            title: "Force Logout",
+            message: `Force logout ${student.studentId}? They will be immediately disconnected.`,
+            confirmLabel: "Force Logout",
+            onConfirm: async () => {
+                const res = await act(student._id, 'force-logout');
+                if (res) {
+                    toast.success("Student forcefully logged out.");
+                    fetchStudents();
+                }
+            }
+        });
     };
 
-    const handleBlockToggle = async (student) => {
+    const handleBlockToggle = (student) => {
         const verb = student.isBanned ? 'Unblock' : 'Block';
-        if (!window.confirm(`${verb} student ${student.studentId}?`)) return;
-        const res = await act(student._id, 'block');
-        if (res) {
-            setStudents(prev => prev.map(s => s._id === student._id ? { ...s, isBanned: res.isBanned } : s));
-        }
+        showConfirm({
+            title: `${verb} Student`,
+            message: `${verb} student ${student.studentId}?`,
+            confirmLabel: verb,
+            isDanger: !student.isBanned,
+            onConfirm: async () => {
+                const res = await act(student._id, 'block');
+                if (res) {
+                    toast.success(`Student ${verb.toLowerCase()}ed successfully.`);
+                    setStudents(prev => prev.map(s => s._id === student._id ? { ...s, isBanned: res.isBanned } : s));
+                }
+            }
+        });
     };
 
-    const handleDelete = async (student) => {
-        if (!window.confirm(`CRITICAL WARNING:\n\nPermanently delete ${student.studentId}?\nThis destroys all records and cannot be undone.`)) return;
-        setBusy(b => ({ ...b, [`${student._id}-delete`]: true }));
-        try {
-            await api.delete(`${API}/students/${student._id}`);
-            fetchStudents();
-        } catch (e) {
-            setGlobalError(e.response?.data?.error || "Deletion failed.");
-        } finally {
-            setBusy(b => ({ ...b, [`${student._id}-delete`]: false }));
-        }
+    const handleDelete = (student) => {
+        showConfirm({
+            title: "Delete Student",
+            message: `CRITICAL WARNING:\n\nPermanently delete ${student.studentId}?\nThis destroys all records and cannot be undone.`,
+            confirmLabel: "Delete Permanently",
+            isDanger: true,
+            onConfirm: async () => {
+                setBusy(b => ({ ...b, [`${student._id}-delete`]: true }));
+                try {
+                    await api.delete(`${API}/students/${student._id}`);
+                    toast.success("Student deleted successfully.");
+                    fetchStudents();
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Deletion failed.");
+                    setGlobalError(e.response?.data?.error || "Deletion failed.");
+                } finally {
+                    setBusy(b => ({ ...b, [`${student._id}-delete`]: false }));
+                }
+            }
+        });
     };
 
     return (

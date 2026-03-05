@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
 
 import useContestTimer from '../hooks/useContestTimer';
 import useAutoSave from '../hooks/useAutoSave';
@@ -202,7 +203,7 @@ const CodeArena = ({ language = 'javascript' }) => {
             if (res.data.nextRoundId) {
                 navigate(`/arena/${res.data.nextRoundId}`);
             } else {
-                alert("Transmission Successful. Disconnecting from Arena.");
+                toast.success("Transmission Successful. Disconnecting from Arena.");
                 navigate('/dashboard');
             }
         } catch (err) {

@@ -7,6 +7,8 @@ import {
 import { api } from '../../store/authStore';
 import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
+import toast from 'react-hot-toast';
+import { useConfirm } from '../../store/confirmStore';
 
 const QuestionModal = ({ question, onClose, onSave }) => {
     const isEdit = !!question;
@@ -306,6 +308,7 @@ const QuestionModal = ({ question, onClose, onSave }) => {
 };
 
 const QuestionBankTab = () => {
+    const showConfirm = useConfirm(state => state.showConfirm);
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
@@ -344,14 +347,23 @@ const QuestionBankTab = () => {
         setPage(1);
     }, [search]);
 
-    const handleDelete = async (questionId) => {
-        if (!window.confirm('Delete this question permanently from the bank?')) return;
-        try {
-            await api.delete(`${API}/questions/${questionId}`);
-            fetchQuestions();
-        } catch (e) {
-            console.error(e);
-        }
+    const handleDelete = (questionId) => {
+        showConfirm({
+            title: "Delete Question",
+            message: "Delete this question permanently from the bank?",
+            confirmLabel: "Delete Permanently",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.delete(`${API}/questions/${questionId}`);
+                    toast.success("Question deleted from bank.");
+                    fetchQuestions();
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Deletion failed.");
+                    console.error(e);
+                }
+            }
+        });
     };
 
     const handleSave = (savedQuestion) => {

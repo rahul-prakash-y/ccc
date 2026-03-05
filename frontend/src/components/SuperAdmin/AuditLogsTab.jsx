@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
+import toast from 'react-hot-toast';
+import { useConfirm } from '../../store/confirmStore';
 import Pagination from './components/Pagination';
 
 const AuditLogsTab = ({ rounds }) => {
+    const showConfirm = useConfirm(state => state.showConfirm);
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState('');
@@ -47,33 +50,45 @@ const AuditLogsTab = ({ rounds }) => {
     }, [selectedRound, search]);
 
     // 3. Actions
-    const handleDeleteSubmission = async (submissionId) => {
-        if (!window.confirm("CRITICAL: Are you sure you want to PERMANENTLY DELETE this submission record?\n\nThis removes the student's score and frees them to take the test again. This cannot be undone.")) return;
-
-        setBusy(b => ({ ...b, [submissionId]: true }));
-        try {
-            await api.delete(`${API}/submissions/${submissionId}`);
-            fetchLogs(); // Refresh to update count and data
-        } catch (e) {
-            alert(e.response?.data?.error || "Delete failed");
-        } finally {
-            setBusy(b => ({ ...b, [submissionId]: false }));
-        }
+    const handleDeleteSubmission = (submissionId) => {
+        showConfirm({
+            title: "Delete Submission Record",
+            message: "CRITICAL: Are you sure you want to PERMANENTLY DELETE this submission record?\n\nThis removes the student's score and frees them to take the test again. This cannot be undone.",
+            confirmLabel: "Delete Permanently",
+            isDanger: true,
+            onConfirm: async () => {
+                setBusy(b => ({ ...b, [submissionId]: true }));
+                try {
+                    await api.delete(`${API}/submissions/${submissionId}`);
+                    toast.success("Submission deleted successfully");
+                    fetchLogs();
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Delete failed");
+                } finally {
+                    setBusy(b => ({ ...b, [submissionId]: false }));
+                }
+            }
+        });
     };
 
-    const handleAllowReEntry = async (submissionId, studentName) => {
-        if (!window.confirm(`Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them 10 extra minutes to complete their changes.`)) return;
-
-        setBusy(b => ({ ...b, [submissionId]: true }));
-        try {
-            await api.patch(`${API}/submissions/${submissionId}/allow-reentry`);
-            alert(`Re-entry approved for ${studentName}. They can now refresh and re-enter the test.`);
-            fetchLogs();
-        } catch (e) {
-            alert(e.response?.data?.error || "Failed to approve re-entry.");
-        } finally {
-            setBusy(b => ({ ...b, [submissionId]: false }));
-        }
+    const handleAllowReEntry = (submissionId, studentName) => {
+        showConfirm({
+            title: "Approve Re-Entry",
+            message: `Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them 10 extra minutes to complete their changes.`,
+            confirmLabel: "Approve Re-Entry",
+            onConfirm: async () => {
+                setBusy(b => ({ ...b, [submissionId]: true }));
+                try {
+                    await api.patch(`${API}/submissions/${submissionId}/allow-reentry`);
+                    toast.success(`Re-entry approved for ${studentName}`);
+                    fetchLogs();
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Failed to approve re-entry.");
+                } finally {
+                    setBusy(b => ({ ...b, [submissionId]: false }));
+                }
+            }
+        });
     };
 
     const handleAddTime = async (submissionId, studentName) => {
@@ -82,17 +97,17 @@ const AuditLogsTab = ({ rounds }) => {
 
         const numericMins = parseInt(mins, 10);
         if (isNaN(numericMins) || numericMins <= 0) {
-            alert("Please enter a valid positive number.");
+            toast.error("Please enter a valid positive number.");
             return;
         }
 
         setBusy(b => ({ ...b, [submissionId]: true }));
         try {
             await api.patch(`${API}/submissions/${submissionId}/extra-time`, { addMinutes: numericMins });
-            alert(`Successfully added ${numericMins} minutes to ${studentName}. It will sync to their screen shortly.`);
+            toast.success(`Successfully added ${numericMins} minutes to ${studentName}.`);
             fetchLogs();
         } catch (e) {
-            alert(e.response?.data?.error || "Failed to grant extra time.");
+            toast.error(e.response?.data?.error || "Failed to grant extra time.");
         } finally {
             setBusy(b => ({ ...b, [submissionId]: false }));
         }

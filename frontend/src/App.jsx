@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import SuperAdminRoute from './components/SuperAdminRoute';
+import { Toaster } from 'react-hot-toast';
+import ConfirmModal from './components/ConfirmModal';
 
 // Route Component Imports
 import Login from './components/Login';
@@ -99,6 +101,8 @@ function App() {
 
     return (
         <Router>
+            <Toaster position="top-right" />
+            <ConfirmModal />
             <AppRoutes />
         </Router>
     );
