@@ -25,6 +25,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [questions, setQuestions] = useState([]);
     const [activeIdx, setActiveIdx] = useState(0);
     const [answers, setAnswers] = useState({});
+    const [pdfUrl, setPdfUrl] = useState(null);
     const [roundInfo, setRoundInfo] = useState(null);
     const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -204,7 +205,7 @@ const CodeArena = ({ language = 'javascript' }) => {
         setIsSubmitting(true);
         setSubmitError(null);
         try {
-            const res = await api.post(`/rounds/${roundId}/submit`, { endOtp: otpString, answers });
+            const res = await api.post(`/rounds/${roundId}/submit`, { endOtp: otpString, answers, pdfUrl });
             if (res.data.nextRoundId) {
                 navigate(`/arena/${res.data.nextRoundId}`);
             } else {
@@ -537,6 +538,74 @@ const CodeArena = ({ language = 'javascript' }) => {
                                             <span className={`text-sm font-medium leading-relaxed ${currentAnswer === opt ? 'font-bold' : ''}`}>{opt}</span>
                                         </button>
                                     ))}
+                                </div>
+                            </div>
+                        ) : (q?.type === 'UI_UX' || roundInfo?.type === 'UI_UX_CHALLENGE') ? (
+                            <div className="p-4 sm:p-8 h-full overflow-y-auto custom-scrollbar flex flex-col items-center justify-center bg-slate-50/50">
+                                <div className="max-w-xl w-full space-y-8 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
+                                    <div className="text-center">
+                                        <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                            <Code2 size={32} />
+                                        </div>
+                                        <h3 className="text-xl font-black text-slate-800 tracking-tight">UI/UX Challenge Submission</h3>
+                                        <p className="text-slate-500 text-sm mt-2">Provide your Figma project link and upload a PDF snapshot of your design.</p>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Figma Project URL</label>
+                                            <input
+                                                type="url"
+                                                disabled={isTimeUp}
+                                                placeholder="https://www.figma.com/file/..."
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium text-slate-700"
+                                                value={currentAnswer}
+                                                onChange={(e) => handleAnswerChange(q?._id, e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Design Snapshot (PDF)</label>
+                                            <label className={`block w-full border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${pdfUrl ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/30 bg-slate-50'} ${isTimeUp ? 'cursor-not-allowed opacity-60' : ''}`}>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    className="hidden"
+                                                    disabled={isTimeUp}
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file && file.type === 'application/pdf') {
+                                                            if (file.size > 10 * 1024 * 1024) {
+                                                                toast.error("File size must be less than 10MB");
+                                                                return;
+                                                            }
+                                                            const reader = new FileReader();
+                                                            reader.onloadend = () => {
+                                                                setPdfUrl(reader.result);
+                                                                toast.success("PDF attached successfully!");
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        } else if (file) {
+                                                            toast.error("Please upload a valid PDF file");
+                                                        }
+                                                    }}
+                                                />
+                                                {pdfUrl ? (
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <CheckCircle className="text-emerald-500" size={24} />
+                                                        <span className="text-sm font-bold text-emerald-700">PDF Snapshot Attached</span>
+                                                        <span className="text-[10px] text-emerald-600/70 font-black uppercase tracking-widest">Click to replace</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Save className="text-slate-400" size={24} />
+                                                        <span className="text-sm font-bold text-slate-700">Select PDF File</span>
+                                                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Max size 10MB</span>
+                                                    </div>
+                                                )}
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? (

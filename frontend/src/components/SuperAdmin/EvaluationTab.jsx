@@ -73,12 +73,26 @@ const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
             {/* Student's answer */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Student's Answer</p>
-                {entry.answer !== null && entry.answer !== undefined ? (
+                {entry.answer !== null && entry.answer !== undefined && String(entry.answer).trim() !== '' ? (
                     <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
                         {typeof entry.answer === 'object' ? JSON.stringify(entry.answer, null, 2) : String(entry.answer)}
                     </pre>
                 ) : (
-                    <p className="text-xs text-slate-400 italic">No answer submitted for this question.</p>
+                    <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
+                )}
+
+                {entry.pdfUrl && (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                        <a
+                            href={entry.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold transition-colors"
+                        >
+                            <ClipboardCheck size={14} />
+                            View Attached PDF Snapshot
+                        </a>
+                    </div>
                 )}
             </div>
 

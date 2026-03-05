@@ -626,6 +626,7 @@ module.exports = async function (fastify, opts) {
                             student: sub.student,
                             submissionStatus: sub.status,
                             answer,
+                            pdfUrl: sub.pdfUrl || null,
                             existingScore: existingScore || null
                         };
                     });

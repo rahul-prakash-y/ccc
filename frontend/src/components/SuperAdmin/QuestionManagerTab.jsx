@@ -308,6 +308,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                         <option value="DEBUG">Bug Fix / Debug</option>
                                         <option value="FILL_BLANKS">Fill in Blanks</option>
                                         <option value="EXPLAIN">Short Answer / Explain</option>
+                                        <option value="UI_UX">UI/UX Submission</option>
                                     </select>
                                 </div>
                                 <div>
@@ -420,15 +421,19 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
 
                             {form.type !== 'MCQ' && (
                                 <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {field('Input Format Rules', 'inputFormat', 'text', 3)}
-                                        {field('Output Format Rules', 'outputFormat', 'text', 3)}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {field('Sample Test Input', 'sampleInput', 'text', 3)}
-                                        {field('Sample Test Output', 'sampleOutput', 'text', 3)}
-                                    </div>
-                                    {form.type !== 'CODE' && (
+                                    {(form.type !== 'UI_UX') && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {field('Input Format Rules', 'inputFormat', 'text', 3)}
+                                            {field('Output Format Rules', 'outputFormat', 'text', 3)}
+                                        </div>
+                                    )}
+                                    {(form.type !== 'UI_UX') && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {field('Sample Test Input', 'sampleInput', 'text', 3)}
+                                            {field('Sample Test Output', 'sampleOutput', 'text', 3)}
+                                        </div>
+                                    )}
+                                    {form.type !== 'CODE' && form.type !== 'UI_UX' && (
                                         <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
                                             {field('Expected Correct Answer', 'correctAnswer', 'text', 2)}
                                         </div>

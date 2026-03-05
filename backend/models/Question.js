@@ -56,7 +56,7 @@ const questionSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN'],
+        enum: ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX'],
         default: 'CODE'
     },
     category: {

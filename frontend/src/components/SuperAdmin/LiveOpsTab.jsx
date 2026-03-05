@@ -654,6 +654,7 @@ const LiveOpsTab = () => {
                           <option value="SQL_CONTEST">SQL</option>
                           <option value="MINI_HACKATHON">Hackathon</option>
                           <option value="HTML_CSS_QUIZ">HTML/CSS</option>
+                          <option value="UI_UX_CHALLENGE">UI/UX Design</option>
                         </select>
                       </div>
                     </div>
