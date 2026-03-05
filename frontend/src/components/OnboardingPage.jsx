@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ArrowRight, Loader2, Rocket, ShieldCheck } from 'lucide-react';
+import { User, ArrowRight, Loader2, Rocket, ShieldCheck, Linkedin, Lock, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 
 const OnboardingPage = () => {
     const [name, setName] = useState('');
+    const [linkedinProfile, setLinkedinProfile] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const { onboard, user } = useAuthStore();
@@ -18,9 +21,19 @@ const OnboardingPage = () => {
             return;
         }
 
+        if (password && password.length < 6) {
+            setError('Password must be at least 6 characters long');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
         setLoading(true);
         setError('');
-        const res = await onboard(name);
+        const res = await onboard(name, linkedinProfile, password);
         setLoading(false);
 
         if (res.success) {
@@ -73,7 +86,61 @@ const OnboardingPage = () => {
                                     placeholder="Enter your name..."
                                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-lg font-medium"
                                     autoFocus
+                                    required
                                 />
+                            </div>
+                        </div>
+
+                        <div className="relative group">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
+                                LinkedIn Profile Link
+                            </label>
+                            <div className="relative">
+                                <Linkedin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
+                                <input
+                                    type="url"
+                                    value={linkedinProfile}
+                                    onChange={(e) => setLinkedinProfile(e.target.value)}
+                                    placeholder="https://linkedin.com/in/..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-lg font-medium"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="relative group">
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
+                                    New Password
+                                </label>
+                                <div className="relative">
+                                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={18} />
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="relative group">
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
+                                    Confirm Password
+                                </label>
+                                <div className="relative">
+                                    <CheckCircle2 className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={18} />
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium"
+                                        required
+                                    />
+                                </div>
                             </div>
                         </div>
 

@@ -12,6 +12,10 @@ const questionSchema = new mongoose.Schema({
         default: false,
         index: true
     },
+    linkedRounds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Round'
+    }],
     title: {
         type: String,
         required: true,

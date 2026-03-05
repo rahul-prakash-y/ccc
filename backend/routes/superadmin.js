@@ -229,14 +229,24 @@ module.exports = async function (fastify, opts) {
             const { roundId } = request.params;
             const { search, page = 1, limit = 50 } = request.query;
 
-            const filter = { round: roundId };
+            const filter = {
+                $or: [
+                    { round: roundId },
+                    { linkedRounds: roundId }
+                ]
+            };
             if (search) {
                 const searchRegex = new RegExp(search, 'i');
-                filter.$or = [
+                const searchOr = [
                     { title: searchRegex },
                     { description: searchRegex },
                     { category: searchRegex }
                 ];
+                filter.$and = [
+                    { $or: filter.$or },
+                    { $or: searchOr }
+                ];
+                delete filter.$or;
             }
 
             const pageNum = Math.max(1, Number(page));
@@ -486,43 +496,20 @@ module.exports = async function (fastify, opts) {
                 return reply.code(404).send({ error: 'No valid bank questions found for the provided IDs' });
             }
 
-            // Figure out the current highest order in this round
-            const count = await Question.countDocuments({ round: roundId });
-            let startingOrder = count + 1;
-
-            const clonedQuestions = bankQuestions.map((q) => {
-                const cloned = new Question({
-                    round: roundId,
-                    isBank: false,
-                    title: q.title,
-                    description: q.description,
-                    inputFormat: q.inputFormat,
-                    outputFormat: q.outputFormat,
-                    sampleInput: q.sampleInput,
-                    sampleOutput: q.sampleOutput,
-                    difficulty: q.difficulty,
-                    points: q.points,
-                    order: startingOrder++,
-                    type: q.type,
-                    category: q.category,
-                    options: q.options,
-                    correctAnswer: q.correctAnswer,
-                    isManualEvaluation: q.isManualEvaluation,
-                    assignedAdmin: q.assignedAdmin
-                });
-                return cloned.save();
-            });
-
-            const savedQuestions = await Promise.all(clonedQuestions);
+            // Link them to the round (addToSet prevents duplicates)
+            await Question.updateMany(
+                { _id: { $in: bankQuestions.map(q => q._id) } },
+                { $addToSet: { linkedRounds: roundId } }
+            );
 
             await logActivity({
                 action: 'IMPORTED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Round', id: roundId, label: `Imported ${savedQuestions.length} questions from Bank` },
+                target: { type: 'Round', id: roundId, label: `Imported ${bankQuestions.length} questions from Bank` },
                 ip: request.ip
             });
 
-            return reply.code(200).send({ success: true, message: `Successfully imported ${savedQuestions.length} questions.` });
+            return reply.code(200).send({ success: true, message: `Successfully imported ${bankQuestions.length} questions.` });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to import questions from bank' });
@@ -539,16 +526,24 @@ module.exports = async function (fastify, opts) {
             const adminId = request.user.userId;
             const { page = 1, limit = 10 } = request.query;
 
-            const filter = { isManualEvaluation: true, assignedAdmin: adminId, round: { $ne: null } };
-
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
+
+            const filter = {
+                isManualEvaluation: true,
+                assignedAdmin: adminId,
+                $or: [
+                    { round: { $ne: null } },
+                    { 'linkedRounds.0': { $exists: true } }
+                ]
+            };
 
             // Find questions assigned to this admin with pagination
             const [questions, total] = await Promise.all([
                 Question.find(filter)
                     .populate('round', 'name')
+                    .populate('linkedRounds', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum)
@@ -570,23 +565,37 @@ module.exports = async function (fastify, opts) {
                 });
             }
 
-            // Collect unique round ObjectIds
-            const roundObjectIds = [
-                ...new Map(questions.filter(q => q.round).map(q => [q.round._id.toString(), q.round._id])).values()
-            ];
+            // Collect unique round ObjectIds from direct rounds and linked rounds
+            const roundObjectIds = [];
+            questions.forEach(q => {
+                if (q.round) {
+                    roundObjectIds.push(q.round._id ? q.round._id.toString() : q.round.toString());
+                }
+                if (q.linkedRounds && q.linkedRounds.length > 0) {
+                    q.linkedRounds.forEach(r => {
+                        roundObjectIds.push(r._id ? r._id.toString() : r.toString());
+                    });
+                }
+            });
+            const uniqueRoundIds = [...new Set(roundObjectIds)];
 
-            // Find all submissions for those rounds
-            const submissions = await Submission.find({ round: { $in: roundObjectIds } })
+            // Find all submissions for those rounds that need evaluation
+            const submissions = await Submission.find({ round: { $in: uniqueRoundIds } })
                 .populate('student', 'studentId name')
                 .lean();
 
             // Build result: for each question, list all students and their answer + score
             const result = questions.map(question => {
-                const qRoundId = question.round?._id?.toString();
-                if (!qRoundId) return { question, students: [] };
+                const qRoundIds = [];
+                if (question.round) qRoundIds.push(question.round._id ? question.round._id.toString() : question.round.toString());
+                if (question.linkedRounds) {
+                    question.linkedRounds.forEach(r => qRoundIds.push(r._id ? r._id.toString() : r.toString()));
+                }
+
+                if (qRoundIds.length === 0) return { question, students: [] };
 
                 const students = submissions
-                    .filter(sub => sub.round.toString() === qRoundId)
+                    .filter(sub => qRoundIds.includes(sub.round.toString()))
                     .filter(sub => {
                         if (sub.assignedQuestions && sub.assignedQuestions.length > 0) {
                             return sub.assignedQuestions.some(id => id.toString() === question._id.toString());
@@ -821,8 +830,27 @@ module.exports = async function (fastify, opts) {
     fastify.delete('/questions/:questionId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { questionId } = request.params;
-            const question = await Question.findByIdAndDelete(questionId);
+            const { roundId } = request.query;
+
+            const question = await Question.findById(questionId);
             if (!question) return reply.code(404).send({ error: 'Question not found' });
+
+            if (roundId && question.isBank) {
+                // Just unlink from the round
+                question.linkedRounds = question.linkedRounds.filter(rid => rid.toString() !== roundId);
+                await question.save();
+
+                await logActivity({
+                    action: 'UNLINKED',
+                    performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                    target: { type: 'Question', id: questionId, label: `Unlinked from round ${roundId}` },
+                    ip: request.ip
+                });
+
+                return reply.code(200).send({ success: true, message: 'Question unlinked successfully' });
+            }
+
+            await Question.findByIdAndDelete(questionId);
 
             await logActivity({
                 action: 'DELETED',

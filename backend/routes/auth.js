@@ -144,14 +144,28 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/onboard', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const { name } = request.body;
+            const { name, linkedinProfile, password } = request.body;
             if (!name || name.trim().length < 2) {
                 return reply.code(400).send({ error: 'Valid name is required' });
             }
 
+            const updateData = {
+                name: name.trim(),
+                linkedinProfile: linkedinProfile ? linkedinProfile.trim() : null,
+                isOnboarded: true
+            };
+
+            if (password) {
+                if (password.length < 6) {
+                    return reply.code(400).send({ error: 'Password must be at least 6 characters long' });
+                }
+                const hashedPassword = await bcrypt.hash(password, 10);
+                updateData.password = hashedPassword;
+            }
+
             const user = await User.findByIdAndUpdate(
                 request.user.userId,
-                { name: name.trim(), isOnboarded: true },
+                updateData,
                 { new: true }
             );
 

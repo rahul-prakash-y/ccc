@@ -524,7 +524,12 @@ module.exports = async function (fastify, opts) {
                     .filter(Boolean);
             } else {
                 // First load: build and persist the student's question set
-                const allQuestions = await Question.find({ round: roundId }).sort({ order: 1 });
+                const allQuestions = await Question.find({
+                    $or: [
+                        { round: roundId },
+                        { linkedRounds: roundId }
+                    ]
+                }).sort({ order: 1 });
 
                 // Group the available questions by their type field
                 const groupedQuestions = {

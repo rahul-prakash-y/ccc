@@ -14,26 +14,36 @@ import { SkeletonList } from '../Skeleton';
 // ─── Import From Library Modal ──────────────────────────────────────────────────────
 const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
     const [bankQuestions, setBankQuestions] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const [importedBankIds, setImportedBankIds] = useState(new Set());
+    const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
-        const fetchBank = async () => {
+        const fetchBankAndExisting = async () => {
             try {
-                const res = await api.get(`${API}/question-bank`);
-                setBankQuestions(res.data.data || []);
+                const [bankRes, existingRes] = await Promise.all([
+                    api.get(`${API}/question-bank`),
+                    api.get(`${API}/questions/${roundId}?limit=1000`) // fetch all to check imported
+                ]);
+                setBankQuestions(bankRes.data.data || []);
+
+                // Track which bank IDs have already been imported
+                const qList = existingRes.data.data || [];
+                const importedIds = new Set(qList.filter(q => q.isBank).map(q => q._id));
+                setImportedBankIds(importedIds);
             } catch {
                 setError('Failed to fetch library questions.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchBank();
-    }, []);
+        fetchBankAndExisting();
+    }, [roundId]);
 
-    const toggleSelection = (id) => {
+    const toggleSelection = (id, isAlreadyImported) => {
+        if (isAlreadyImported) return;
         const newSet = new Set(selectedIds);
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
@@ -96,20 +106,35 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                         ) : (
                             <div className="grid gap-3">
                                 {bankQuestions.map(q => {
+                                    const isAlreadyImported = importedBankIds.has(q._id);
                                     const isSelected = selectedIds.has(q._id);
+
                                     return (
                                         <div
                                             key={q._id}
-                                            onClick={() => toggleSelection(q._id)}
-                                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex gap-4 items-center ${isSelected ? 'border-emerald-500 bg-emerald-50 flex-row-reverse' : 'border-slate-200 bg-white hover:border-slate-300'
+                                            onClick={() => toggleSelection(q._id, isAlreadyImported)}
+                                            className={`p-4 rounded-xl border-2 transition-all flex gap-4 items-center 
+                                                ${isAlreadyImported ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' :
+                                                    isSelected ? 'border-emerald-500 bg-emerald-50 flex-row-reverse cursor-pointer' :
+                                                        'border-slate-200 bg-white hover:border-slate-300 cursor-pointer'
                                                 }`}
                                         >
-                                            <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'
+                                            <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border 
+                                                ${isAlreadyImported ? 'bg-slate-200 border-slate-300 text-slate-400' :
+                                                    isSelected ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                        'bg-white border-slate-300'
                                                 }`}>
-                                                {isSelected && <Check size={14} />}
+                                                {(isSelected || isAlreadyImported) && <Check size={14} />}
                                             </div>
                                             <div className="flex-1">
-                                                <p className="font-bold text-slate-900 text-sm mb-1">{q.title}</p>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="font-bold text-slate-900 text-sm">{q.title}</p>
+                                                    {isAlreadyImported && (
+                                                        <span className="text-[9px] font-black uppercase tracking-widest bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded">
+                                                            Imported
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="flex gap-2 text-[10px] uppercase font-bold tracking-wider">
                                                     <span className={`px-1.5 py-0.5 rounded border ${DIFFICULTY_COLORS[q.difficulty]}`}>{q.difficulty}</span>
                                                     <span className="text-slate-500">{q.type}</span>
@@ -498,19 +523,23 @@ const QuestionManagerTab = ({ rounds }) => {
         }
     }, [selectedRound, fetchQuestions]);
 
-    const handleDelete = (questionId) => {
+    const handleDelete = (questionId, isBank) => {
+        const title = isBank ? "Unlink Question" : "Delete Question";
+        const message = isBank ? "Remove this library question from the current round? It will remain in the global library." : "Delete this question permanently?";
+        const confirmLabel = isBank ? "Unlink Question" : "Delete Permanently";
+
         showConfirm({
-            title: "Delete Question",
-            message: "Delete this question permanently?",
-            confirmLabel: "Delete Permanently",
+            title,
+            message,
+            confirmLabel,
             isDanger: true,
             onConfirm: async () => {
                 try {
-                    await api.delete(`${API}/questions/${questionId}`);
-                    toast.success("Question deleted successfully.");
+                    await api.delete(`${API}/questions/${questionId}?roundId=${selectedRound}`);
+                    toast.success(isBank ? "Question unlinked successfully." : "Question deleted successfully.");
                     fetchQuestions(selectedRound);
                 } catch (e) {
-                    toast.error(e.response?.data?.error || "Deletion failed.");
+                    toast.error(e.response?.data?.error || (isBank ? "Unlinking failed." : "Deletion failed."));
                     console.error(e);
                 }
             }
@@ -624,6 +653,11 @@ const QuestionManagerTab = ({ rounds }) => {
                                                         <ClipboardCheck size={9} /> Manual
                                                     </span>
                                                 )}
+                                                {q.isBank && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-blue-50 border-blue-200 text-blue-700">
+                                                        Library
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="shrink-0 text-right pr-4 border-r border-slate-100 hidden sm:block">
@@ -645,11 +679,11 @@ const QuestionManagerTab = ({ rounds }) => {
                                                 <Pencil size={16} />
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(q._id)}
-                                                className="p-2 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                title="Delete Record"
+                                                onClick={() => handleDelete(q._id, q.isBank)}
+                                                className={`p-2 rounded-lg transition-colors ${q.isBank ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50' : 'text-slate-300 hover:text-red-600 hover:bg-red-50'}`}
+                                                title={q.isBank ? "Unlink from Round" : "Delete Record"}
                                             >
-                                                <Trash2 size={16} />
+                                                {q.isBank ? <X size={16} /> : <Trash2 size={16} />}
                                             </button>
                                         </div>
                                     </div>
