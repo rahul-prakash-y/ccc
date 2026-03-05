@@ -380,6 +380,7 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
 const StudentManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
     const [students, setStudents] = useState([]);
+    const [teams, setTeams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
@@ -394,6 +395,15 @@ const StudentManagerTab = () => {
     const [resetTarget, setResetTarget] = useState(null);
     const [busy, setBusy] = useState({});
     const [globalError, setGlobalError] = useState('');
+
+    const fetchTeams = useCallback(async () => {
+        try {
+            const res = await api.get(`${API}/teams`);
+            setTeams(res.data.data || []);
+        } catch (e) {
+            console.error("Failed to fetch teams:", e);
+        }
+    }, []);
 
     // 1. Fetch Logic (now server-side)
     const fetchStudents = useCallback(async () => {
@@ -417,7 +427,8 @@ const StudentManagerTab = () => {
     // 2. Initial Mount & Background Polling
     useEffect(() => {
         fetchStudents();
-    }, [fetchStudents]);
+        fetchTeams();
+    }, [fetchStudents, fetchTeams]);
 
     // Reset page on search change
     useEffect(() => {
@@ -453,6 +464,16 @@ const StudentManagerTab = () => {
                 }
             }
         });
+    };
+
+    const handleTeamChange = async (studentId, teamId) => {
+        try {
+            await api.patch(`${API}/students/${studentId}/team`, { teamId });
+            toast.success("Team updated");
+            fetchStudents();
+        } catch (e) {
+            toast.error(e.response?.data?.error || "Failed to update team");
+        }
     };
 
     const handleBlockToggle = (student) => {
@@ -570,19 +591,35 @@ const StudentManagerTab = () => {
                                             : 'bg-white border-slate-200 hover:border-indigo-300'}`}
                                 >
                                     {/* Core Info */}
-                                    <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
                                         <div className={`p-2 rounded-lg border shrink-0 ${student.isBanned ? 'bg-red-100 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-400 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-colors'
                                             }`}>
                                             <Users size={16} />
                                         </div>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-bold text-slate-900 font-mono text-sm tracking-tight">{student.studentId}</p>
-                                                {student.isBanned && (
-                                                    <span className="px-1.5 py-0.5 rounded uppercase text-[9px] font-black bg-red-100 text-red-600 tracking-wider">Blocked</span>
-                                                )}
+                                        <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-slate-900 font-mono text-sm tracking-tight">{student.studentId}</p>
+                                                    {student.isBanned && (
+                                                        <span className="px-1.5 py-0.5 rounded uppercase text-[9px] font-black bg-red-100 text-red-600 tracking-wider">Blocked</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-slate-500 truncate font-medium">{student.name || 'No Name Registered'}</p>
                                             </div>
-                                            <p className="text-xs text-slate-500 truncate font-medium">{student.name || 'No Name Registered'}</p>
+
+                                            {/* Team Selector */}
+                                            <div className="flex items-center gap-2 border-l border-slate-100 pl-4 py-1">
+                                                <select
+                                                    value={student.team?._id || ''}
+                                                    onChange={(e) => handleTeamChange(student._id, e.target.value || null)}
+                                                    className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 max-w-[140px] transition-all"
+                                                >
+                                                    <option value="">No Team Assigned</option>
+                                                    {teams.map(t => (
+                                                        <option key={t._id} value={t._id}>{t.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
 

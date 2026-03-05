@@ -43,6 +43,11 @@ const userSchema = new mongoose.Schema({
   tokenIssuedAfter: {
     type: Date,
     default: null
+  },
+  team: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Team',
+    default: null
   }
 }, {
   timestamps: true

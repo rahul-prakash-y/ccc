@@ -59,11 +59,11 @@ const OtpPanel = ({ section, onOtpChange }) => {
     return (
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
-          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start OTP</p>
+          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start Auth OTP</p>
           <p className="text-lg font-mono font-bold text-slate-700 tracking-widest">{section.startOtp || '------'}</p>
         </div>
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-center">
-          <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">End OTP</p>
+          <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Final Auth OTP</p>
           <p className="text-lg font-mono font-bold text-indigo-600 tracking-widest">{section.endOtp || '------'}</p>
         </div>
       </div>
@@ -89,13 +89,13 @@ const OtpPanel = ({ section, onOtpChange }) => {
       {/* OTP blocks */}
       <div className={`grid grid-cols-2 gap-3 transition-all ${flashing ? 'scale-[1.02]' : ''}`}>
         <div className={`border rounded-xl p-3 text-center transition-colors ${flashing ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
-          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start OTP</p>
+          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start Auth OTP</p>
           <p className={`text-lg font-mono font-bold tracking-widest transition-colors ${flashing ? 'text-emerald-600' : 'text-slate-700'}`}>
             {otp.startOtp || '------'}
           </p>
         </div>
         <div className={`border rounded-xl p-3 text-center transition-colors ${flashing ? 'bg-emerald-50 border-emerald-200' : 'bg-indigo-50/50 border-indigo-100'}`}>
-          <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">End OTP</p>
+          <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Final Auth OTP</p>
           <p className={`text-lg font-mono font-bold tracking-widest transition-colors ${flashing ? 'text-emerald-600' : 'text-indigo-600'}`}>
             {otp.endOtp || '------'}
           </p>
@@ -167,13 +167,13 @@ const ProjectorOtp = ({ section }) => {
 
       <div className={`grid grid-cols-1 md:grid-cols-2 gap-16 transition-all ${flashing ? 'opacity-50 scale-[0.98]' : 'opacity-100 scale-100'}`}>
         <div className="space-y-6">
-          <p className="text-slate-500 font-black tracking-widest text-xl uppercase">Entry Access Key</p>
+          <p className="text-slate-500 font-black tracking-widest text-xl uppercase">Start Authorization OTP</p>
           <div className={`border-2 rounded-[40px] py-16 text-[10rem] font-mono font-black leading-none shadow-2xl transition-colors ${flashing ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-white/5 border-white/10 text-white'}`}>
             {otp.startOtp}
           </div>
         </div>
         <div className="space-y-6">
-          <p className="text-indigo-400 font-black tracking-widest text-xl uppercase">Submission Key</p>
+          <p className="text-indigo-400 font-black tracking-widest text-xl uppercase">Final Authorization OTP</p>
           <div className={`border-2 rounded-[40px] py-16 text-[10rem] font-mono font-black leading-none shadow-2xl transition-colors ${flashing ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'}`}>
             {otp.endOtp}
           </div>
@@ -246,7 +246,7 @@ const QuestionSettings = ({ section, onSave, busy }) => {
 };
 
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection, setProjectorSection }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -379,6 +379,7 @@ const LiveOpsTab = () => {
   const [testName, setTestName] = useState('');
   const [testDurationMinutes, setTestDurationMinutes] = useState(60);
   const [roundsConfig, setRoundsConfig] = useState([{ type: 'GENERAL', questionCount: '' }]);
+  const [isTeamTest, setIsTeamTest] = useState(false);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null
@@ -520,11 +521,13 @@ const LiveOpsTab = () => {
         durationMinutes: testDurationMinutes,
         testDurationMinutes,
         roundOrder: 1,
-        questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount)
+        questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount),
+        isTeamTest
       });
       setShowAddModal(false);
       setTestName('');
       setTestDurationMinutes(60);
+      setIsTeamTest(false);
       setRoundsConfig([{ type: 'GENERAL', questionCount: '' }]);
       fetchSections();
     } catch (err) { console.error(err); }
@@ -621,6 +624,16 @@ const LiveOpsTab = () => {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Duration (Min)</label>
                   <input type="number" min="1" required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800"
                     value={testDurationMinutes} onChange={e => setTestDurationMinutes(Number(e.target.value))} />
+                </div>
+
+                <div className="flex items-center gap-3 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 cursor-pointer transition-all hover:bg-indigo-100/50" onClick={() => setIsTeamTest(!isTeamTest)}>
+                  <div className={`w-10 h-5 rounded-full transition-all relative ${isTeamTest ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isTeamTest ? 'left-6' : 'left-1'}`} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-indigo-900 uppercase tracking-widest leading-none mb-1">Team Test Mode</p>
+                    <p className="text-[10px] font-bold text-slate-500">{isTeamTest ? 'Enabled (Scores halved for students)' : 'Disabled (Full scores awarded)'}</p>
+                  </div>
                 </div>
 
                 <div className="space-y-3 mt-4 pt-4 border-t border-slate-100">

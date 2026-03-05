@@ -64,6 +64,10 @@ const roundSchema = new mongoose.Schema({
     shuffleQuestions: {
         type: Boolean,
         default: true // When true, each student gets questions in a different order
+    },
+    isTeamTest: {
+        type: Boolean,
+        default: false // If true, scores are halved for individual students
     }
 }, {
     timestamps: true

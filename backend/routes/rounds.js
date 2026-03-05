@@ -222,22 +222,7 @@ module.exports = async function (fastify, opts) {
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
-            // Ensure authorization: Auto-Join sequence OR manual OTP
-            if (isAutoJoin) {
-                if (!round.testGroupId || round.roundOrder === 1) {
-                    return reply.code(403).send({ error: 'Auto-join sequence invalid for this endpoint' });
-                }
-                const prevRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder - 1 });
-                if (!prevRound) return reply.code(403).send({ error: 'Sequence broken: Previous round not found' });
-                const prevSub = await Submission.findOne({ student: studentId, round: prevRound._id, status: { $in: ['SUBMITTED', 'DISQUALIFIED'] } });
-                if (!prevSub) return reply.code(403).send({ error: 'You must complete the previous section first' });
-            } else {
-                if (!startOtp) return reply.code(400).send({ error: 'startOtp is required' });
-                if (round.status === 'LOCKED' || !round.isOtpActive) return reply.code(403).send({ error: 'Round is currently locked by admin' });
-                if (round.startOtp !== startOtp) return reply.code(401).send({ error: 'Invalid Start OTP' });
-            }
-
-            // Check if student already has a submission for this round
+            // Check if student already has a submission for this round first
             let submission = await Submission.findOne({ student: studentId, round: roundId });
 
             if (submission) {
@@ -251,6 +236,21 @@ module.exports = async function (fastify, opts) {
                     startTime: submission.startTime,
                     durationMinutes: round.testDurationMinutes || round.durationMinutes
                 });
+            }
+
+            // If no existing submission, check authorization
+            if (isAutoJoin) {
+                if (!round.testGroupId || round.roundOrder === 1) {
+                    return reply.code(403).send({ error: 'Auto-join sequence invalid for this endpoint' });
+                }
+                const prevRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder - 1 });
+                if (!prevRound) return reply.code(403).send({ error: 'Sequence broken: Previous round not found' });
+                const prevSub = await Submission.findOne({ student: studentId, round: prevRound._id, status: { $in: ['SUBMITTED', 'DISQUALIFIED'] } });
+                if (!prevSub) return reply.code(403).send({ error: 'You must complete the previous section first' });
+            } else {
+                if (!startOtp) return reply.code(400).send({ error: 'startOtp is required' });
+                if (round.status === 'LOCKED' || !round.isOtpActive) return reply.code(403).send({ error: 'Round is currently locked by admin' });
+                if (round.startOtp !== startOtp) return reply.code(401).send({ error: 'Invalid Start OTP' });
             }
 
             // Determine if we should inherit the clock from Round 1 of the Test Group
@@ -375,7 +375,12 @@ module.exports = async function (fastify, opts) {
             }
             submission.autoScore = autoScore;
             const totalManualScore = (submission.manualScores || []).reduce((sum, ms) => sum + (ms.score || 0), 0);
-            submission.score = autoScore + totalManualScore;
+
+            let finalScore = autoScore + totalManualScore;
+            if (round.isTeamTest) {
+                finalScore = finalScore / 2;
+            }
+            submission.score = finalScore;
 
             if (pdfUrl) submission.pdfUrl = pdfUrl;
 
@@ -525,13 +530,19 @@ module.exports = async function (fastify, opts) {
                 const groupedQuestions = {
                     MCQ: [],
                     CODE: [],
-                    SHORT_ANSWER: []
+                    DEBUG: [],
+                    FILL_BLANKS: [],
+                    EXPLAIN: [],
+                    SHORT_ANSWER: [],
+                    OTHER: []
                 };
 
                 allQuestions.forEach(q => {
                     const type = q.type;
                     if (groupedQuestions[type]) {
                         groupedQuestions[type].push(q);
+                    } else {
+                        groupedQuestions.OTHER.push(q);
                     }
                 });
 
@@ -574,10 +585,14 @@ module.exports = async function (fastify, opts) {
                 // Shuffle each group individually without hardcoded limits
                 const mcqQuestions = shuffleGroup(groupedQuestions['MCQ'], 'MCQ');
                 const codeQuestions = shuffleGroup(groupedQuestions['CODE'], 'CODE');
+                const debugQuestions = shuffleGroup(groupedQuestions['DEBUG'], 'DEBUG');
+                const fillBlanksQuestions = shuffleGroup(groupedQuestions['FILL_BLANKS'], 'FILL_BLANKS');
+                const explainQuestions = shuffleGroup(groupedQuestions['EXPLAIN'], 'EXPLAIN');
                 const shortAnswerQuestions = shuffleGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER');
+                const otherQuestions = shuffleGroup(groupedQuestions['OTHER'], 'OTHER');
 
                 // Combine questions sequentially
-                let selected = [...mcqQuestions, ...codeQuestions, ...shortAnswerQuestions];
+                let selected = [...mcqQuestions, ...codeQuestions, ...debugQuestions, ...fillBlanksQuestions, ...explainQuestions, ...shortAnswerQuestions, ...otherQuestions];
 
                 // Respect the questionCount limit if configured globally for the test
                 if (round.questionCount && round.questionCount > 0) {
@@ -633,7 +648,12 @@ module.exports = async function (fastify, opts) {
                         type: q.type,
                         category: q.category,
                         options: q.options
-                    }))
+                    })),
+                    debugInfo: {
+                        fetchedQuestionsCount: assignedQuestions.length,
+                        roundId: roundId,
+                        submissionHasAssigned: !!(submission.assignedQuestions && submission.assignedQuestions.length > 0)
+                    }
                 }
             });
         } catch (error) {

@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Terminal, Lock, Send, AlertTriangle, Save,
     ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Code2, LogOut,
-    Clock, ArrowRight
+    Clock, ArrowRight,
+    Loader2, Eye, EyeOff
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, useAuthStore } from '../store/authStore';
@@ -28,6 +29,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+    const [showPreview, setShowPreview] = useState(true);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -50,7 +52,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     // --- Anti-Cheat Logic ---
     const handleCheatDetected = useCallback(async (cheatEvent) => {
         try {
-            const res = await api.post(`/ rounds / ${roundId}/report-cheat`, cheatEvent);
+            const res = await api.post(`/rounds/${roundId}/report-cheat`, cheatEvent);
             if (res.data.banned) {
                 setIsBanned(true);
                 setBanReason(res.data.reason);
@@ -98,6 +100,8 @@ const CodeArena = ({ language = 'javascript' }) => {
     // --- Data Loading ---
     useEffect(() => {
         const load = async () => {
+            setIsLoading(true);
+            setActiveIdx(0);
             try {
                 // Attempt an auto-join first. If this is Round 2+, it inherits the clock and validates.
                 // If this is Round 1, it will safely fail (403) and we proceed to load logic because StudentDashboard already unlocked it.
@@ -300,7 +304,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                             {/* Marks for current question */}
                             {questions[activeIdx]?.points !== undefined && (
                                 <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-black text-[10px] uppercase tracking-wide">
-                                    {questions[activeIdx].points} pts
+                                    {questions[activeIdx]?.points} pts
                                 </span>
                             )}
                             <span className="text-slate-300 hidden md:inline">|</span>
@@ -405,52 +409,52 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     ${q?.difficulty === 'HARD' ? 'bg-red-50 text-red-600 border-red-100' :
                                         q?.difficulty === 'MEDIUM' ? 'bg-orange-50 text-orange-600 border-orange-100' :
                                             'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                                    {q.difficulty}
+                                    {q?.difficulty}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
-                                    {q.category}
+                                    {q?.category}
                                 </span>
                                 <span className="ml-auto text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                                    {q.points} Pts
+                                    {q?.points} Pts
                                 </span>
                             </div>
 
-                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-4 sm:mb-6 tracking-tight leading-tight">{q.title}</h2>
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-4 sm:mb-6 tracking-tight leading-tight">{q?.title}</h2>
 
                             <div className="prose prose-slate max-w-none text-sm font-medium leading-relaxed whitespace-pre-wrap mb-8">
-                                {q.description}
+                                {q?.description}
                             </div>
 
-                            {q.type !== 'MCQ' && (
+                            {q?.type !== 'MCQ' && (
                                 <div className="space-y-6">
-                                    {(q.inputFormat || q.outputFormat) && (
+                                    {(q?.inputFormat || q?.outputFormat) && (
                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                            {q.inputFormat && (
+                                            {q?.inputFormat && (
                                                 <div>
                                                     <h4 className="text-indigo-600 font-black uppercase text-[10px] tracking-widest mb-2 flex items-center gap-1.5"><HelpCircle size={12} /> Input Expected</h4>
-                                                    <div className="text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm leading-relaxed">{q.inputFormat}</div>
+                                                    <div className="text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm leading-relaxed">{q?.inputFormat}</div>
                                                 </div>
                                             )}
-                                            {q.outputFormat && (
+                                            {q?.outputFormat && (
                                                 <div>
                                                     <h4 className="text-emerald-600 font-black uppercase text-[10px] tracking-widest mb-2 flex items-center gap-1.5"><CheckCircle size={12} /> Output Expected</h4>
-                                                    <div className="text-xs text-slate-600 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm leading-relaxed">{q.outputFormat}</div>
+                                                    <div className="text-xs text-slate-600 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm leading-relaxed">{q?.outputFormat}</div>
                                                 </div>
                                             )}
                                         </div>
                                     )}
-                                    {(q.sampleInput || q.sampleOutput) && (
+                                    {(q?.sampleInput || q?.sampleOutput) && (
                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                            {q.sampleInput && (
+                                            {q?.sampleInput && (
                                                 <div>
                                                     <h4 className="text-slate-400 font-black uppercase text-[10px] tracking-widest mb-2">Sample Input</h4>
-                                                    <pre className="text-slate-800 bg-slate-100 p-4 rounded-xl border border-slate-200 font-mono text-xs shadow-inner overflow-x-auto">{q.sampleInput}</pre>
+                                                    <pre className="text-slate-800 bg-slate-100 p-4 rounded-xl border border-slate-200 font-mono text-xs shadow-inner overflow-x-auto">{q?.sampleInput}</pre>
                                                 </div>
                                             )}
-                                            {q.sampleOutput && (
+                                            {q?.sampleOutput && (
                                                 <div>
                                                     <h4 className="text-slate-400 font-black uppercase text-[10px] tracking-widest mb-2">Sample Output</h4>
-                                                    <pre className="text-indigo-800 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 font-mono text-xs shadow-inner overflow-x-auto">{q.sampleOutput}</pre>
+                                                    <pre className="text-indigo-800 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100 font-mono text-xs shadow-inner overflow-x-auto">{q?.sampleOutput}</pre>
                                                 </div>
                                             )}
                                         </div>
@@ -465,15 +469,32 @@ const CodeArena = ({ language = 'javascript' }) => {
                 <div className="h-full flex flex-col bg-white overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.03)] border-l border-slate-200">
 
                     {/* IDE Header */}
-                    <div className="h-10 bg-slate-50/80 border-b border-slate-200 flex items-end px-4 shrink-0">
+                    <div className="h-10 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
                         {/* Active Tab */}
                         <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-t-lg border-t border-x border-slate-200 border-b-0 text-xs font-mono font-bold text-indigo-600 relative top-[1px]">
                             <Terminal size={14} className="text-indigo-400" />
-                            <span>{q.type === 'MCQ' ? 'Selection_Matrix.exe' : q.type === 'CODE' ? `solution.${language}` : 'Text_Buffer.txt'}</span>
+                            <span>
+                                {q?.type === 'MCQ' ? 'Selection_Matrix.exe' :
+                                    (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ?
+                                        `solution.${(q?.category === 'SQL' || roundInfo?.type === 'SQL_CONTEST') ? 'sql' :
+                                            (q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? 'html' :
+                                                q?.category === 'CSS' ? 'css' : language}` :
+                                        'Text_Buffer.txt'}
+                            </span>
                         </div>
+
+                        {(q?.category === 'HTML' || q?.category === 'CSS') && (
+                            <button
+                                onClick={() => setShowPreview(!showPreview)}
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:border-indigo-300'}`}
+                            >
+                                {showPreview ? <EyeOff size={12} /> : <Eye size={12} />}
+                                {showPreview ? 'Hide Preview' : 'Show Preview'}
+                            </button>
+                        )}
                     </div>
 
-                    <div className="flex-1 relative overflow-hidden bg-slate-50/30">
+                    <div className="flex-1 relative overflow-hidden bg-slate-50/30 flex flex-col">
                         {/* Lock Overlay (Frosted Glass) */}
                         <AnimatePresence>
                             {isTimeUp && (
@@ -494,15 +515,15 @@ const CodeArena = ({ language = 'javascript' }) => {
                             )}
                         </AnimatePresence>
 
-                        {q.type === 'MCQ' ? (
+                        {q?.type === 'MCQ' ? (
                             <div className="p-8 h-full overflow-y-auto custom-scrollbar">
                                 <div className="max-w-xl mx-auto space-y-4 pt-4">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Select optimal solution</h3>
-                                    {q.options?.map((opt, i) => (
+                                    {q?.options?.map((opt, i) => (
                                         <button
                                             key={i}
                                             disabled={isTimeUp}
-                                            onClick={() => handleAnswerChange(q._id, opt)}
+                                            onClick={() => handleAnswerChange(q?._id, opt)}
                                             className={`w-full p-5 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 group
                                 ${currentAnswer === opt ?
                                                     'bg-indigo-50/80 border-indigo-400 text-indigo-900 shadow-[0_8px_30px_-4px_rgba(79,70,229,0.15)]' :
@@ -518,7 +539,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     ))}
                                 </div>
                             </div>
-                        ) : (q.type === 'CODE' || q.type === 'DEBUG') ? (
+                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? (
                             !q ? (
                                 <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
                                     <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
@@ -530,37 +551,86 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl"></div>
                                 </div>
                             ) : (
-                                <Editor
-                                    height="100%"
-                                    language={q.category === 'SQL' ? 'sql' : language}
-                                    theme="light" // Switched to Monaco's built-in light theme
-                                    value={currentAnswer || (q.type === 'DEBUG' ? q.sampleInput : '')}
-                                    onChange={(val) => handleAnswerChange(q._id, val)}
-                                    options={{
-                                        minimap: { enabled: false },
-                                        fontSize: 14,
-                                        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-                                        lineHeight: 24,
-                                        padding: { top: 24 },
-                                        scrollBeyondLastLine: false,
-                                        smoothScrolling: true,
-                                        cursorBlinking: "smooth",
-                                        readOnly: isTimeUp,
-                                        renderLineHighlight: "all",
-                                        hideCursorInOverviewRuler: true
-                                    }}
-                                    loading={
-                                        <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
-                                            <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
-                                            <div className="space-y-3">
-                                                <div className="h-4 bg-slate-100 rounded-md w-full"></div>
-                                                <div className="h-4 bg-slate-100 rounded-md w-5/6"></div>
-                                                <div className="h-4 bg-slate-100 rounded-md w-4/6"></div>
-                                            </div>
-                                            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl"></div>
+                                (q?.category === 'HTML' || q?.category === 'CSS' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') && showPreview ? (
+                                    <Split
+                                        direction="vertical"
+                                        sizes={[60, 40]}
+                                        minSize={100}
+                                        gutterSize={6}
+                                        className="h-full flex flex-col overflow-hidden"
+                                    >
+                                        <div className="flex-1 overflow-hidden">
+                                            <Editor
+                                                height="100%"
+                                                language={(q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? 'html' : 'css'}
+                                                theme="light"
+                                                value={currentAnswer || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                                onChange={(val) => handleAnswerChange(q?._id, val)}
+                                                options={{
+                                                    minimap: { enabled: false },
+                                                    fontSize: 14,
+                                                    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                                                    lineHeight: 24,
+                                                    padding: { top: 24 },
+                                                    scrollBeyondLastLine: false,
+                                                    smoothScrolling: true,
+                                                    cursorBlinking: "smooth",
+                                                    readOnly: isTimeUp,
+                                                    renderLineHighlight: "all",
+                                                    hideCursorInOverviewRuler: true
+                                                }}
+                                            />
                                         </div>
-                                    }
-                                />
+                                        <div className="flex-1 bg-white border-t border-slate-200 flex flex-col overflow-hidden">
+                                            <div className="h-8 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Preview</span>
+                                            </div>
+                                            <div className="flex-1 bg-white p-0">
+                                                <iframe
+                                                    title="preview"
+                                                    srcDoc={q?.category === 'HTML' ? currentAnswer : `<style>${currentAnswer}</style>${q?.sampleInput || ''}`}
+                                                    className="w-full h-full border-0 bg-white"
+                                                    sandbox="allow-scripts"
+                                                />
+                                            </div>
+                                        </div>
+                                    </Split>
+                                ) : (
+                                    <Editor
+                                        height="100%"
+                                        language={(q?.category === 'SQL' || roundInfo?.type === 'SQL_CONTEST') ? 'sql' :
+                                            (q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? 'html' :
+                                                q?.category === 'CSS' ? 'css' :
+                                                    'javascript'}
+                                        theme="light" // Switched to Monaco's built-in light theme
+                                        value={currentAnswer || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                        onChange={(val) => handleAnswerChange(q?._id, val)}
+                                        options={{
+                                            minimap: { enabled: false },
+                                            fontSize: 14,
+                                            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                                            lineHeight: 24,
+                                            padding: { top: 24 },
+                                            scrollBeyondLastLine: false,
+                                            smoothScrolling: true,
+                                            cursorBlinking: "smooth",
+                                            readOnly: isTimeUp,
+                                            renderLineHighlight: "all",
+                                            hideCursorInOverviewRuler: true
+                                        }}
+                                        loading={
+                                            <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
+                                                <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
+                                                <div className="space-y-3">
+                                                    <div className="h-4 bg-slate-100 rounded-md w-full"></div>
+                                                    <div className="h-4 bg-slate-100 rounded-md w-5/6"></div>
+                                                    <div className="h-4 bg-slate-100 rounded-md w-4/6"></div>
+                                                </div>
+                                                <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl"></div>
+                                            </div>
+                                        }
+                                    />
+                                )
                             )
                         ) : (
                             <div className="p-6 h-full flex flex-col max-w-4xl mx-auto w-full">
@@ -569,7 +639,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     placeholder="// Initialize text stream here..."
                                     className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 text-slate-700 font-mono text-sm focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 resize-none leading-relaxed transition-all shadow-sm custom-scrollbar disabled:bg-slate-50 disabled:text-slate-400"
                                     value={currentAnswer}
-                                    onChange={(e) => handleAnswerChange(q._id, e.target.value)}
+                                    onChange={(e) => handleAnswerChange(q?._id, e.target.value)}
                                 />
                                 <div className="mt-4 flex items-center justify-end gap-2 text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest">
                                     Size: <span className="text-indigo-600 text-xs">{currentAnswer.length}</span> bytes
@@ -605,10 +675,10 @@ const CodeArena = ({ language = 'javascript' }) => {
 
                                 <p className="text-slate-500 text-sm mb-6 leading-relaxed font-medium">
                                     {isTimeUp
-                                        ? "Session closed. Enter the Proctor's End Key to securely flush data to the server."
+                                        ? "Session closed. Enter the Final Authorization OTP to securely flush data to the server."
                                         : (roundInfo?.hasNextRound
                                             ? "You are about to submit this section. The timer will continue seamlessly into the next section. Ready to proceed?"
-                                            : "Ready to commit? Enter the End Key provided by the Proctor to finalize your test submission.")}
+                                            : "Ready to commit? Enter the Final Authorization OTP provided by the Proctor to finalize your test submission.")}
                                 </p>
 
                                 <form onSubmit={handleFinalSubmit} className="space-y-6">

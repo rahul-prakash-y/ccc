@@ -3,6 +3,7 @@ const Submission = require('../models/Submission');
 const Round = require('../models/Round');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
+const Team = require('../models/Team');
 const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
@@ -538,7 +539,7 @@ module.exports = async function (fastify, opts) {
             const adminId = request.user.userId;
             const { page = 1, limit = 10 } = request.query;
 
-            const filter = { isManualEvaluation: true, assignedAdmin: adminId };
+            const filter = { isManualEvaluation: true, assignedAdmin: adminId, round: { $ne: null } };
 
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
@@ -571,7 +572,7 @@ module.exports = async function (fastify, opts) {
 
             // Collect unique round ObjectIds
             const roundObjectIds = [
-                ...new Map(questions.map(q => [q.round._id.toString(), q.round._id])).values()
+                ...new Map(questions.filter(q => q.round).map(q => [q.round._id.toString(), q.round._id])).values()
             ];
 
             // Find all submissions for those rounds
@@ -581,7 +582,8 @@ module.exports = async function (fastify, opts) {
 
             // Build result: for each question, list all students and their answer + score
             const result = questions.map(question => {
-                const qRoundId = question.round._id.toString();
+                const qRoundId = question.round?._id?.toString();
+                if (!qRoundId) return { question, students: [] };
 
                 const students = submissions
                     .filter(sub => sub.round.toString() === qRoundId)
@@ -678,7 +680,14 @@ module.exports = async function (fastify, opts) {
 
             // Recalculate total score as sum of all manual scores + autoScore
             const totalManualScore = submission.manualScores.reduce((sum, ms) => sum + (ms.score || 0), 0);
-            submission.score = (submission.autoScore || 0) + totalManualScore;
+
+            // Fetch round to check if it's a team test
+            const round = await Round.findById(submission.round);
+            let finalScore = (submission.autoScore || 0) + totalManualScore;
+            if (round && round.isTeamTest) {
+                finalScore = finalScore / 2;
+            }
+            submission.score = finalScore;
 
             await submission.save();
 
@@ -1037,7 +1046,8 @@ module.exports = async function (fastify, opts) {
 
             const [students, total] = await Promise.all([
                 User.find(filter)
-                    .select('studentId name isBanned tokenIssuedAfter createdAt')
+                    .select('studentId name isBanned tokenIssuedAfter createdAt team')
+                    .populate('team', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),
@@ -1312,6 +1322,8 @@ module.exports = async function (fastify, opts) {
     fastify.patch('/submissions/:submissionId/allow-reentry', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { submissionId } = request.params;
+            const { addMinutes = 10 } = request.body || {}; // Default to 10 mins if not provided
+
             const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
@@ -1322,8 +1334,8 @@ module.exports = async function (fastify, opts) {
             // Reset status so they can enter again
             submission.status = 'IN_PROGRESS';
 
-            // Give them an extra 10 minutes by default so they can actually make changes before it auto-submits
-            submission.extraTimeMinutes = (submission.extraTimeMinutes || 0) + 10;
+            // Give them extra time so they can actually make changes
+            submission.extraTimeMinutes = (submission.extraTimeMinutes || 0) + Number(addMinutes);
 
             // Clear disqualification reason
             submission.disqualificationReason = null;
@@ -1399,6 +1411,50 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to reset password' });
+        }
+    });
+
+    // PATCH /api/superadmin/students/:userId/team — assign a student to a team
+    fastify.patch('/students/:userId/team', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { userId } = request.params;
+            const { teamId } = request.body; // Can be null to unassign
+
+            const student = await User.findById(userId);
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            const oldTeamId = student.team;
+
+            // 1. Update the Student
+            student.team = teamId || null;
+            await student.save();
+
+            // 2. Update Team Memberships
+            // Remove from old team
+            if (oldTeamId) {
+                const Team = require('../models/Team');
+                await Team.findByIdAndUpdate(oldTeamId, { $pull: { members: userId } });
+            }
+            // Add to new team
+            if (teamId) {
+                const Team = require('../models/Team');
+                await Team.findByIdAndUpdate(teamId, { $addToSet: { members: userId } });
+            }
+
+            const populatedStudent = await User.findById(userId).populate('team', 'name');
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', id: userId, label: `${student.studentId} — Team Update` },
+                metadata: { oldTeamId, newTeamId: teamId },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: populatedStudent });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update student team' });
         }
     });
 
@@ -1489,6 +1545,138 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to delete round' });
+        }
+    });
+
+    /**
+     * TEAM MANAGEMENT ROUTES
+     */
+
+    // 1. GET /api/superadmin/teams
+    fastify.get('/teams', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const teams = await Team.find({}).populate('members', 'studentId name').sort({ name: 1 });
+            return reply.code(200).send({ success: true, data: teams });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch teams' });
+        }
+    });
+
+    // 2. POST /api/superadmin/teams
+    fastify.post('/teams', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { name, members } = request.body;
+        if (!name) return reply.code(400).send({ error: 'Team name is required' });
+
+        try {
+            const team = new Team({ name, members: members || [] });
+            await team.save();
+
+            if (members && members.length > 0) {
+                await User.updateMany({ _id: { $in: members } }, { $set: { team: team._id } });
+            }
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Team', id: team._id, label: team.name },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: team });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create team' });
+        }
+    });
+
+    // 3. PUT /api/superadmin/teams/:teamId
+    fastify.put('/teams/:teamId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { teamId } = request.params;
+        const { name, members } = request.body;
+
+        try {
+            const oldTeam = await Team.findById(teamId);
+            if (!oldTeam) return reply.code(404).send({ error: 'Team not found' });
+
+            // Remove team ref from old members not in the new list
+            const oldMembers = (oldTeam.members || []).map(m => m.toString());
+            const newMembers = (members || []).map(m => m.toString());
+            const removedMembers = oldMembers.filter(m => !newMembers.includes(m));
+
+            if (removedMembers.length > 0) {
+                await User.updateMany({ _id: { $in: removedMembers } }, { $set: { team: null } });
+            }
+
+            const team = await Team.findByIdAndUpdate(teamId, { name, members }, { new: true });
+
+            if (members && members.length > 0) {
+                await User.updateMany({ _id: { $in: members } }, { $set: { team: team._id } });
+            }
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Team', id: teamId, label: team.name },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: team });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update team' });
+        }
+    });
+
+    // 4. DELETE /api/superadmin/teams/:teamId
+    fastify.delete('/teams/:teamId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { teamId } = request.params;
+
+        try {
+            const team = await Team.findByIdAndDelete(teamId);
+            if (!team) return reply.code(404).send({ error: 'Team not found' });
+
+            // Clear team ref for all members
+            await User.updateMany({ team: teamId }, { $set: { team: null } });
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Team', id: teamId, label: team.name },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Team deleted' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete team' });
+        }
+    });
+
+    // 5. GET /api/superadmin/team-scores
+    fastify.get('/team-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const teams = await Team.find({}).populate('members', '_id name studentId');
+            const submissions = await Submission.find({ score: { $ne: null } }).lean();
+
+            const teamScores = teams.map(team => {
+                const memberIds = team.members.map(m => m._id.toString());
+                const totalScore = submissions
+                    .filter(sub => memberIds.includes(sub.student.toString()))
+                    .reduce((sum, sub) => sum + (sub.score || 0), 0);
+
+                return {
+                    _id: team._id,
+                    name: team.name,
+                    members: team.members,
+                    totalScore
+                };
+            }).sort((a, b) => b.totalScore - a.totalScore);
+
+            return reply.code(200).send({ success: true, data: teamScores });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch team scores' });
         }
     });
 

@@ -73,14 +73,23 @@ const AuditLogsTab = ({ rounds }) => {
     };
 
     const handleAllowReEntry = (submissionId, studentName) => {
+        const mins = window.prompt(`How many extra minutes do you want to grant to ${studentName} for re-entry?`, "10");
+        if (mins === null) return; // Cancelled
+
+        const numericMins = parseInt(mins, 10);
+        if (isNaN(numericMins) || numericMins < 0) {
+            toast.error("Please enter a valid number of minutes.");
+            return;
+        }
+
         showConfirm({
             title: "Approve Re-Entry",
-            message: `Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them 10 extra minutes to complete their changes.`,
+            message: `Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them ${numericMins} extra minutes.`,
             confirmLabel: "Approve Re-Entry",
             onConfirm: async () => {
                 setBusy(b => ({ ...b, [submissionId]: true }));
                 try {
-                    await api.patch(`${API}/submissions/${submissionId}/allow-reentry`);
+                    await api.patch(`${API}/submissions/${submissionId}/allow-reentry`, { addMinutes: numericMins });
                     toast.success(`Re-entry approved for ${studentName}`);
                     fetchLogs();
                 } catch (e) {

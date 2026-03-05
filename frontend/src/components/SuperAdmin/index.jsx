@@ -17,6 +17,8 @@ import QuestionBankTab from './QuestionBankTab';
 import QuestionManagerTab from './QuestionManagerTab';
 import EvaluationTab from './EvaluationTab';
 import StudentScoreDashboard from './StudentScoreDashboard';
+import TeamManagerTab from './TeamManagerTab';
+import TeamScoreTab from './TeamScoreTab';
 
 const TABS = [
   { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -28,6 +30,8 @@ const TABS = [
   { id: 'questions', label: 'Test Questions', icon: ClipboardCheck },
   { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
   { id: 'scores', label: 'Student Scores', icon: Trophy },
+  { id: 'teams', label: 'Teams', icon: Users },
+  { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
 ];
 
 const SuperAdminDashboard = () => {
@@ -157,6 +161,8 @@ const SuperAdminDashboard = () => {
                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                 {activeTab === 'evaluations' && <EvaluationTab />}
                 {activeTab === 'scores' && <StudentScoreDashboard />}
+                {activeTab === 'teams' && <TeamManagerTab />}
+                {activeTab === 'team-scores' && <TeamScoreTab />}
               </div>
             </div>
 
