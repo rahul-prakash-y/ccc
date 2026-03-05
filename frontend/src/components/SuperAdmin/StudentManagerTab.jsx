@@ -9,8 +9,9 @@ import { API } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { SkeletonList } from '../Skeleton';
 
-// ─── Refined Add Student Modal ─────────────────────────────────────────────────────────
+// ─── Refined Student Creation Modal ─────────────────────────────────────────────────────────
 const AddStudentModal = ({ onClose, onCreated }) => {
     const [studentId, setStudentId] = useState('');
     const [saving, setSaving] = useState(false);
@@ -546,9 +547,8 @@ const StudentManagerTab = () => {
             {/* Data Grid */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
                 {loading && students.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 h-full">
-                        <Loader2 size={36} className="text-indigo-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Directory...</p>
+                    <div className="py-4">
+                        <SkeletonList count={8} />
                     </div>
                 ) : students.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">

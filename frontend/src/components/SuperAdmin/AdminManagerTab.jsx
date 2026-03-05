@@ -9,6 +9,7 @@ import { API } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { SkeletonList } from '../Skeleton';
 
 // ─── Refined Add Admin Modal ───────────────────────────────────────────────────────────
 const AddAdminModal = ({ onClose, onCreated }) => {
@@ -348,12 +349,11 @@ const AdminManagerTab = () => {
                 )}
             </AnimatePresence>
 
-            {/* Data Grid */}
+            {/* List Container */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
                 {loading && admins.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 h-full">
-                        <Loader2 size={36} className="text-violet-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Personnel...</p>
+                    <div className="py-4">
+                        <SkeletonList count={8} />
                     </div>
                 ) : admins.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
@@ -453,7 +453,7 @@ const AdminManagerTab = () => {
             {showAddModal && (
                 <AddAdminModal
                     onClose={() => setShowAddModal(false)}
-                    onCreated={admin => {
+                    onCreated={() => {
                         fetchAdmins();
                         setShowAddModal(false);
                     }}

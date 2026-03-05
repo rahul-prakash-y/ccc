@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     ClipboardCheck, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp,
     User, BookOpen, Star, Search
@@ -7,6 +7,7 @@ import {
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import { SkeletonList } from '../Skeleton';
 
 // ─── Single student evaluation row ──────────────────────────────────────────
 const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
@@ -293,10 +294,7 @@ const EvaluationTab = () => {
             {/* Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4 space-y-3">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-24">
-                        <Loader2 size={36} className="text-amber-400 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Assignments...</p>
-                    </div>
+                    <SkeletonList count={8} />
                 ) : error ? (
                     <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-red-200 rounded-2xl bg-red-50">
                         <AlertTriangle size={36} className="text-red-300 mb-3" />

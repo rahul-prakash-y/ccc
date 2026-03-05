@@ -4,6 +4,7 @@ import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles } from 'lu
 import OtpGate from './OtpGate';
 import { useAuthStore, api } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { SkeletonGrid } from './Skeleton';
 
 const statusConfig = {
     LOCKED: {
@@ -151,12 +152,8 @@ const StudentDashboard = () => {
                 </div>
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-32 space-y-4">
-                        <div className="relative">
-                            <div className="w-12 h-12 border-4 border-indigo-100 rounded-full"></div>
-                            <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin absolute inset-0"></div>
-                        </div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Grid...</p>
+                    <div className="py-4">
+                        <SkeletonGrid count={6} />
                     </div>
                 ) : displayRounds.length === 0 ? (
                     <motion.div

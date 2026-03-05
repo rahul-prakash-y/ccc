@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
+import { SkeletonGrid } from '../Skeleton';
 
 // ── Per-section OTP panel with live countdown ───────────────────────────────────
 const OtpPanel = ({ section, onOtpChange }) => {
@@ -550,9 +551,18 @@ const LiveOpsTab = () => {
 
   if (loading && sections.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Loader2 size={40} className="text-indigo-500 animate-spin" />
-        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Initializing Control Panel...</p>
+      <div className="space-y-4 max-w-7xl mx-auto">
+        {/* Header Section */}
+        <div className="flex justify-between items-end border-b border-slate-100 pb-4">
+          <div>
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Overlord</h2>
+            <p className="text-xl font-bold text-slate-800">Live Operations</p>
+          </div>
+          <button disabled className="opacity-50 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200">
+            <Plus size={18} /> Create Test
+          </button>
+        </div>
+        <SkeletonGrid count={6} />
       </div>
     );
   }

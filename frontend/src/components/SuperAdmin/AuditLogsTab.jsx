@@ -5,6 +5,7 @@ import { API, STATUS_COLORS } from './constants';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
 import Pagination from './components/Pagination';
+import { SkeletonList } from '../Skeleton';
 
 const AuditLogsTab = ({ rounds }) => {
     const showConfirm = useConfirm(state => state.showConfirm);
@@ -148,9 +149,8 @@ const AuditLogsTab = ({ rounds }) => {
             {/* Data Grid Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
-                        <Loader2 size={36} className="text-indigo-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Querying Submissions...</p>
+                    <div className="py-4">
+                        <SkeletonList count={10} />
                     </div>
                 ) : logs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 min-h-[400px] border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">

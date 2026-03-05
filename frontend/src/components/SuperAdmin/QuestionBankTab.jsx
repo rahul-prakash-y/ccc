@@ -9,6 +9,7 @@ import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { SkeletonList } from '../Skeleton';
 
 const QuestionModal = ({ question, onClose, onSave }) => {
     const isEdit = !!question;
@@ -366,7 +367,7 @@ const QuestionBankTab = () => {
         });
     };
 
-    const handleSave = (savedQuestion) => {
+    const handleSave = () => {
         fetchQuestions();
         setModal(null);
     };
@@ -414,9 +415,8 @@ const QuestionBankTab = () => {
             {/* List Container */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
                 {loading && questions.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
-                        <Loader2 size={36} className="text-indigo-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Library...</p>
+                    <div className="py-4">
+                        <SkeletonList count={10} />
                     </div>
                 ) : questions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">

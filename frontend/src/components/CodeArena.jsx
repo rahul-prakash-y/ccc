@@ -3,13 +3,14 @@ import Split from 'react-split';
 import Editor from '@monaco-editor/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-    Terminal, Lock, Send, AlertTriangle, Save, Loader2,
+    Terminal, Lock, Send, AlertTriangle, Save,
     ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Code2, LogOut,
-    Clock
+    Clock, ArrowRight
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import { SkeletonCodeArena } from './Skeleton';
 
 import useContestTimer from '../hooks/useContestTimer';
 import useAutoSave from '../hooks/useAutoSave';
@@ -47,52 +48,52 @@ const CodeArena = ({ language = 'javascript' }) => {
     const otpRefs = useRef([]);
 
     // --- Anti-Cheat Logic ---
-    // const handleCheatDetected = useCallback(async (cheatEvent) => {
-    //     try {
-    //         const res = await api.post(`/rounds/${roundId}/report-cheat`, cheatEvent);
-    //         if (res.data.banned) {
-    //             setIsBanned(true);
-    //             setBanReason(res.data.reason);
-    //             updateUser({ isBanned: true, banReason: res.data.reason });
-    //         }
-    //     } catch (err) {
-    //         console.error("Anti-cheat sync failed:", err);
-    //         if (err.response?.status === 403) {
-    //             const reason = err.response?.data?.error || "Access Revoked";
-    //             setIsBanned(true);
-    //             setBanReason(reason);
-    //             updateUser({ isBanned: true, banReason: reason });
-    //         }
-    //     }
-    // }, [roundId, updateUser]);
+    const handleCheatDetected = useCallback(async (cheatEvent) => {
+        try {
+            const res = await api.post(`/ rounds / ${roundId}/report-cheat`, cheatEvent);
+            if (res.data.banned) {
+                setIsBanned(true);
+                setBanReason(res.data.reason);
+                updateUser({ isBanned: true, banReason: res.data.reason });
+            }
+        } catch (err) {
+            console.error("Anti-cheat sync failed:", err);
+            if (err.response?.status === 403) {
+                const reason = err.response?.data?.error || "Access Revoked";
+                setIsBanned(true);
+                setBanReason(reason);
+                updateUser({ isBanned: true, banReason: reason });
+            }
+        }
+    }, [roundId, updateUser]);
 
-    // useEffect(() => {
-    //     const handlePaste = (e) => {
-    //         e.preventDefault();
-    //         handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
-    //     };
-    //     const blockAction = (e) => e.preventDefault();
-    //     const handleKeyDown = (e) => {
-    //         if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
-    //             e.preventDefault();
-    //             if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
-    //         }
-    //     };
+    useEffect(() => {
+        const handlePaste = (e) => {
+            e.preventDefault();
+            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+        };
+        const blockAction = (e) => e.preventDefault();
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
+                e.preventDefault();
+                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+            }
+        };
 
-    //     window.addEventListener('paste', handlePaste, { capture: true });
-    //     window.addEventListener('copy', blockAction, { capture: true });
-    //     window.addEventListener('cut', blockAction, { capture: true });
-    //     window.addEventListener('contextmenu', blockAction, { capture: true });
-    //     window.addEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('paste', handlePaste, { capture: true });
+        window.addEventListener('copy', blockAction, { capture: true });
+        window.addEventListener('cut', blockAction, { capture: true });
+        window.addEventListener('contextmenu', blockAction, { capture: true });
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
 
-    //     return () => {
-    //         window.removeEventListener('paste', handlePaste, { capture: true });
-    //         window.removeEventListener('copy', blockAction, { capture: true });
-    //         window.removeEventListener('cut', blockAction, { capture: true });
-    //         window.removeEventListener('contextmenu', blockAction, { capture: true });
-    //         window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    //     };
-    // }, [handleCheatDetected]);
+        return () => {
+            window.removeEventListener('paste', handlePaste, { capture: true });
+            window.removeEventListener('copy', blockAction, { capture: true });
+            window.removeEventListener('cut', blockAction, { capture: true });
+            window.removeEventListener('contextmenu', blockAction, { capture: true });
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        };
+    }, [handleCheatDetected]);
 
     // --- Data Loading ---
     useEffect(() => {
@@ -144,7 +145,7 @@ const CodeArena = ({ language = 'javascript' }) => {
         durationMinutes: roundInfo?.durationMinutes || 60,
         extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        // onCheatDetected: handleCheatDetected
+        onCheatDetected: handleCheatDetected
     });
 
     const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned, (responsePayload) => {
@@ -260,12 +261,7 @@ const CodeArena = ({ language = 'javascript' }) => {
 
     // --- Loading State Render ---
     if (isLoading) {
-        return (
-            <div className="h-screen w-full bg-[#f8fafc] flex flex-col items-center justify-center text-indigo-600 gap-4 font-mono font-bold tracking-widest">
-                <Loader2 className="animate-spin" size={40} />
-                <p className="uppercase text-xs text-indigo-400">Constructing Environment...</p>
-            </div>
-        );
+        return <SkeletonCodeArena />;
     }
 
     const q = questions[activeIdx];
@@ -523,31 +519,49 @@ const CodeArena = ({ language = 'javascript' }) => {
                                 </div>
                             </div>
                         ) : (q.type === 'CODE' || q.type === 'DEBUG') ? (
-                            <Editor
-                                height="100%"
-                                language={q.category === 'SQL' ? 'sql' : language}
-                                theme="light" // Switched to Monaco's built-in light theme
-                                value={currentAnswer || (q.type === 'DEBUG' ? q.sampleInput : '')}
-                                onChange={(val) => handleAnswerChange(q._id, val)}
-                                options={{
-                                    minimap: { enabled: false },
-                                    fontSize: 14,
-                                    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-                                    lineHeight: 24,
-                                    padding: { top: 24 },
-                                    scrollBeyondLastLine: false,
-                                    smoothScrolling: true,
-                                    cursorBlinking: "smooth",
-                                    readOnly: isTimeUp,
-                                    renderLineHighlight: "all",
-                                    hideCursorInOverviewRuler: true
-                                }}
-                                loading={
-                                    <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-3 font-mono text-sm font-bold tracking-widest uppercase">
-                                        <Loader2 className="animate-spin" size={28} /> Booting IDE...
+                            !q ? (
+                                <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
+                                    <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
+                                    <div className="space-y-3">
+                                        <div className="h-4 bg-slate-100 rounded-md w-full"></div>
+                                        <div className="h-4 bg-slate-100 rounded-md w-5/6"></div>
+                                        <div className="h-4 bg-slate-100 rounded-md w-4/6"></div>
                                     </div>
-                                }
-                            />
+                                    <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl"></div>
+                                </div>
+                            ) : (
+                                <Editor
+                                    height="100%"
+                                    language={q.category === 'SQL' ? 'sql' : language}
+                                    theme="light" // Switched to Monaco's built-in light theme
+                                    value={currentAnswer || (q.type === 'DEBUG' ? q.sampleInput : '')}
+                                    onChange={(val) => handleAnswerChange(q._id, val)}
+                                    options={{
+                                        minimap: { enabled: false },
+                                        fontSize: 14,
+                                        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                                        lineHeight: 24,
+                                        padding: { top: 24 },
+                                        scrollBeyondLastLine: false,
+                                        smoothScrolling: true,
+                                        cursorBlinking: "smooth",
+                                        readOnly: isTimeUp,
+                                        renderLineHighlight: "all",
+                                        hideCursorInOverviewRuler: true
+                                    }}
+                                    loading={
+                                        <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
+                                            <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
+                                            <div className="space-y-3">
+                                                <div className="h-4 bg-slate-100 rounded-md w-full"></div>
+                                                <div className="h-4 bg-slate-100 rounded-md w-5/6"></div>
+                                                <div className="h-4 bg-slate-100 rounded-md w-4/6"></div>
+                                            </div>
+                                            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl"></div>
+                                        </div>
+                                    }
+                                />
+                            )
                         ) : (
                             <div className="p-6 h-full flex flex-col max-w-4xl mx-auto w-full">
                                 <textarea

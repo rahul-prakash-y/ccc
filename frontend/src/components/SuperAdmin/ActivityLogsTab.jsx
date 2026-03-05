@@ -3,6 +3,7 @@ import { Filter, Search, Loader2, ChevronDown, RefreshCw } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, ACTION_STYLES, ALL_ACTIONS } from './constants';
 import Pagination from './components/Pagination';
+import { SkeletonRow } from '../Skeleton';
 
 const ActivityLogsTab = () => {
     // 1. Data Source & Pagination State
@@ -94,9 +95,8 @@ const ActivityLogsTab = () => {
 
             {/* Data Table Area */}
             {loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 min-h-[400px]">
-                    <Loader2 size={40} className="text-indigo-500 animate-spin mb-4" />
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Compiling System Logs...</p>
+                <div className="py-4">
+                    <SkeletonRow count={10} />
                 </div>
             ) : logs.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 min-h-[400px] border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50">

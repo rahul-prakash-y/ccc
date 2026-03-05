@@ -9,6 +9,7 @@ import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { SkeletonList } from '../Skeleton';
 
 // ─── Import From Library Modal ──────────────────────────────────────────────────────
 const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
@@ -82,7 +83,9 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
 
                     <div className="overflow-y-auto custom-scrollbar p-6 flex-1 bg-slate-50/30">
                         {loading ? (
-                            <div className="flex justify-center items-center py-10"><Loader2 className="animate-spin text-indigo-500" /></div>
+                            <div className="py-4">
+                                <SkeletonList count={5} />
+                            </div>
                         ) : error && bankQuestions.length === 0 ? (
                             <div className="text-red-500 font-bold text-sm text-center py-10">{error}</div>
                         ) : bankQuestions.length === 0 ? (
@@ -584,9 +587,8 @@ const QuestionManagerTab = ({ rounds }) => {
                         <p className="text-xs text-slate-400 mt-1">Select a round from the dropdown to access its question bank.</p>
                     </div>
                 ) : loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
-                        <Loader2 size={36} className="text-indigo-500 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Retrieving Bank Data...</p>
+                    <div className="py-4">
+                        <SkeletonList count={10} />
                     </div>
                 ) : questions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 h-full border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">

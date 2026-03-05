@@ -7,6 +7,7 @@ import {
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import { SkeletonList } from '../Skeleton';
 
 // ─── Rank medal helper ────────────────────────────────────────────────────────
 const RankBadge = ({ rank }) => {
@@ -239,9 +240,8 @@ const StudentScoreDashboard = () => {
             {/* Leaderboard */}
             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 pb-4">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-24">
-                        <Loader2 size={36} className="text-indigo-400 animate-spin mb-4" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Scores...</p>
+                    <div className="py-4">
+                        <SkeletonList count={8} />
                     </div>
                 ) : data.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-200 rounded-2xl">
