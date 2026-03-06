@@ -1275,7 +1275,7 @@ module.exports = async function (fastify, opts) {
 
             const [students, total] = await Promise.all([
                 User.find(filter)
-                    .select('studentId name isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob')
+                    .select('studentId name email isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob')
                     .populate('team', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
@@ -1305,7 +1305,7 @@ module.exports = async function (fastify, opts) {
     // POST /api/superadmin/students — create a new STUDENT
     fastify.post('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { studentId } = request.body;
+            const { studentId, email } = request.body;
             if (!studentId) {
                 return reply.code(400).send({ error: 'studentId is required' });
             }
@@ -1317,6 +1317,7 @@ module.exports = async function (fastify, opts) {
             const student = new User({
                 studentId,
                 name: `Student ${studentId}`,
+                email: email || undefined,
                 password: hashedPassword,
                 role: 'STUDENT',
                 isOnboarded: false
@@ -1397,7 +1398,7 @@ module.exports = async function (fastify, opts) {
     fastify.get('/students/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const data = [
-                { 'Roll No': '2024CS001', 'Name': 'Jane Doe', 'Phone': '1234567890', 'DOB': '2000-01-01', 'Bio': 'CS Student', 'LinkedIn': 'linkedin.com/in/jane', 'GitHub': 'github.com/jane' },
+                { 'Roll No': '2024CS001' },
             ];
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
@@ -1434,6 +1435,7 @@ module.exports = async function (fastify, opts) {
                     ['rollno', 'studentid', 'roll_no', 'roll number'].includes(k.toLowerCase().replace(/[\s_]/g, ''))
                 );
                 const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
+                const emailKey = Object.keys(row).find(k => k.toLowerCase() === 'email');
                 const phoneKey = Object.keys(row).find(k => k.toLowerCase() === 'phone');
                 const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob' || k.toLowerCase() === 'dateofbirth');
                 const bioKey = Object.keys(row).find(k => k.toLowerCase() === 'bio');
@@ -1447,6 +1449,7 @@ module.exports = async function (fastify, opts) {
                 return {
                     studentId: String(row[idKey]).trim(),
                     name: row[nameKey] ? String(row[nameKey]).trim() : null,
+                    email: row[emailKey] ? String(row[emailKey]).trim() : null,
                     phone: row[phoneKey] ? String(row[phoneKey]).trim() : null,
                     dob: isNaN(dobVal) ? null : dobVal,
                     bio: row[bioKey] ? String(row[bioKey]).trim() : null,

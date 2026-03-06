@@ -13,6 +13,12 @@ const userSchema = new mongoose.Schema({
     required: true,
     // Note: should be hashed before saving
   },
+  email: {
+    type: String,
+    required: false,
+    trim: true,
+    index: true
+  },
   role: {
     type: String,
     enum: ['STUDENT', 'ADMIN', 'SUPER_ADMIN'],

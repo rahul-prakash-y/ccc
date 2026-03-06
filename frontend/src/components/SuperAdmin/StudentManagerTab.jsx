@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check, Eye, Mail, Phone, FileText,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload,
-    Linkedin, Github
+    Linkedin, Github, Calendar
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -16,6 +16,7 @@ import { SkeletonList } from '../Skeleton';
 const AddStudentModal = ({ onClose, onCreated }) => {
     const [studentId, setStudentId] = useState('');
     const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [dob, setDob] = useState('');
     const [saving, setSaving] = useState(false);
@@ -33,6 +34,7 @@ const AddStudentModal = ({ onClose, onCreated }) => {
             const res = await api.post(`${API}/students`, {
                 studentId: trimmedId,
                 name: name.trim() || undefined,
+                email: email.trim() || undefined,
                 phone: phone.trim() || undefined,
                 dob: dob || undefined
             });
@@ -101,6 +103,21 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                             </div>
                             <div>
                                 <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    placeholder="yourname@gmail.com"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
                                     Phone Number
                                 </label>
                                 <input
@@ -111,18 +128,17 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                                 />
                             </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                Date of Birth
-                            </label>
-                            <input
-                                type="date"
-                                value={dob}
-                                onChange={e => setDob(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                            />
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Date of Birth
+                                </label>
+                                <input
+                                    type="date"
+                                    value={dob}
+                                    onChange={e => setDob(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
                         </div>
 
                         {error && (
@@ -516,11 +532,11 @@ const StudentDetailsModal = ({ student, onClose }) => {
                                             </span>
                                         </div>
                                     )}
-                                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 cursor-not-allowed">
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700">
                                         <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
-                                            <Mail size={14} />
+                                            <Mail size={14} className="text-indigo-400" />
                                         </div>
-                                        <span className="text-[10px] font-bold uppercase tracking-tighter">Email Hidden</span>
+                                        <span className="text-xs font-bold">{student.email || 'N/A'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -782,6 +798,12 @@ const StudentManagerTab = () => {
 
                                                 {/* Profile Quick Info Indicators */}
                                                 <div className="flex items-center gap-3 mt-1.5">
+                                                    {student.email && (
+                                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                                            <Mail size={10} />
+                                                            <span>{student.email}</span>
+                                                        </div>
+                                                    )}
                                                     {student.phone && (
                                                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 group-hover:text-indigo-500 transition-colors">
                                                             <Phone size={10} />

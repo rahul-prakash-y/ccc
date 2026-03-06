@@ -151,13 +151,14 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/onboard', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const { name, linkedinProfile, githubProfile, phone, bio, dob, password } = request.body;
+            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, password } = request.body;
             if (!name || name.trim().length < 2) {
                 return reply.code(400).send({ error: 'Valid name is required' });
             }
 
             const updateData = {
                 name: name.trim(),
+                email: email ? email.trim() : null,
                 linkedinProfile: linkedinProfile ? linkedinProfile.trim() : null,
                 githubProfile: githubProfile ? githubProfile.trim() : null,
                 phone: phone ? phone.trim() : null,

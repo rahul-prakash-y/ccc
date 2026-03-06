@@ -51,9 +51,9 @@ export const useAuthStore = create((set, get) => ({
         set({ user: updatedUser });
     },
 
-    onboard: async (name, linkedinProfile, githubProfile, phone, bio, dob, password) => {
+    onboard: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password) => {
         try {
-            const res = await api.post('/auth/onboard', { name, linkedinProfile, githubProfile, phone, bio, dob, password });
+            const res = await api.post('/auth/onboard', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password });
             const { token, user } = res.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
