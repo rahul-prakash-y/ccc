@@ -116,7 +116,7 @@ const StudentDashboard = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
                     <div>
                         <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            Code Circuit <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md text-sm border border-indigo-100">Fint & Friends</span>
+                            Code Circle Club <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md text-sm border border-indigo-100">Fint & Friends</span>
                         </h1>
                         <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1">
                             Student: <span className="font-mono font-bold text-slate-700">{user?.name || 'Unknown'}</span> ({user?.studentId})
