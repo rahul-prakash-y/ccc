@@ -264,9 +264,9 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                         {field('Sample Test Input', 'sampleInput', 'text', 3)}
                                         {field('Sample Test Output', 'sampleOutput', 'text', 3)}
                                     </div>
-                                    {form.type !== 'CODE' && (
+                                    {(form.type !== 'CODE' || form.isManualEvaluation) && form.type !== 'UI_UX' && (
                                         <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                            {field('Expected Correct Answer', 'correctAnswer', 'text', 2)}
+                                            {field(form.type === 'CODE' ? 'Reference Solution (Correct Answer)' : 'Expected Correct Answer', 'correctAnswer', 'text', 2)}
                                         </div>
                                     )}
                                 </div>
@@ -717,7 +717,9 @@ const QuestionBankTab = () => {
 
                                                     {q.correctAnswer && q.type !== 'MCQ' && (
                                                         <div className="pt-2">
-                                                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1.5">Expected Answer Engine Match</p>
+                                                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1.5">
+                                                                {q.type === 'CODE' ? 'Reference Code Solution' : 'Expected Answer Engine Match'}
+                                                            </p>
                                                             <pre className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-lg font-mono text-xs overflow-x-auto">{q.correctAnswer}</pre>
                                                         </div>
                                                     )}
