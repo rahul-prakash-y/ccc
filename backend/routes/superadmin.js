@@ -96,6 +96,8 @@ module.exports = async function (fastify, opts) {
                 Submission.find(filter)
                     .populate('student', 'studentId name role isBanned')
                     .populate('round', 'name status type')
+                    .populate('manualScores.questionId', 'title points type')
+                    .populate('manualScores.adminId', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),

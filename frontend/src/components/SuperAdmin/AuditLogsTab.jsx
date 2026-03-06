@@ -284,6 +284,39 @@ const AuditLogsTab = ({ rounds }) => {
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
+                                        {/* Manual Evaluation Score Breakdown if available */}
+                                        {viewingLog.manualScores && viewingLog.manualScores.length > 0 && (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+                                                <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                    <ClipboardList size={12} /> Manual Evaluation Results
+                                                </h4>
+                                                <div className="space-y-2">
+                                                    {viewingLog.manualScores.map((ms, idx) => (
+                                                        <div key={idx} className="bg-white border border-amber-100 rounded-xl p-3 shadow-sm">
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <p className="text-[10px] font-bold text-slate-700 truncate max-w-[70%]">
+                                                                    {ms.questionId?.title || 'Unknown Question'}
+                                                                </p>
+                                                                <div className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-black">
+                                                                    {ms.score} Pts
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between mt-1 text-[9px] font-bold">
+                                                                <span className="text-slate-400">Awarded by: <span className="text-indigo-500">{ms.adminId?.name || 'Unknown Admin'}</span></span>
+                                                                <span className="text-slate-300">{ms.evaluatedAt ? new Date(ms.evaluatedAt).toLocaleDateString() : ''}</span>
+                                                            </div>
+                                                            {ms.feedback && (
+                                                                <div className="bg-slate-50 rounded-lg p-2 border border-slate-100">
+                                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Admin Feedback:</p>
+                                                                    <p className="text-xs text-slate-600 italic leading-relaxed">"{ms.feedback}"</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Submitted Answers</h4>
                                         {loadingQuestions ? (
                                             <div className="flex items-center justify-center py-12">
@@ -396,9 +429,19 @@ const AuditLogsTab = ({ rounds }) => {
 
                                                 {/* Score Column */}
                                                 <td className="px-4 py-3">
-                                                    <span className={`font-mono font-bold text-sm ${log.score !== null ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                        {log.score ?? '—'}
-                                                    </span>
+                                                    <div className="flex flex-col">
+                                                        <span className={`font-mono font-bold text-sm leading-none ${log.score !== null ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {log.score ?? '—'}
+                                                        </span>
+                                                        {(log.manualScores && log.manualScores.length > 0) && (
+                                                            <div className="flex items-center gap-1 mt-1 font-mono text-[9px] font-bold text-slate-400 whitespace-nowrap">
+                                                                <span className="text-indigo-400">{log.autoScore || 0}</span>
+                                                                <span>+</span>
+                                                                <span className="text-amber-500">{log.manualScores.reduce((sum, ms) => sum + (ms.score || 0), 0)}</span>
+                                                                <span className="text-[8px] opacity-70 ml-0.5">(A+M)</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
 
                                                 {/* Anomalies Column */}
