@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github } from 'lucide-react';
+import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
 import { SkeletonList } from '../Skeleton';
 
 // ─── Single question evaluation row (inside a student's submission card) ─────
-const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved }) => {
+const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer }) => {
     const { question, answer, existingScore } = questionEntry;
     const [score, setScore] = useState(existingScore?.score ?? '');
     const [feedback, setFeedback] = useState(existingScore?.feedback ?? '');
@@ -24,8 +24,6 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved }) => {
         }
         return trimmed;
     };
-
-
 
     const handleSave = async () => {
         const numScore = Number(score);
@@ -58,38 +56,61 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved }) => {
                     <BookOpen size={14} className="text-indigo-500" />
                     <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{question.title}</p>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{question.points} Points Max</p>
+                <div className="flex items-center gap-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{question.points} Points Max</p>
+                    <button
+                        onClick={() => onTransfer(question)}
+                        className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-amber-600 transition-all flex items-center gap-1 group"
+                        title="Transfer Evaluation to another Admin"
+                    >
+                        <UserIcon size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                        <span className="text-[9px] font-black uppercase tracking-tighter">Transfer</span>
+                    </button>
+                </div>
             </div>
 
             <div className="p-4 space-y-4">
                 {/* Answer Content */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Submitted Answer</p>
-                    {answer !== null && answer !== undefined && String(answer).trim() !== '' ? (
-                        <div>
-                            {(question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') ? (
-                                <a
-                                    href={formatFigmaUrl(String(answer))}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs font-bold text-indigo-600 hover:underline break-all"
-                                >
-                                    {String(answer)}
-                                </a>
-                            ) : (
-                                <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
-                                    {typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer)}
-                                </pre>
-                            )}
-                        </div>
-                    ) : (
-                        <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
-                    )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Student's Answer</p>
+                        {answer !== null && answer !== undefined && String(answer).trim() !== '' ? (
+                            <div>
+                                {(question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') ? (
+                                    <a
+                                        href={formatFigmaUrl(String(answer))}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs font-bold text-indigo-600 hover:underline break-all"
+                                    >
+                                        {String(answer)}
+                                    </a>
+                                ) : (
+                                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                                        {typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer)}
+                                    </pre>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
+                        )}
+                    </div>
+
+                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1.5">Correct / Expected Answer</p>
+                        {question.correctAnswer ? (
+                            <pre className="text-xs text-emerald-800 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                                {question.correctAnswer}
+                            </pre>
+                        ) : (
+                            <p className="text-xs text-slate-400 italic">No reference answer provided for this question.</p>
+                        )}
+                    </div>
                 </div>
 
                 {/* Question Description for Admin context */}
                 <div className="px-3 py-2 bg-amber-50/50 border border-amber-100 rounded-lg">
-                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Grading Context</p>
+                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Grading Context / Instructions</p>
                     <p className="text-[11px] text-amber-800 leading-relaxed whitespace-pre-wrap">
                         {question.description}
                     </p>
@@ -144,8 +165,130 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved }) => {
     );
 };
 
+// ─── Transfer Evaluation Modal ────────────────────────────────────────────────
+const TransferEvalModal = ({ question, isOpen, onClose, onTransferred }) => {
+    const [admins, setAdmins] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [transferring, setTransferring] = useState(false);
+    const [selectedAdminId, setSelectedAdminId] = useState('');
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            const fetchAdmins = async () => {
+                setLoading(true);
+                try {
+                    const res = await api.get(`${API}/admins/list`);
+                    setAdmins(res.data.data.filter(a => a._id !== JSON.parse(localStorage.getItem('user'))?.userId));
+                } catch (_err) {
+                    setError('Failed to load admin list');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            fetchAdmins();
+        }
+    }, [isOpen]);
+
+    const handleTransfer = async () => {
+        if (!selectedAdminId) return;
+        setTransferring(true);
+        setError('');
+        try {
+            await api.patch(`${API}/manual-evaluations/transfer/${question._id}`, {
+                newAdminId: selectedAdminId
+            });
+            onTransferred();
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to transfer evaluation');
+        } finally {
+            setTransferring(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden"
+            >
+                <div className="p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                            <UserIcon size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 leading-none">Transfer Evaluation</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">
+                                Reassigning: {question.title}
+                            </p>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-xs font-bold">
+                            <AlertTriangle size={14} /> {error}
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Select Target Admin</label>
+                            {loading ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="animate-spin text-indigo-500" size={24} />
+                                </div>
+                            ) : (
+                                <div className="grid gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {admins.map(admin => (
+                                        <button
+                                            key={admin._id}
+                                            onClick={() => setSelectedAdminId(admin._id)}
+                                            className={`flex items-center justify-between p-3 rounded-xl border transition-all text-left ${selectedAdminId === admin._id ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500/10' : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
+                                        >
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-900">{admin.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-mono">{admin.studentId}</p>
+                                            </div>
+                                            {selectedAdminId === admin._id && <Check size={14} className="text-indigo-600" />}
+                                        </button>
+                                    ))}
+                                    {admins.length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-4 italic">No other active admins available.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 flex items-center gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleTransfer}
+                        disabled={!selectedAdminId || transferring}
+                        className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                    >
+                        {transferring ? <Loader2 size={13} className="animate-spin" /> : <ClipboardCheck size={13} />}
+                        {transferring ? 'Transferring...' : 'Confirm Transfer'}
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
 // ─── Student Submission Card ──────────────────────────────────────────────────
-const SubmissionEvalCard = ({ submission, onScoreSaved }) => {
+const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
     const [expanded, setExpanded] = useState(true);
     const gradedCount = submission.questions.filter(q => q.existingScore).length;
 
@@ -258,6 +401,7 @@ const SubmissionEvalCard = ({ submission, onScoreSaved }) => {
                                         questionEntry={qEntry}
                                         student={submission.student}
                                         onScoreSaved={onScoreSaved}
+                                        onTransfer={onTransfer}
                                     />
                                 ))}
                             </div>
@@ -279,6 +423,8 @@ const EvaluationTab = () => {
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+
+    const [transferModal, setTransferModal] = useState({ isOpen: false, question: null });
 
     const fetchEvaluations = useCallback(async () => {
         setLoading(data.length === 0);
@@ -371,6 +517,7 @@ const EvaluationTab = () => {
                             key={submission.submissionId || idx}
                             submission={submission}
                             onScoreSaved={fetchEvaluations}
+                            onTransfer={(q) => setTransferModal({ isOpen: true, question: q })}
                         />
                     ))
                 )}
@@ -382,6 +529,14 @@ const EvaluationTab = () => {
                 onPageChange={setPage}
                 totalRecords={pagination.totalRecords}
                 limit={limit}
+            />
+
+            {/* Transfer Modal */}
+            <TransferEvalModal
+                isOpen={transferModal.isOpen}
+                question={transferModal.question}
+                onClose={() => setTransferModal({ isOpen: false, question: null })}
+                onTransferred={fetchEvaluations}
             />
         </div>
     );

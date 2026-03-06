@@ -661,7 +661,7 @@ module.exports = async function (fastify, opts) {
             const adminQuestions = await Question.find({
                 isManualEvaluation: true,
                 assignedAdmin: adminId
-            }).select('_id title description points type round category').lean();
+            }).select('_id title description points type round category correctAnswer').lean();
 
             if (adminQuestions.length === 0) {
                 return reply.code(200).send({
@@ -1400,6 +1400,50 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to process bulk upload' });
+        }
+    });
+
+    // GET /api/superadmin/admins/list - MINIMAL LIST FOR TRANSFERS
+    fastify.get('/admins/list', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const admins = await User.find({ role: 'ADMIN', isBanned: false }).select('_id name studentId');
+            return reply.code(200).send({ success: true, data: admins });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch admins list' });
+        }
+    });
+
+    // PATCH /api/superadmin/manual-evaluations/transfer/:questionId - TRANSFER EVALUATION
+    fastify.patch('/manual-evaluations/transfer/:questionId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { questionId } = request.params;
+            const { newAdminId } = request.body;
+            const currentAdminId = request.user.userId;
+
+            if (!newAdminId) return reply.code(400).send({ error: 'newAdminId is required' });
+
+            const question = await Question.findOne({ _id: questionId, isManualEvaluation: true, assignedAdmin: currentAdminId });
+            if (!question) return reply.code(403).send({ error: 'You are not authorized to transfer this evaluation' });
+
+            const newAdmin = await User.findOne({ _id: newAdminId, role: 'ADMIN', isBanned: false });
+            if (!newAdmin) return reply.code(404).send({ error: 'Target admin not found or inactive' });
+
+            question.assignedAdmin = newAdminId;
+            await question.save();
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', id: questionId, label: `Transferred evaluation of "${question.title}" to ${newAdmin.name}` },
+                metadata: { fromAdmin: currentAdminId, toAdmin: newAdminId },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, message: 'Evaluation assignment transferred successfully' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to transfer evaluation' });
         }
     });
 
