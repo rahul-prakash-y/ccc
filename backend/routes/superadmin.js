@@ -1180,7 +1180,7 @@ module.exports = async function (fastify, opts) {
 
             const [students, total] = await Promise.all([
                 User.find(filter)
-                    .select('studentId name isBanned tokenIssuedAfter createdAt team')
+                    .select('studentId name isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob')
                     .populate('team', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
@@ -1302,9 +1302,7 @@ module.exports = async function (fastify, opts) {
     fastify.get('/students/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const data = [
-                { 'Roll No': '2024CS001' },
-                { 'Roll No': '2024CS002' },
-                { 'Roll No': '2024CS003' }
+                { 'Roll No': '2024CS001', 'Name': 'Jane Doe', 'Phone': '1234567890', 'DOB': '2000-01-01', 'Bio': 'CS Student', 'LinkedIn': 'linkedin.com/in/jane', 'GitHub': 'github.com/jane' },
             ];
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
@@ -1336,40 +1334,52 @@ module.exports = async function (fastify, opts) {
                 return reply.code(400).send({ error: 'The uploaded file is empty' });
             }
 
-            // Standardize keys (looking for "roll no" or "studentId")
-            const studentIds = json.map(row => {
-                const key = Object.keys(row).find(k =>
-                    k.toLowerCase().replace(/[\s_]/g, '') === 'rollno' ||
-                    k.toLowerCase() === 'studentid'
+            const bulkData = json.map(row => {
+                const idKey = Object.keys(row).find(k =>
+                    ['rollno', 'studentid', 'roll_no', 'roll number'].includes(k.toLowerCase().replace(/[\s_]/g, ''))
                 );
-                return key ? String(row[key]).trim() : null;
+                const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
+                const phoneKey = Object.keys(row).find(k => k.toLowerCase() === 'phone');
+                const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob' || k.toLowerCase() === 'dateofbirth');
+                const bioKey = Object.keys(row).find(k => k.toLowerCase() === 'bio');
+                const linkedinKey = Object.keys(row).find(k => k.toLowerCase() === 'linkedin');
+                const githubKey = Object.keys(row).find(k => k.toLowerCase() === 'github');
+
+                if (!idKey) return null;
+
+                const dobVal = row[dobKey] ? new Date(row[dobKey]) : null;
+
+                return {
+                    studentId: String(row[idKey]).trim(),
+                    name: row[nameKey] ? String(row[nameKey]).trim() : null,
+                    phone: row[phoneKey] ? String(row[phoneKey]).trim() : null,
+                    dob: isNaN(dobVal) ? null : dobVal,
+                    bio: row[bioKey] ? String(row[bioKey]).trim() : null,
+                    linkedinProfile: row[linkedinKey] ? String(row[linkedinKey]).trim() : null,
+                    githubProfile: row[githubKey] ? String(row[githubKey]).trim() : null,
+                    role: 'STUDENT'
+                };
             }).filter(Boolean);
 
-            if (studentIds.length === 0) {
-                return reply.code(400).send({ error: 'No "Roll No" or "StudentId" column found in Excel' });
+            if (bulkData.length === 0) {
+                return reply.code(400).send({ error: 'No valid student records found in Excel' });
             }
 
             let createdCount = 0;
             let skippedCount = 0;
-            const defaultPassword = '123456';
-            const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
-            for (const sId of studentIds) {
-                const exists = await User.findOne({ studentId: sId });
-                if (exists) {
+            for (const item of bulkData) {
+                const existing = await User.findOne({ studentId: item.studentId });
+                if (existing) {
                     skippedCount++;
-                    continue;
+                } else {
+                    await User.create({
+                        ...item,
+                        password: 'password_will_be_onboarded', // Students set during onboarding
+                        isOnboarded: false
+                    });
+                    createdCount++;
                 }
-
-                const student = new User({
-                    studentId: sId,
-                    name: `Student ${sId}`,
-                    password: hashedPassword,
-                    role: 'STUDENT',
-                    isOnboarded: false
-                });
-                await student.save();
-                createdCount++;
             }
 
             await logActivity({
@@ -1385,7 +1395,6 @@ module.exports = async function (fastify, opts) {
                 message: `Bulk creation complete. ${createdCount} students created, ${skippedCount} skipped.`,
                 data: { createdCount, skippedCount }
             });
-
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to process bulk upload' });

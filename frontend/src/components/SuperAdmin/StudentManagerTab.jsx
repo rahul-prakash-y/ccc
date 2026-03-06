@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-    Plus, Loader2, AlertTriangle, X, Check,
-    Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload
+    Plus, Loader2, AlertTriangle, X, Check, Eye, Mail, Phone, FileText,
+    Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload,
+    Linkedin, Github
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -14,6 +15,9 @@ import { SkeletonList } from '../Skeleton';
 // ─── Refined Student Creation Modal ─────────────────────────────────────────────────────────
 const AddStudentModal = ({ onClose, onCreated }) => {
     const [studentId, setStudentId] = useState('');
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [dob, setDob] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
@@ -26,7 +30,12 @@ const AddStudentModal = ({ onClose, onCreated }) => {
         setError('');
 
         try {
-            const res = await api.post(`${API}/students`, { studentId: trimmedId });
+            const res = await api.post(`${API}/students`, {
+                studentId: trimmedId,
+                name: name.trim() || undefined,
+                phone: phone.trim() || undefined,
+                dob: dob || undefined
+            });
             onCreated(res.data.data);
         } catch (e) {
             setError(e.response?.data?.error || "Failed to create student. Check if ID exists.");
@@ -64,7 +73,7 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                     <form onSubmit={handleSubmit} className="p-6 space-y-6">
                         <div>
                             <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                Student Identifier (Roll/ID)
+                                Student Identifier (Roll/ID) *
                             </label>
                             <input
                                 type="text"
@@ -75,9 +84,45 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                                 autoFocus
                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
                             />
-                            <p className="mt-2 text-[10px] text-slate-400 font-bold tracking-wide">
-                                <span className="text-indigo-500">Note:</span> Default password will be "123456"
-                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Full Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={name}
+                                    onChange={e => setName(e.target.value)}
+                                    placeholder="Enter name"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Phone Number
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={e => setPhone(e.target.value)}
+                                    placeholder="Contact No"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                Date of Birth
+                            </label>
+                            <input
+                                type="date"
+                                value={dob}
+                                onChange={e => setDob(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                            />
                         </div>
 
                         {error && (
@@ -377,6 +422,134 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
 };
 
 // ─── Main Student Manager Tab ───────────────────────────────────────────────────────
+// ─── Student Details Modal ──────────────────────────────────────────────────
+const StudentDetailsModal = ({ student, onClose }) => {
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-100 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={e => e.target === e.currentTarget && onClose()}
+            >
+                <motion.div
+                    initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+                >
+                    <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-indigo-50/50">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center justify-center text-indigo-600">
+                                <Users size={24} />
+                            </div>
+                            <div>
+                                <h2 className="font-black text-slate-900 text-xl tracking-tight leading-none">{student.name || 'Anonymous Student'}</h2>
+                                <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest mt-1.5">{student.studentId}</p>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-8">
+                        {/* Bio Section */}
+                        {student.bio && (
+                            <div className="space-y-3">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <FileText size={12} className="text-indigo-400" /> About Student
+                                </h3>
+                                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                                    <p className="text-sm text-slate-600 font-medium leading-relaxed italic">
+                                        "{student.bio}"
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            {/* Social Profiles */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Connect</h3>
+                                <div className="space-y-2">
+                                    {student.linkedinProfile && (
+                                        <a href={student.linkedinProfile} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-100/50 rounded-xl text-blue-700 hover:bg-blue-50 transition-all group">
+                                            <div className="p-1.5 bg-white border border-blue-100 rounded-lg group-hover:scale-110 transition-transform">
+                                                <Linkedin size={14} />
+                                            </div>
+                                            <span className="text-xs font-bold truncate">LinkedIn Profile</span>
+                                        </a>
+                                    )}
+                                    {student.githubProfile && (
+                                        <a href={student.githubProfile} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700 hover:bg-slate-100 transition-all group">
+                                            <div className="p-1.5 bg-white border border-slate-200 rounded-lg group-hover:scale-110 transition-transform">
+                                                <Github size={14} />
+                                            </div>
+                                            <span className="text-xs font-bold truncate">GitHub Profile</span>
+                                        </a>
+                                    )}
+                                    {!student.linkedinProfile && !student.githubProfile && (
+                                        <p className="text-xs text-slate-400 italic">No social profiles linked</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Contact Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact Details</h3>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700">
+                                        <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                            <Phone size={14} className="text-indigo-400" />
+                                        </div>
+                                        <span className="text-xs font-bold">{student.phone || 'N/A'}</span>
+                                    </div>
+                                    {student.dob && (
+                                        <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700">
+                                            <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                                <Calendar size={14} className="text-indigo-400" />
+                                            </div>
+                                            <span className="text-xs font-bold">
+                                                {new Date(student.dob).toLocaleDateString(undefined, {
+                                                    year: 'numeric',
+                                                    month: 'long',
+                                                    day: 'numeric'
+                                                })}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 cursor-not-allowed">
+                                        <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                            <Mail size={14} />
+                                        </div>
+                                        <span className="text-[10px] font-bold uppercase tracking-tighter">Email Hidden</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Additional Meta */}
+                        <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Status</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${student.isOnboarded ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                    <p className="text-xs font-black text-slate-700 uppercase tracking-wider">{student.isOnboarded ? 'Onboarded' : 'Pending Onboarding'}</p>
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Platform Access</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${student.isBanned ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                                    <p className="text-xs font-black text-slate-700 uppercase tracking-wider">{student.isBanned ? 'Blocked' : 'Active'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
 const StudentManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
     const [students, setStudents] = useState([]);
@@ -392,6 +565,7 @@ const StudentManagerTab = () => {
     // UI State
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
+    const [viewingStudent, setViewingStudent] = useState(null);
     const [resetTarget, setResetTarget] = useState(null);
     const [busy, setBusy] = useState({});
     const [globalError, setGlobalError] = useState('');
@@ -605,6 +779,33 @@ const StudentManagerTab = () => {
                                                     )}
                                                 </div>
                                                 <p className="text-xs text-slate-500 truncate font-medium">{student.name || 'No Name Registered'}</p>
+
+                                                {/* Profile Quick Info Indicators */}
+                                                <div className="flex items-center gap-3 mt-1.5">
+                                                    {student.phone && (
+                                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                                            <Phone size={10} />
+                                                            <span>{student.phone}</span>
+                                                        </div>
+                                                    )}
+                                                    {student.dob && (
+                                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                                            <Calendar size={10} />
+                                                            <span>{new Date(student.dob).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center gap-1.5 border-l border-slate-100 pl-2 ml-1">
+                                                        {student.linkedinProfile && (
+                                                            <Linkedin size={10} className="text-slate-300 hover:text-blue-500 transition-colors" />
+                                                        )}
+                                                        {student.githubProfile && (
+                                                            <Github size={10} className="text-slate-300 hover:text-slate-600 transition-colors" />
+                                                        )}
+                                                        {student.bio && (
+                                                            <FileText size={10} className="text-slate-300" title={student.bio} />
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             {/* Team Selector */}
@@ -625,6 +826,16 @@ const StudentManagerTab = () => {
 
                                     {/* Action Buttons */}
                                     <div className="flex items-center gap-1.5 md:opacity-80 group-hover:opacity-100 transition-opacity justify-end">
+                                        <button
+                                            onClick={() => setViewingStudent(student)}
+                                            title="View Full Profile"
+                                            className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition-all"
+                                        >
+                                            <Eye size={14} />
+                                        </button>
+
+                                        <div className="w-px h-6 bg-slate-200 mx-1" />
+
                                         <button
                                             onClick={() => handleForceLogout(student)}
                                             disabled={busy[`${student._id}-force-logout`]}
@@ -705,6 +916,13 @@ const StudentManagerTab = () => {
                 <ResetStudentPasswordModal
                     student={resetTarget}
                     onClose={() => setResetTarget(null)}
+                />
+            )}
+
+            {viewingStudent && (
+                <StudentDetailsModal
+                    student={viewingStudent}
+                    onClose={() => setViewingStudent(null)}
                 />
             )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
@@ -171,10 +171,33 @@ const SubmissionEvalCard = ({ submission, onScoreSaved }) => {
                     </div>
                     <div className="min-w-0">
                         <p className="font-bold text-slate-900 text-[14px] truncate">{submission.student?.name || 'Unknown'}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                            {submission.student?.studentId} &bull; {submission.round?.name} &bull;{' '}
-                            <span className="text-emerald-600">{gradedCount}/{submission.questions.length} questions graded</span>
-                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                                {submission.student?.studentId} &bull; {submission.round?.name}
+                            </p>
+                            <div className="flex items-center gap-2 border-l border-slate-200 pl-2">
+                                {submission.student?.phone && (
+                                    <div className="flex items-center gap-1 text-[9px] font-black text-slate-500 overflow-hidden max-w-[100px]" title={submission.student.phone}>
+                                        <Phone size={10} className="text-indigo-400" />
+                                        <span className="truncate">{submission.student.phone}</span>
+                                    </div>
+                                )}
+                                {submission.student?.dob && (
+                                    <div className="flex items-center gap-1 text-[9px] font-black text-slate-400">
+                                        <Calendar size={10} />
+                                        <span>{new Date(submission.student.dob).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-1.5 ml-1">
+                                    {submission.student?.linkedinProfile && (
+                                        <Linkedin size={10} className="text-slate-300 hover:text-blue-500 transition-colors" />
+                                    )}
+                                    {submission.student?.githubProfile && (
+                                        <Github size={10} className="text-slate-300 hover:text-slate-600 transition-colors" />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0 ml-4">
