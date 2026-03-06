@@ -19,6 +19,7 @@ const AddStudentModal = ({ onClose, onCreated }) => {
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [dob, setDob] = useState('');
+    const [department, setDepartment] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
@@ -36,7 +37,8 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                 name: name.trim() || undefined,
                 email: email.trim() || undefined,
                 phone: phone.trim() || undefined,
-                dob: dob || undefined
+                dob: dob || undefined,
+                department: department.trim() || undefined
             });
             onCreated(res.data.data);
         } catch (e) {
@@ -141,6 +143,19 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                             </div>
                         </div>
 
+                        <div>
+                            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                Department
+                            </label>
+                            <input
+                                type="text"
+                                value={department}
+                                onChange={e => setDepartment(e.target.value)}
+                                placeholder="e.g. CSE"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                            />
+                        </div>
+
                         {error && (
                             <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 border border-red-200 rounded-xl p-3">
                                 <AlertTriangle size={16} className="shrink-0" />
@@ -160,7 +175,7 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                     </form>
                 </motion.div>
             </motion.div>
-        </AnimatePresence>
+        </AnimatePresence >
     );
 };
 
@@ -493,7 +508,15 @@ const StudentDetailsModal = ({ student, onClose }) => {
                             </div>
                             <div>
                                 <h2 className="font-black text-slate-900 text-xl tracking-tight leading-none">{student.name || 'Anonymous Student'}</h2>
-                                <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest mt-1.5">{student.studentId}</p>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">{student.studentId}</p>
+                                    {student.department && (
+                                        <>
+                                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{student.department}</p>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Question = require('../models/Question');
 const Submission = require('../models/Submission');
 const Round = require('../models/Round');
@@ -1447,90 +1448,146 @@ module.exports = async function (fastify, opts) {
 
             const pdfBuffer = await new Promise(async (resolve, reject) => {
                 try {
-                    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+                    const doc = new PDFDocument({ margin: 40, size: 'A4' });
                     let buffers = [];
                     doc.on('data', buffers.push.bind(buffers));
                     doc.on('end', () => resolve(Buffer.concat(buffers)));
                     doc.on('error', reject);
 
-                    // Title
-                    doc.fontSize(20).text('Student Performance Report', { align: 'center' });
-                    doc.moveDown();
+                    // --- Colors & Styles ---
+                    const NAVY = '#1e293b';
+                    const PURPLE = '#581c87';
+                    const ACCENT = '#f59e0b'; // Amber/Yellow
+                    const LIGHT_BLUE = '#eff6ff';
 
-                    // 1. Overview Table
-                    const overviewTable = {
-                        title: "Student Overview",
-                        headers: ["Field", "Value"],
-                        rows: [
-                            ["Roll Number", student.studentId],
-                            ["Full Name", student.name || 'N/A'],
-                            ["Email", student.email || 'N/A'],
-                            ["Phone", student.phone || 'N/A'],
-                            ["Team", student.team?.name || 'No Team'],
-                            ["Joined At", student.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A']
-                        ]
+                    // --- Header Section ---
+                    doc.font('Helvetica-Bold').fontSize(22).fillColor(NAVY).text('BANNARI AMMAN INSTITUTE OF', { align: 'center' });
+                    doc.text('TECHNOLOGY', { align: 'center' });
+                    doc.moveDown(0.2);
+                    doc.fontSize(16).fillColor(PURPLE).text('CODE CIRCLE CLUB', { align: 'center' });
+                    doc.moveDown(0.5);
+
+                    // Yellow Bar
+                    const pageWidth = doc.page.width;
+                    const barWidth = 100;
+                    doc.rect((pageWidth - barWidth) / 2, doc.y, barWidth, 3).fill(ACCENT);
+                    doc.moveDown(0.8);
+
+                    // Pill Shape for "C-CAP REPORT"
+                    const pillWidth = 140;
+                    const pillHeight = 24;
+                    const pillX = (pageWidth - pillWidth) / 2;
+                    doc.roundedRect(pillX, doc.y, pillWidth, pillHeight, 12).fill(NAVY);
+                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold').text('C-CAP REPORT', pillX, doc.y + 7, { width: pillWidth, align: 'center' });
+                    doc.moveDown(1.5);
+
+                    // Horizontal Divider
+                    doc.moveTo(40, doc.y).lineTo(pageWidth - 40, doc.y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+                    doc.moveDown(0.2);
+                    doc.moveTo(40, doc.y).lineTo(pageWidth - 40, doc.y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+                    doc.moveDown(1);
+
+                    // Styled Title Box
+                    const titleBoxY = doc.y;
+                    doc.roundedRect(40, titleBoxY, pageWidth - 80, 45, 8).fill(LIGHT_BLUE).strokeColor('#e2e8f0').stroke();
+                    doc.fillColor(NAVY).fontSize(18).text('STUDENT REPORT #1', 55, titleBoxY + 14);
+                    doc.moveDown(2.5);
+
+                    // --- 1. STUDENT PROFILE ---
+                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
+                    doc.fillColor(NAVY).fontSize(14).text('1. STUDENT PROFILE', 50, doc.y);
+                    doc.moveDown(0.8);
+
+                    const profileY = doc.y;
+                    const col1X = 60;
+                    const col2X = pageWidth / 2 + 50; // Increased padding for center space
+
+                    const drawField = (label, value, x, y, width) => {
+                        doc.fillColor('#64748b').fontSize(10).text(label.toUpperCase(), x, y);
+                        doc.fillColor(NAVY).fontSize(11).font('Helvetica-Bold').text(value || 'N/A', x + 90, y, { align: 'right', width: width || ((pageWidth / 3) - 100) });
+                        doc.moveTo(x, y + 14).lineTo(x + (pageWidth / 2) - 30, y + 14).strokeColor('#f1f5f9').dash(2, { space: 2 }).stroke().undash();
                     };
-                    await doc.table(overviewTable, { width: 500 });
-                    doc.moveDown();
 
-                    // 2. Individual Performance Table
+                    const attendedCount = submissions.filter(s => s.status !== 'NOT_STARTED').length;
+
+                    drawField('Full Name', student.name, col1X, profileY);
+                    drawField('Roll Number', student.studentId, col2X, profileY);
+                    drawField('Department', student.department, col1X, profileY + 35);
+                    drawField('Current Level', `Level ${attendedCount}`, col2X, profileY + 35);
+
+                    doc.moveDown(4);
+
+                    // --- 2. ASSESSMENT SUMMARY ---
+                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
+                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('2. ASSESSMENT SUMMARY', 50, doc.y);
+                    doc.moveDown(1);
+
                     if (submissions.length > 0) {
-                        const individualTable = {
-                            title: "Individual Performance History",
-                            headers: ["Round Name", "Type", "Status", "Score", "Date"],
-                            rows: submissions.map(s => [
-                                s.round?.name || 'Unknown',
-                                s.round?.type || 'GENERAL',
-                                s.status,
-                                String(s.score ?? 'N/A'),
-                                new Date(s.createdAt).toLocaleDateString()
-                            ])
+                        const assessmentRows = [];
+                        for (const s of submissions) {
+                            // Calculate Pass/Fail
+                            const questions = await Question.find({
+                                $or: [
+                                    { round: s.round?._id },
+                                    { linkedRounds: s.round?._id }
+                                ]
+                            });
+                            const totalPoints = questions.reduce((acc, q) => acc + (q.points || 0), 0);
+                            const qualified = (s.score >= totalPoints * 0.5);
+                            const resultText = qualified ? 'QUALIFIED' : 'ELIMINATED';
+
+                            assessmentRows.push([
+                                new Date(s.createdAt).toLocaleDateString(),
+                                s.round?.name || 'Round',
+                                String(s.score ?? 0),
+                                resultText
+                            ]);
+                        }
+
+                        const assessmentTable = {
+                            headers: [
+                                { label: "Date", property: 'date', width: 100 },
+                                { label: "Level", property: 'level', width: 220 },
+                                { label: "Score", property: 'score', width: 80 },
+                                { label: "Result", property: 'result', width: 100 }
+                            ],
+                            rows: assessmentRows
                         };
-                        await doc.table(individualTable, { width: 500 });
-                        doc.moveDown();
-                    }
 
-                    // 3. Team Performance Table
-                    if (student.team) {
-                        const teamMemberIds = student.team.members;
-                        const teamSubmissions = await Submission.find({
-                            student: { $in: teamMemberIds }
-                        }).populate('round').lean();
-
-                        const groupedByRound = {};
-                        teamSubmissions.forEach(ts => {
-                            const rId = ts.round?._id?.toString();
-                            if (!rId) return;
-                            if (!ts.round.isTeamTest) return;
-
-                            if (!groupedByRound[rId]) {
-                                groupedByRound[rId] = {
-                                    roundName: ts.round.name,
-                                    totalTeamScore: 0,
-                                    studentScore: 0
-                                };
-                            }
-                            groupedByRound[rId].totalTeamScore += (ts.score || 0);
-                            if (ts.student.toString() === id) {
-                                groupedByRound[rId].studentScore = ts.score || 0;
+                        await doc.table(assessmentTable, {
+                            prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
+                            prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
+                                doc.font("Helvetica").fontSize(10);
+                                if (indexColumn === 3) { // Result Column
+                                    if (row[3] === 'QUALIFIED') doc.fillColor('#16a34a');
+                                    else doc.fillColor('#dc2626');
+                                } else {
+                                    doc.fillColor(NAVY);
+                                }
                             }
                         });
-
-                        const teamRows = Object.values(groupedByRound).map(g => [
-                            g.roundName,
-                            String(g.totalTeamScore),
-                            String(g.studentScore)
-                        ]);
-
-                        if (teamRows.length > 0) {
-                            const teamTable = {
-                                title: "Team Performance Context",
-                                headers: ["Round Name", "Team Total Score", "Individual Contribution"],
-                                rows: teamRows
-                            };
-                            await doc.table(teamTable, { width: 500 });
-                        }
+                    } else {
+                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No assessments found.');
                     }
+                    doc.moveDown(2);
+
+                    // --- 3. CODING CHALLENGE HISTORY ---
+                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
+                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('3. CODING CHALLENGE HISTORY', 50, doc.y);
+                    doc.moveDown(1);
+
+                    // Fetch coding challenges
+                    const codingSubmissions = submissions.filter(s => s.round?.type === 'CODE' || s.round?.type === 'SQL_CONTEST');
+                    if (codingSubmissions.length > 0) {
+                        // Similar table or list
+                        doc.font('Helvetica').fontSize(10).fillColor(NAVY).text('Challenges attempted across contests: ' + codingSubmissions.length);
+                    } else {
+                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No coding challenges attempted.');
+                    }
+
+                    // --- Footer Decor ---
+                    const footerY = doc.page.height - 60;
+                    doc.rect(40, footerY, doc.page.width - 80, 6).fill(NAVY);
 
                     doc.end();
                 } catch (err) {

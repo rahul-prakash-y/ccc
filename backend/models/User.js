@@ -78,6 +78,11 @@ const userSchema = new mongoose.Schema({
   dob: {
     type: Date,
     default: null
+  },
+  department: {
+    type: String,
+    trim: true,
+    default: null
   }
 }, {
   timestamps: true
