@@ -2176,6 +2176,131 @@ module.exports = async function (fastify, opts) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch team scores' });
         }
+
+    });
+    // 6. GET /api/superadmin/teams/:teamId/report
+    fastify.get('/teams/:teamId/report', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { teamId } = request.params;
+
+        try {
+            const team = await Team.findById(teamId).populate('members', 'name studentId phone email department');
+            if (!team) return reply.code(404).send({ error: 'Team not found' });
+
+            // Fetch all teams to calculate rank
+            const allTeams = await Team.find({}).lean();
+            const allSubmissions = await Submission.find({ score: { $ne: null } }).lean();
+
+            const scores = allTeams.map(t => {
+                const teamSubmissions = allSubmissions.filter(s =>
+                    t.members.some(mId => mId.toString() === s.student.toString())
+                );
+                return {
+                    id: t._id.toString(),
+                    totalScore: teamSubmissions.reduce((sum, s) => sum + (s.score || 0), 0)
+                };
+            }).sort((a, b) => b.totalScore - a.totalScore);
+
+            const rank = scores.findIndex(s => s.id === teamId) + 1;
+            const teamTotalScore = scores.find(s => s.id === teamId)?.totalScore || 0;
+
+            // Fetch individual scores for team members
+            const memberStats = await Promise.all(team.members.map(async (m) => {
+                const memberSubmissions = allSubmissions.filter(s => s.student.toString() === m._id.toString());
+                const totalScore = memberSubmissions.reduce((sum, s) => sum + (s.score || 0), 0);
+                const attended = memberSubmissions.filter(s => s.status !== 'NOT_STARTED').length;
+                return {
+                    name: m.name,
+                    studentId: m.studentId,
+                    attended,
+                    score: totalScore
+                };
+            }));
+
+            const pdfBuffer = await new Promise(async (resolve, reject) => {
+                try {
+                    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+                    let buffers = [];
+                    doc.on('data', buffers.push.bind(buffers));
+                    doc.on('end', () => resolve(Buffer.concat(buffers)));
+                    doc.on('error', reject);
+
+                    // Styles
+                    const NAVY = '#1e293b';
+                    const PURPLE = '#581c87';
+                    const ACCENT = '#f59e0b';
+                    const LIGHT_BLUE = '#eff6ff';
+
+                    // Header
+                    doc.font('Helvetica-Bold').fontSize(22).fillColor(NAVY).text('BANNARI AMMAN INSTITUTE OF', { align: 'center' });
+                    doc.text('TECHNOLOGY', { align: 'center' });
+                    doc.moveDown(0.2);
+                    doc.fontSize(16).fillColor(PURPLE).text('CODE CIRCLE CLUB', { align: 'center' });
+                    doc.moveDown(0.5);
+                    const pageWidth = doc.page.width;
+                    doc.rect((pageWidth - 100) / 2, doc.y, 100, 3).fill(ACCENT);
+                    doc.moveDown(0.8);
+                    const chipWidth = 180; // Increased from 160 for padding
+                    const chipHeight = 24;
+                    const chipX = (pageWidth - chipWidth) / 2;
+                    doc.roundedRect(chipX, doc.y, chipWidth, chipHeight, 12).fill(NAVY);
+                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold').text('TEAM PERFORMANCE REPORT', chipX, doc.y + 7, { width: chipWidth, align: 'center' });
+                    doc.moveDown(2);
+
+                    // Team Info Box
+                    const infoY = doc.y;
+                    doc.roundedRect(40, infoY, pageWidth - 80, 70, 10).fill(LIGHT_BLUE).strokeColor('#e2e8f0').stroke();
+
+                    doc.fillColor(NAVY).fontSize(18).font('Helvetica-Bold').text(team.name.toUpperCase(), 60, infoY + 15);
+                    doc.fontSize(10).font('Helvetica').fillColor('#64748b').text(`RANK #${rank} OVERALL`, 60, infoY + 38);
+
+                    doc.fillColor(PURPLE).fontSize(24).font('Helvetica-Bold').text(String(teamTotalScore), pageWidth - 200, infoY + 15, { width: 140, align: 'right' });
+                    doc.fontSize(10).font('Helvetica-Bold').fillColor(PURPLE).text('AGGREGATE POINTS', pageWidth - 200, infoY + 42, { width: 140, align: 'right' });
+
+                    doc.moveDown(4);
+
+                    // 1. SQUAD OVERVIEW
+                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
+                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('1. SQUAD OVERVIEW', 50, doc.y);
+                    doc.moveDown(1);
+
+                    const table = {
+                        headers: [
+                            { label: "Roll Number", property: 'studentId', width: 100 },
+                            { label: "Member Name", property: 'name', width: 200 },
+                            { label: "Attended", property: 'attended', width: 80 },
+                            { label: "Contribution", property: 'score', width: 100 }
+                        ],
+                        rows: memberStats.map(m => [
+                            m.studentId,
+                            m.name,
+                            String(m.attended),
+                            String(m.score)
+                        ])
+                    };
+
+                    await doc.table(table, {
+                        prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
+                        prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
+                            doc.font("Helvetica").fontSize(10).fillColor(NAVY);
+                            if (indexRow % 2 === 0) doc.addBackground(rectRow, LIGHT_BLUE, 0.4);
+                        }
+                    });
+
+                    // Footer
+                    const footerY = doc.page.height - 60;
+                    doc.rect(40, footerY, doc.page.width - 80, 6).fill(NAVY);
+
+                    doc.end();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+
+            reply.type('application/pdf').header('Content-Disposition', `attachment; filename=Team_Report_${team.name}.pdf`).send(pdfBuffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate team report' });
+        }
     });
 
 };
