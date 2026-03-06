@@ -17,7 +17,11 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const rounds = await Round.find({}).sort({ createdAt: -1 }).lean();
+            // Exclude sensitive OTP fields from the initial query for students
+            const rounds = await Round.find({})
+                .select('-startOtp -endOtp -otpIssuedAt')
+                .sort({ createdAt: -1 })
+                .lean();
             const studentId = request.user.userId;
 
             // Enrich rounds with the student's submission status
@@ -149,7 +153,7 @@ module.exports = async function (fastify, opts) {
                     ...(isOtpActive !== undefined && { isOtpActive })
                 },
                 { new: true }
-            );
+            ).select('-startOtp -endOtp -otpIssuedAt');
 
             await logActivity({
                 action: 'UPDATED',
@@ -632,13 +636,14 @@ module.exports = async function (fastify, opts) {
                     round: {
                         name: round.name,
                         type: round.type,
-                        durationMinutes: round.testGroupId ? round.testDurationMinutes : round.durationMinutes,
+                        durationMinutes: round.testDurationMinutes || round.durationMinutes,
                         status: round.status,
                         startTime: submission.startTime,
                         extraTimeMinutes: submission.extraTimeMinutes || 0,
                         totalRounds,
                         roundNumber,
-                        hasNextRound: !!nextRoundId
+                        hasNextRound: !!nextRoundId,
+                        isTeamTest: round.isTeamTest
                     },
                     questions: assignedQuestions.map(q => ({
                         _id: q._id,

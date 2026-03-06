@@ -38,16 +38,17 @@ module.exports = async function (fastify, opts) {
                 roundOrder: roundOrder || 1
             });
 
-            await round.save();
+            const savedRound = await round.save();
+            const data = await Round.findById(savedRound._id).select('-startOtp -endOtp -otpIssuedAt');
 
             await logActivity({
                 action: 'CREATED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Round', id: round._id, label: round.name },
+                target: { type: 'Round', id: data._id, label: data.name },
                 ip: request.ip
             });
 
-            return reply.code(201).send({ success: true, data: round });
+            return reply.code(201).send({ success: true, data });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to create round' });
@@ -58,7 +59,7 @@ module.exports = async function (fastify, opts) {
      * 1. GET /api/superadmin/audit-logs
      * Returns all submissions across all rounds, enriched with student + round info.
      */
-    fastify.get('/audit-logs', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.get('/audit-logs', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId, search, page = 1, limit = 20 } = request.query;
 
@@ -93,8 +94,8 @@ module.exports = async function (fastify, opts) {
 
             const [submissions, total] = await Promise.all([
                 Submission.find(filter)
-                    .populate('student', 'studentId name role')
-                    .populate('round', 'name status')
+                    .populate('student', 'studentId name role isBanned')
+                    .populate('round', 'name status type')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),
@@ -176,7 +177,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const rounds = await Round.find({}).sort({ createdAt: 1 });
+            const rounds = await Round.find({}).select('-startOtp -endOtp -otpIssuedAt').sort({ createdAt: 1 });
             return reply.code(200).send({ success: true, data: rounds });
         } catch (error) {
             fastify.log.error(error);
@@ -198,7 +199,7 @@ module.exports = async function (fastify, opts) {
             if (questionCount !== undefined) updateFields.questionCount = questionCount === '' ? null : Number(questionCount) || null;
             if (shuffleQuestions !== undefined) updateFields.shuffleQuestions = Boolean(shuffleQuestions);
 
-            const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true });
+            const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             // Clear previously assigned question sets so students get re-assigned on next load
@@ -383,9 +384,11 @@ module.exports = async function (fastify, opts) {
     // 1. GET /api/superadmin/question-bank
     fastify.get('/question-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search, page = 1, limit = 50 } = request.query;
+            const { search, category, page = 1, limit = 50 } = request.query;
 
             const filter = { isBank: true };
+            if (category) filter.category = category;
+
             if (search) {
                 const searchRegex = new RegExp(search, 'i');
                 filter.$or = [
@@ -476,6 +479,128 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * POST /api/superadmin/bulk-upload-questions
+     * Parses Excel, validates, and saves multiple questions to the library.
+     */
+    fastify.post('/bulk-upload-questions', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data) return reply.code(400).send({ error: 'No spreadsheet file uploaded' });
+
+            const buffer = await data.toBuffer();
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet);
+
+            if (rows.length === 0) return reply.code(400).send({ error: 'Excel file is empty' });
+
+            const validDifficulties = ['EASY', 'MEDIUM', 'HARD'];
+            const validTypes = ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX', 'MINI_HACKATHON'];
+            const validCategories = ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'];
+
+            const questionsToSave = [];
+            let errorCount = 0;
+            const errors = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const lineNum = i + 2; // Assuming header is line 1
+
+                const title = row.title || row.Title;
+                const description = row.description || row.Description || row.Problem_Statement;
+
+                if (!title || !description) {
+                    errorCount++;
+                    errors.push(`Row ${lineNum}: Title and Description are required.`);
+                    continue;
+                }
+
+                const difficulty = (row.difficulty || row.Difficulty || 'MEDIUM').toUpperCase();
+                const type = (row.type || row.Type || 'CODE').toUpperCase();
+                const category = (row.category || row.Category || 'GENERAL').toUpperCase();
+                const points = Number(row.points || row.Points) || 10;
+                const isManualEvaluation = String(row.isManualEvaluation || row.Manual_Evaluation).toLowerCase() === 'true';
+
+                if (!validDifficulties.includes(difficulty)) {
+                    errorCount++;
+                    errors.push(`Row ${lineNum}: Invalid difficulty "${difficulty}".`);
+                    continue;
+                }
+                if (!validTypes.includes(type)) {
+                    errorCount++;
+                    errors.push(`Row ${lineNum}: Invalid type "${type}".`);
+                    continue;
+                }
+                if (!validCategories.includes(category)) {
+                    errorCount++;
+                    errors.push(`Row ${lineNum}: Invalid category "${category}".`);
+                    continue;
+                }
+
+                // Handle Options for MCQ
+                let options = [];
+                if (type === 'MCQ') {
+                    if (row.options || row.Options) {
+                        options = String(row.options || row.Options).split(',').map(o => o.trim());
+                    } else {
+                        for (let j = 1; j <= 10; j++) {
+                            const opt = row[`Option ${j}`] || row[`option ${j}`] || row[`Option${j}`];
+                            if (opt) options.push(String(opt).trim());
+                        }
+                    }
+                    if (options.length < 2) {
+                        errorCount++;
+                        errors.push(`Row ${lineNum}: MCQ requires at least 2 options.`);
+                        continue;
+                    }
+                }
+
+                questionsToSave.push({
+                    isBank: true,
+                    title,
+                    description,
+                    inputFormat: row.inputFormat || row.Input_Format || '',
+                    outputFormat: row.outputFormat || row.Output_Format || '',
+                    sampleInput: row.sampleInput || row.Sample_Input || '',
+                    sampleOutput: row.sampleOutput || row.Sample_Output || '',
+                    difficulty,
+                    points,
+                    type,
+                    category,
+                    options,
+                    correctAnswer: String(row.correctAnswer || row.Correct_Answer || ''),
+                    isManualEvaluation
+                });
+            }
+
+            if (questionsToSave.length === 0) {
+                return reply.code(400).send({ error: 'No valid questions found in file.', details: errors });
+            }
+
+            const savedQuestions = await Question.insertMany(questionsToSave);
+
+            await logActivity({
+                action: 'BULK_UPLOAD',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', label: `Bulk Upload: ${savedQuestions.length} Library items` },
+                metadata: { successCount: savedQuestions.length, errorCount },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({
+                success: true,
+                message: `Successfully imported ${savedQuestions.length} questions.`,
+                errorCount,
+                errors: errors.length > 0 ? errors : undefined
+            });
+
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to process bulk upload', details: error.message });
+        }
+    });
+
     // 3. POST /api/superadmin/rounds/:roundId/import-from-bank
     fastify.post('/rounds/:roundId/import-from-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
@@ -524,120 +649,100 @@ module.exports = async function (fastify, opts) {
     fastify.get('/manual-evaluations', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const adminId = request.user.userId;
-            const { page = 1, limit = 10 } = request.query;
+            const { page = 1, limit = 10, search = '' } = request.query;
 
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
 
-            const filter = {
+            // 1. Get all questions assigned to this admin for manual evaluation
+            const adminQuestions = await Question.find({
                 isManualEvaluation: true,
-                assignedAdmin: adminId,
-                $or: [
-                    { round: { $ne: null } },
-                    { 'linkedRounds.0': { $exists: true } }
-                ]
-            };
+                assignedAdmin: adminId
+            }).select('_id title description points type round category').lean();
 
-            // Find questions assigned to this admin with pagination
-            const [questions, total] = await Promise.all([
-                Question.find(filter)
-                    .populate('round', 'name')
-                    .populate('linkedRounds', 'name')
-                    .sort({ createdAt: -1 })
-                    .skip(skip)
-                    .limit(limitNum)
-                    .lean(),
-                Question.countDocuments(filter)
-            ]);
-
-            if (questions.length === 0) {
+            if (adminQuestions.length === 0) {
                 return reply.code(200).send({
                     success: true,
                     data: [],
-                    pagination: {
-                        totalRecords: total,
-                        total,
-                        page: pageNum,
-                        limit: limitNum,
-                        totalPages: Math.ceil(total / limitNum)
-                    }
+                    pagination: { totalRecords: 0, totalPages: 0, page: pageNum, limit: limitNum }
                 });
             }
 
-            // Collect unique round ObjectIds from direct rounds and linked rounds
-            const roundObjectIds = [];
-            questions.forEach(q => {
-                if (q.round) {
-                    roundObjectIds.push(q.round._id ? q.round._id.toString() : q.round.toString());
+            const adminQuestionIds = adminQuestions.map(q => q._id);
+
+            // 2. Build filter for Submissions
+            const submissionFilter = {
+                assignedQuestions: { $in: adminQuestionIds },
+                status: 'SUBMITTED'
+            };
+
+
+            if (search.trim()) {
+                const students = await User.find({
+                    role: 'STUDENT',
+                    $or: [
+                        { name: { $regex: search, $options: 'i' } },
+                        { studentId: { $regex: search, $options: 'i' } }
+                    ]
+                }).select('_id');
+                submissionFilter.student = { $in: students.map(s => s._id) };
+            }
+
+            // 3. Find and Paginate Submissions
+            const [submissions, total] = await Promise.all([
+                Submission.find(submissionFilter)
+                    .populate('student', 'name studentId')
+                    .populate('round', 'name')
+                    .sort({ updatedAt: -1 })
+                    .skip(skip)
+                    .limit(limitNum)
+                    .lean(),
+                Submission.countDocuments(submissionFilter)
+            ]);
+
+            // 4. Transform results to show Student -> [Questions]
+            const result = submissions.map(sub => {
+                let answers = {};
+                try {
+                    answers = JSON.parse(sub.codeContent || '{}');
+                } catch (e) {
+                    answers = {};
                 }
-                if (q.linkedRounds && q.linkedRounds.length > 0) {
-                    q.linkedRounds.forEach(r => {
-                        roundObjectIds.push(r._id ? r._id.toString() : r.toString());
-                    });
-                }
-            });
-            const uniqueRoundIds = [...new Set(roundObjectIds)];
 
-            // Find all submissions for those rounds that need evaluation
-            const submissions = await Submission.find({ round: { $in: uniqueRoundIds } })
-                .populate('student', 'studentId name')
-                .lean();
-
-            // Build result: for each question, list all students and their answer + score
-            const result = questions.map(question => {
-                const qRoundIds = [];
-                if (question.round) qRoundIds.push(question.round._id ? question.round._id.toString() : question.round.toString());
-                if (question.linkedRounds) {
-                    question.linkedRounds.forEach(r => qRoundIds.push(r._id ? r._id.toString() : r.toString()));
-                }
-
-                if (qRoundIds.length === 0) return { question, students: [] };
-
-                const students = submissions
-                    .filter(sub => qRoundIds.includes(sub.round.toString()))
-                    .filter(sub => {
-                        if (sub.assignedQuestions && sub.assignedQuestions.length > 0) {
-                            return sub.assignedQuestions.some(id => id.toString() === question._id.toString());
-                        }
-                        try {
-                            const parsed = JSON.parse(sub.codeContent || '{}');
-                            return parsed[question._id.toString()] !== undefined;
-                        } catch (_) {
-                            return true;
-                        }
-                    })
-                    .map(sub => {
-                        let answer = null;
-                        try {
-                            const parsed = JSON.parse(sub.codeContent || '{}');
-                            const rawAnswer = parsed[question._id.toString()];
-                            answer = rawAnswer !== undefined ? rawAnswer : null;
-                        } catch (_) {
-                            answer = sub.codeContent || null;
-                        }
-
-                        const existingScore = (sub.manualScores || []).find(
-                            ms => ms.questionId && ms.questionId.toString() === question._id.toString()
-                        );
-
-                        return {
-                            submissionId: sub._id,
-                            student: sub.student,
-                            submissionStatus: sub.status,
-                            answer,
-                            pdfUrl: sub.pdfUrl || null,
-                            existingScore: existingScore || null
-                        };
-                    });
+                const relevantQuestions = adminQuestions.filter(q =>
+                    sub.assignedQuestions.some(aqId => aqId.toString() === q._id.toString())
+                ).map(q => {
+                    const existingScore = sub.manualScores?.find(ms => ms.questionId?.toString() === q._id.toString());
+                    return {
+                        question: q,
+                        answer: answers[q._id.toString()],
+                        existingScore: existingScore || null
+                    };
+                });
 
                 return {
-                    question,
-                    students
+                    submissionId: sub._id,
+                    student: sub.student,
+                    round: sub.round,
+                    pdfUrl: sub.pdfUrl,
+                    status: sub.status,
+                    assignedQuestionsCount: sub.assignedQuestions.length,
+                    questions: relevantQuestions
                 };
             });
 
-            return reply.code(200).send({ success: true, data: result });
+            return reply.code(200).send({
+                success: true,
+                data: result,
+                pagination: {
+                    totalRecords: total,
+                    total: total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages: Math.ceil(total / limitNum)
+                }
+            });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch manual evaluations' });
@@ -1144,6 +1249,9 @@ module.exports = async function (fastify, opts) {
             const student = await User.findOneAndDelete({ _id: studentId, role: 'STUDENT' });
             if (!student) return reply.code(404).send({ error: 'Student not found' });
 
+            // Cascading delete: Remove all submissions for this student to maintain integrity
+            await Submission.deleteMany({ student: studentId });
+
             await logActivity({
                 action: 'DELETED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
@@ -1532,7 +1640,7 @@ module.exports = async function (fastify, opts) {
             if (isOtpActive !== undefined) updates.isOtpActive = isOtpActive;
             if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
 
-            const round = await Round.findByIdAndUpdate(roundId, updates, { new: true });
+            const round = await Round.findByIdAndUpdate(roundId, updates, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             await logActivity({

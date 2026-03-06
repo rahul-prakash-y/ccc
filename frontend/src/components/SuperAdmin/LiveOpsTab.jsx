@@ -607,7 +607,7 @@ const LiveOpsTab = () => {
       <AnimatePresence>
         {/* Create Test Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-slate-800">New Assessment Generation</h3>
@@ -641,7 +641,7 @@ const LiveOpsTab = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Test Configuration</label>
                   </div>
                   <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-1.5 absolute top-4 right-4 z-60">
                       <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider whitespace-nowrap">Assessment Type</h4>
                       <div className="flex-1">
                         <select className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none shadow-sm text-slate-800"
@@ -686,7 +686,7 @@ const LiveOpsTab = () => {
         {/* Global Confirmation Dialog */}
         {
           confirmDialog.isOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+            <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
               <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-8 text-center">
                 <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${confirmDialog.isDestructive ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-500'}`}>
                   {confirmDialog.isDestructive ? <AlertTriangle size={32} /> : <CheckCircle2 size={32} />}
@@ -707,7 +707,7 @@ const LiveOpsTab = () => {
         {/* Projector Mode with live OTP */}
         {
           projectorSection && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-10">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-200 bg-slate-950 flex flex-col items-center justify-center p-10">
               <button onClick={() => setProjectorSection(null)} className="absolute top-10 right-10 text-slate-500 hover:text-white font-black tracking-[0.3em] text-xs transition-colors">[ ESC / CLOSE ]</button>
               <div className="text-center w-full max-w-6xl">
                 <div className="flex items-center justify-center gap-3 mb-8">

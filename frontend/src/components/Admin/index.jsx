@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -10,6 +10,9 @@ import StudentManagerTab from '../SuperAdmin/StudentManagerTab';
 import QuestionManagerTab from '../SuperAdmin/QuestionManagerTab';
 import EvaluationTab from '../SuperAdmin/EvaluationTab';
 import StudentScoreDashboard from '../SuperAdmin/StudentScoreDashboard';
+import AuditLogsTab from '../SuperAdmin/AuditLogsTab';
+import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
+import TeamScoreTab from '../SuperAdmin/TeamScoreTab';
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -17,6 +20,9 @@ const TABS = [
     { id: 'questions', label: 'Questions', icon: BookOpen },
     { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
     { id: 'scores', label: 'Student Scores', icon: Trophy },
+    { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
+    { id: 'teams', label: 'Teams', icon: Users },
+    { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
 ];
 
 const AdminDashboard = () => {
@@ -48,7 +54,7 @@ const AdminDashboard = () => {
                     {/* Identity Section */}
                     <div className="flex items-center gap-4">
                         <div className="relative group">
-                            <div className="absolute -inset-1 bg-gradient-to-tr from-rose-500 to-orange-400 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
+                            <div className="absolute -inset-1 bg-linear-to-tr from-rose-500 to-orange-400 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
                             <div className="relative p-2.5 bg-white border border-slate-100 rounded-xl">
                                 <ShieldCheck size={22} className="text-rose-600" />
                             </div>
@@ -144,11 +150,14 @@ const AdminDashboard = () => {
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
                                 {activeTab === 'scores' && <StudentScoreDashboard />}
+                                {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
+                                {activeTab === 'teams' && <TeamManagerTab />}
+                                {activeTab === 'team-scores' && <TeamScoreTab />}
                             </div>
                         </div>
 
                         {/* Bottom Gradient Overlay (Depth Indicator) */}
-                        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-20" />
+                        <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-t from-white via-white/80 to-transparent pointer-events-none z-20" />
                     </motion.div>
                 </AnimatePresence>
             </main>

@@ -472,7 +472,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                     {/* IDE Header */}
                     <div className="h-10 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
                         {/* Active Tab */}
-                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-t-lg border-t border-x border-slate-200 border-b-0 text-xs font-mono font-bold text-indigo-600 relative top-[1px]">
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-t-lg border-t border-x border-slate-200 border-b-0 text-xs font-mono font-bold text-indigo-600 relative top-px">
                             <Terminal size={14} className="text-indigo-400" />
                             <span>
                                 {q?.type === 'MCQ' ? 'Selection_Matrix.exe' :
@@ -540,24 +540,30 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     ))}
                                 </div>
                             </div>
-                        ) : (q?.type === 'UI_UX' || roundInfo?.type === 'UI_UX_CHALLENGE') ? (
+                        ) : (q?.type === 'UI_UX' || q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'UI_UX_CHALLENGE' || roundInfo?.type === 'MINI_HACKATHON') ? (
                             <div className="p-4 sm:p-8 h-full overflow-y-auto custom-scrollbar flex flex-col items-center justify-center bg-slate-50/50">
                                 <div className="max-w-xl w-full space-y-8 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
                                     <div className="text-center">
                                         <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                             <Code2 size={32} />
                                         </div>
-                                        <h3 className="text-xl font-black text-slate-800 tracking-tight">UI/UX Challenge Submission</h3>
-                                        <p className="text-slate-500 text-sm mt-2">Provide your Figma project link and upload a PDF snapshot of your design.</p>
+                                        <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                                            {(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? 'Mini Hackathon Submission' : 'UI/UX Challenge Submission'}
+                                        </h3>
+                                        <p className="text-slate-500 text-sm mt-2">
+                                            {(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? 'Provide your GitHub repository link and upload a PDF abstract of your project.' : 'Provide your Figma project link and upload a PDF snapshot of your design.'}
+                                        </p>
                                     </div>
 
                                     <div className="space-y-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Figma Project URL</label>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                                {(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? 'GitHub Repository URL' : 'Figma Project URL'}
+                                            </label>
                                             <input
                                                 type="url"
                                                 disabled={isTimeUp}
-                                                placeholder="https://www.figma.com/file/..."
+                                                placeholder={(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? "https://github.com/username/repo" : "https://www.figma.com/file/..."}
                                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium text-slate-700"
                                                 value={currentAnswer}
                                                 onChange={(e) => handleAnswerChange(q?._id, e.target.value)}
@@ -565,7 +571,9 @@ const CodeArena = ({ language = 'javascript' }) => {
                                         </div>
 
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Design Snapshot (PDF)</label>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                                {(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? 'Project Abstract / Screenshots (PDF)' : 'Design Snapshot (PDF)'}
+                                            </label>
                                             <label className={`block w-full border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${pdfUrl ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/30 bg-slate-50'} ${isTimeUp ? 'cursor-not-allowed opacity-60' : ''}`}>
                                                 <input
                                                     type="file"
@@ -593,7 +601,9 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                 {pdfUrl ? (
                                                     <div className="flex flex-col items-center gap-2">
                                                         <CheckCircle className="text-emerald-500" size={24} />
-                                                        <span className="text-sm font-bold text-emerald-700">PDF Snapshot Attached</span>
+                                                        <span className="text-sm font-bold text-emerald-700">
+                                                            {(q?.type === 'MINI_HACKATHON' || roundInfo?.type === 'MINI_HACKATHON') ? 'Project PDF Attached' : 'PDF Snapshot Attached'}
+                                                        </span>
                                                         <span className="text-[10px] text-emerald-600/70 font-black uppercase tracking-widest">Click to replace</span>
                                                     </div>
                                                 ) : (
@@ -608,7 +618,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     </div>
                                 </div>
                             </div>
-                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? (
+                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? (
                             !q ? (
                                 <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
                                     <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
@@ -727,7 +737,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             className={`relative w-full max-w-md overflow-hidden rounded-3xl bg-white border shadow-2xl ${isTimeUp ? 'border-red-200' : 'border-indigo-200'}`}
                         >
-                            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isTimeUp ? 'from-transparent via-red-500 to-transparent' : 'from-transparent via-indigo-500 to-transparent'}`}></div>
+                            <div className={`absolute top-0 left-0 right-0 h-1 bg-linear-to-r ${isTimeUp ? 'from-transparent via-red-500 to-transparent' : 'from-transparent via-indigo-500 to-transparent'}`}></div>
 
                             <div className="p-8">
                                 <div className="flex items-center gap-4 mb-6">
@@ -784,7 +794,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting || ((!roundInfo?.hasNextRound || isTimeUp) && endOtp.join('').length !== 6)}
-                                            className={`flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
+                                            className={`flex-2 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
                                         >
                                             {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Verifying</> : (roundInfo?.hasNextRound && !isTimeUp ? <><Send size={16} /> Proceed to Next</> : <><Send size={16} /> Confirm Sequence</>)}
                                         </button>

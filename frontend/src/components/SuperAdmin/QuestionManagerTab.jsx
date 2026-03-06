@@ -19,12 +19,19 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
     const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
     const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
+    const [category, setCategory] = useState('');
 
     useEffect(() => {
         const fetchBankAndExisting = async () => {
+            setLoading(true);
             try {
+                const params = new URLSearchParams();
+                if (search) params.append('search', search);
+                if (category) params.append('category', category);
+
                 const [bankRes, existingRes] = await Promise.all([
-                    api.get(`${API}/question-bank`),
+                    api.get(`${API}/question-bank?${params.toString()}`),
                     api.get(`${API}/questions/${roundId}?limit=1000`) // fetch all to check imported
                 ]);
                 setBankQuestions(bankRes.data.data || []);
@@ -40,7 +47,7 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
             }
         };
         fetchBankAndExisting();
-    }, [roundId]);
+    }, [roundId, search, category]);
 
     const toggleSelection = (id, isAlreadyImported) => {
         if (isAlreadyImported) return;
@@ -48,6 +55,21 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
         setSelectedIds(newSet);
+    };
+
+    const toggleSelectAll = () => {
+        const nonImported = bankQuestions.filter(q => !importedBankIds.has(q._id));
+        if (nonImported.length === 0) return;
+
+        const allSelected = nonImported.every(q => selectedIds.has(q._id));
+        const newSelected = new Set(selectedIds);
+
+        if (allSelected) {
+            nonImported.forEach(q => newSelected.delete(q._id));
+        } else {
+            nonImported.forEach(q => newSelected.add(q._id));
+        }
+        setSelectedIds(newSelected);
     };
 
     const handleImport = async () => {
@@ -76,19 +98,67 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                     initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
                     className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl max-h-full flex flex-col shadow-2xl overflow-hidden"
                 >
-                    <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-emerald-50/50 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
-                                <Import size={18} />
+                    <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                    <Import size={18} />
+                                </div>
+                                <div>
+                                    <h2 className="font-bold text-slate-900 text-lg">Import from Library</h2>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Select questions to copy into this round</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="font-bold text-slate-900 text-lg">Import from Library</h2>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Select questions to copy into this round</p>
+                            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                            <div className="relative flex-1 w-full">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search library questions..."
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                                />
+                                {search && (
+                                    <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        <X size={14} />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <div className="relative flex-1 sm:w-40">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                        <Filter size={12} />
+                                    </div>
+                                    <select
+                                        value={category}
+                                        onChange={e => setCategory(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none shadow-sm cursor-pointer"
+                                    >
+                                        <option value="">All Categories</option>
+                                        <option value="GENERAL">General</option>
+                                        <option value="SQL">SQL</option>
+                                        <option value="HTML">HTML</option>
+                                        <option value="CSS">CSS</option>
+                                        <option value="UI_UX">UI/UX</option>
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                                <button
+                                    onClick={toggleSelectAll}
+                                    disabled={bankQuestions.filter(q => !importedBankIds.has(q._id)).length === 0}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-sm active:scale-95 whitespace-nowrap disabled:opacity-50"
+                                >
+                                    <Check size={14} className={bankQuestions.filter(q => !importedBankIds.has(q._id)).every(q => selectedIds.has(q._id)) ? "text-emerald-500" : "text-slate-400"} />
+                                    Select All
+                                </button>
                             </div>
                         </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
-                            <X size={16} />
-                        </button>
                     </div>
 
                     <div className="overflow-y-auto custom-scrollbar p-6 flex-1 bg-slate-50/30">

@@ -1,21 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-    ClipboardCheck, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp,
-    User, BookOpen, Star, Search
-} from 'lucide-react';
+import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
 import { SkeletonList } from '../Skeleton';
 
-// ─── Single student evaluation row ──────────────────────────────────────────
-const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
-    const [score, setScore] = useState(entry.existingScore?.score ?? '');
-    const [feedback, setFeedback] = useState(entry.existingScore?.feedback ?? '');
+// ─── Single question evaluation row (inside a student's submission card) ─────
+const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved }) => {
+    const { question, answer, existingScore } = questionEntry;
+    const [score, setScore] = useState(existingScore?.score ?? '');
+    const [feedback, setFeedback] = useState(existingScore?.feedback ?? '');
     const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(!!entry.existingScore);
+    const [saved, setSaved] = useState(!!existingScore);
     const [error, setError] = useState('');
+
+    const formatFigmaUrl = (url) => {
+        if (!url || typeof url !== 'string') return url;
+        const trimmed = url.trim();
+        if (!trimmed) return trimmed;
+        if (!trimmed.startsWith('http')) {
+            return `https://${trimmed}`;
+        }
+        return trimmed;
+    };
+
+
 
     const handleSave = async () => {
         const numScore = Number(score);
@@ -26,7 +36,7 @@ const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
         setSaving(true);
         setError('');
         try {
-            await api.post(`${API}/manual-evaluations/${entry.submissionId}/score`, {
+            await api.post(`${API}/manual-evaluations/${submissionId}/score`, {
                 questionId: question._id,
                 score: numScore,
                 feedback
@@ -41,113 +51,112 @@ const StudentEvalRow = ({ entry, question, onScoreSaved }) => {
     };
 
     return (
-        <div className="bg-white border border-slate-100 rounded-xl p-4 space-y-3">
-            {/* Student header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                        <User size={14} />
-                    </div>
-                    <div>
-                        <p className="text-[13px] font-bold text-slate-900">{entry.student?.name || 'Unknown'}</p>
-                        <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">{entry.student?.studentId}</p>
-                    </div>
-                </div>
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            {/* Question Header */}
+            <div className="px-4 py-2.5 bg-indigo-50/50 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    {/* Submission status badge */}
-                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border ${entry.submissionStatus === 'SUBMITTED' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                        entry.submissionStatus === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                            entry.submissionStatus === 'DISQUALIFIED' ? 'bg-red-50 border-red-200 text-red-600' :
-                                'bg-slate-50 border-slate-200 text-slate-500'
-                        }`}>
-                        {entry.submissionStatus || 'NOT STARTED'}
-                    </span>
-                    {saved && (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black rounded-lg uppercase tracking-widest">
-                            <Check size={10} /> Graded
-                        </span>
+                    <BookOpen size={14} className="text-indigo-500" />
+                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{question.title}</p>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{question.points} Points Max</p>
+            </div>
+
+            <div className="p-4 space-y-4">
+                {/* Answer Content */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Submitted Answer</p>
+                    {answer !== null && answer !== undefined && String(answer).trim() !== '' ? (
+                        <div>
+                            {(question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') ? (
+                                <a
+                                    href={formatFigmaUrl(String(answer))}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-bold text-indigo-600 hover:underline break-all"
+                                >
+                                    {String(answer)}
+                                </a>
+                            ) : (
+                                <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                                    {typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer)}
+                                </pre>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
                     )}
                 </div>
-            </div>
 
-            {/* Student's answer */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Student's Answer</p>
-                {entry.answer !== null && entry.answer !== undefined && String(entry.answer).trim() !== '' ? (
-                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
-                        {typeof entry.answer === 'object' ? JSON.stringify(entry.answer, null, 2) : String(entry.answer)}
-                    </pre>
-                ) : (
-                    <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
-                )}
+                {/* Question Description for Admin context */}
+                <div className="px-3 py-2 bg-amber-50/50 border border-amber-100 rounded-lg">
+                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Grading Context</p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed whitespace-pre-wrap">
+                        {question.description}
+                    </p>
+                </div>
 
-                {entry.pdfUrl && (
-                    <div className="mt-3 pt-3 border-t border-slate-200">
-                        <a
-                            href={entry.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold transition-colors"
-                        >
-                            <ClipboardCheck size={14} />
-                            View Attached PDF Snapshot
-                        </a>
+                {/* Score + feedback inputs */}
+                <div className="grid grid-cols-[100px_1fr] gap-3 items-start">
+                    <div>
+                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                            Score <span className="text-slate-300">/ {question.points}</span>
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max={question.points}
+                            value={score}
+                            onChange={e => { setScore(e.target.value); setSaved(false); }}
+                            placeholder="0"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                            Feedback (optional)
+                        </label>
+                        <textarea
+                            rows={2}
+                            value={feedback}
+                            onChange={e => { setFeedback(e.target.value); setSaved(false); }}
+                            placeholder="Add remarks for the student..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none shadow-sm"
+                        />
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
+                        <AlertTriangle size={12} /> {error}
                     </div>
                 )}
+
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className={`w-full py-2.5 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] ${saved ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-100' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-100'}`}
+                >
+                    {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <CheckCircle2 size={13} /> : <Check size={13} />}
+                    {saving ? 'Saving...' : saved ? 'Update Score' : 'Save Score'}
+                </button>
             </div>
-
-            {/* Score + feedback inputs */}
-            <div className="grid grid-cols-[100px_1fr] gap-3 items-start">
-                <div>
-                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                        Score <span className="text-slate-300">/ {question.points}</span>
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        max={question.points}
-                        value={score}
-                        onChange={e => { setScore(e.target.value); setSaved(false); }}
-                        placeholder="0"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
-                    />
-                </div>
-                <div>
-                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                        Feedback (optional)
-                    </label>
-                    <textarea
-                        rows={2}
-                        value={feedback}
-                        onChange={e => { setFeedback(e.target.value); setSaved(false); }}
-                        placeholder="Add remarks for the student..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none shadow-sm"
-                    />
-                </div>
-            </div>
-
-            {error && (
-                <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
-                    <AlertTriangle size={12} /> {error}
-                </div>
-            )}
-
-            <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-amber-100 active:scale-[0.98]"
-            >
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                {saving ? 'Saving...' : saved ? 'Update Score' : 'Save Score'}
-            </button>
         </div>
     );
 };
 
-// ─── Evaluation question card ────────────────────────────────────────────────
-const QuestionEvalCard = ({ item, onScoreSaved }) => {
+// ─── Student Submission Card ──────────────────────────────────────────────────
+const SubmissionEvalCard = ({ submission, onScoreSaved }) => {
     const [expanded, setExpanded] = useState(true);
-    const gradedCount = item.students.filter(s => s.existingScore).length;
+    const gradedCount = submission.questions.filter(q => q.existingScore).length;
+
+    const downloadPdf = (pdfBase64, filename) => {
+        const link = document.createElement('a');
+        link.href = pdfBase64;
+        link.download = filename || 'submission.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
@@ -157,14 +166,14 @@ const QuestionEvalCard = ({ item, onScoreSaved }) => {
                 className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left"
             >
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg shrink-0">
-                        <ClipboardCheck size={16} />
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <User size={18} />
                     </div>
                     <div className="min-w-0">
-                        <p className="font-bold text-slate-900 text-[13px] truncate">{item.question.title}</p>
+                        <p className="font-bold text-slate-900 text-[14px] truncate">{submission.student?.name || 'Unknown'}</p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                            {item.question.round?.name} &bull; {item.question.points} pts &bull;{' '}
-                            <span className="text-emerald-600">{gradedCount}/{item.students.length} graded</span>
+                            {submission.student?.studentId} &bull; {submission.round?.name} &bull;{' '}
+                            <span className="text-emerald-600">{gradedCount}/{submission.questions.length} questions graded</span>
                         </p>
                     </div>
                 </div>
@@ -174,7 +183,7 @@ const QuestionEvalCard = ({ item, onScoreSaved }) => {
                         <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-emerald-400 rounded-full transition-all"
-                                style={{ width: item.students.length ? `${(gradedCount / item.students.length) * 100}%` : '0%' }}
+                                style={{ width: submission.questions.length ? `${(gradedCount / submission.questions.length) * 100}%` : '0%' }}
                             />
                         </div>
                     </div>
@@ -182,7 +191,7 @@ const QuestionEvalCard = ({ item, onScoreSaved }) => {
                 </div>
             </button>
 
-            {/* Expanded student list */}
+            {/* Expanded Content */}
             <AnimatePresence>
                 {expanded && (
                     <motion.div
@@ -191,33 +200,44 @@ const QuestionEvalCard = ({ item, onScoreSaved }) => {
                         exit={{ height: 0, opacity: 0 }}
                         className="border-t border-slate-100 overflow-hidden"
                     >
-                        {/* Question prompt visible to admin */}
-                        <div className="px-4 pt-4 pb-3 bg-indigo-50/60 border-b border-indigo-100">
-                            <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                <BookOpen size={10} /> Question
-                            </p>
-                            <h3 className="text-sm font-bold text-indigo-900 mb-1">{item.question.title}</h3>
-                            <p className="text-xs text-indigo-700 leading-relaxed whitespace-pre-wrap">
-                                {item.question.description}
-                            </p>
-                        </div>
-
-                        <div className="p-4 space-y-3 bg-slate-50/50">
-                            {item.students.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <BookOpen size={32} className="text-slate-200 mx-auto mb-2" />
-                                    <p className="text-xs text-slate-400 font-bold">No student submissions yet for this question's round.</p>
+                        <div className="p-4 space-y-4 bg-slate-50/50">
+                            {/* PDF Preview if available for this submission */}
+                            {submission.pdfUrl && (
+                                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                            <ClipboardCheck size={12} /> Global Design Snapshot
+                                        </p>
+                                        <button
+                                            onClick={() => downloadPdf(submission.pdfUrl, `UI_UX_${submission.student?.studentId || 'submission'}.pdf`)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors"
+                                        >
+                                            <ExternalLink size={12} />
+                                            Download PDF
+                                        </button>
+                                    </div>
+                                    <div className="w-full aspect-video bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group">
+                                        <iframe
+                                            src={submission.pdfUrl}
+                                            className="w-full h-full border-none"
+                                            title="PDF Preview"
+                                        />
+                                    </div>
                                 </div>
-                            ) : (
-                                item.students.map((entry, i) => (
-                                    <StudentEvalRow
-                                        key={`${entry.submissionId}-${i}`}
-                                        entry={entry}
-                                        question={item.question}
+                            )}
+
+                            {/* Question List */}
+                            <div className="grid gap-4">
+                                {submission.questions.map((qEntry, i) => (
+                                    <QuestionEvalRow
+                                        key={`${submission.submissionId}-${qEntry.question._id}-${i}`}
+                                        submissionId={submission.submissionId}
+                                        questionEntry={qEntry}
+                                        student={submission.student}
                                         onScoreSaved={onScoreSaved}
                                     />
-                                ))
-                            )}
+                                ))}
+                            </div>
                         </div>
                     </motion.div>
                 )}
@@ -232,7 +252,6 @@ const EvaluationTab = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Pagination & Search States
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
@@ -257,7 +276,6 @@ const EvaluationTab = () => {
         }
     }, [search, page, limit, data.length]);
 
-    // Reset page on search
     useEffect(() => {
         setPage(1);
     }, [search]);
@@ -266,12 +284,13 @@ const EvaluationTab = () => {
         fetchEvaluations();
     }, [fetchEvaluations]);
 
-    const totalStudents = data.reduce((sum, item) => sum + item.students.length, 0);
-    const totalGraded = data.reduce((sum, item) => sum + item.students.filter(s => s.existingScore).length, 0);
+    const totalQuestions = data.reduce((sum, sub) => sum + sub.questions.length, 0);
+    const totalGraded = data.reduce((sum, sub) =>
+        sum + sub.questions.filter(q => q.existingScore).length, 0
+    );
 
     return (
         <div className="space-y-4 h-full flex flex-col">
-
             {/* Header stats */}
             <div className="flex max-md:flex-col max-md:gap-3 items-center justify-between bg-amber-50 border border-amber-100 rounded-2xl p-4">
                 <div className="flex items-center gap-3">
@@ -281,7 +300,7 @@ const EvaluationTab = () => {
                     <div>
                         <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest">Manual Evaluation Queue</p>
                         <p className="text-xs text-amber-600 mt-0.5">
-                            Questions assigned to you for grading
+                            Students with questions assigned to you
                         </p>
                     </div>
                 </div>
@@ -290,7 +309,7 @@ const EvaluationTab = () => {
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
                         <input
                             type="text"
-                            placeholder="Search questions or students..."
+                            placeholder="Search students..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             className="bg-white border border-amber-200 rounded-xl pl-9 pr-4 py-2 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm w-64 placeholder:text-amber-200"
@@ -299,7 +318,7 @@ const EvaluationTab = () => {
                     {!loading && (
                         <div className="text-right hidden sm:block border-l border-amber-200 pl-4">
                             <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Progress</p>
-                            <p className="text-sm font-bold text-amber-800">{totalGraded} / {totalStudents} graded</p>
+                            <p className="text-sm font-bold text-amber-800">{totalGraded} / {totalQuestions} items</p>
                         </div>
                     )}
                 </div>
@@ -320,15 +339,14 @@ const EvaluationTab = () => {
                         <ClipboardCheck size={48} className="text-amber-200 mb-3" />
                         <p className="text-sm font-bold text-slate-500">No Evaluation Assignments</p>
                         <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
-                            No manual-evaluation questions have been assigned to you yet.
-                            A super admin can assign questions to you from the Questions tab.
+                            No submissions found for questions assigned to you.
                         </p>
                     </div>
                 ) : (
-                    data.map((item, idx) => (
-                        <QuestionEvalCard
-                            key={item.question._id || idx}
-                            item={item}
+                    data.map((submission, idx) => (
+                        <SubmissionEvalCard
+                            key={submission.submissionId || idx}
+                            submission={submission}
                             onScoreSaved={fetchEvaluations}
                         />
                     ))

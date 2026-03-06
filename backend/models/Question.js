@@ -56,12 +56,12 @@ const questionSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX'],
+        enum: ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX', 'MINI_HACKATHON'],
         default: 'CODE'
     },
     category: {
         type: String,
-        enum: ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL'],
+        enum: ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'],
         default: 'GENERAL'
     },
     options: {

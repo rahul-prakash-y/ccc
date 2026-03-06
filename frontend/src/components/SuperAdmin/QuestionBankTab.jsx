@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Loader2,
-    Eye, EyeOff, BookOpen, ClipboardCheck, AlertTriangle, Search
+    Eye, EyeOff, BookOpen, ClipboardCheck, AlertTriangle, Search,
+    Upload, Download, FileSpreadsheet
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, DIFFICULTY_COLORS } from './constants';
@@ -308,6 +309,173 @@ const QuestionModal = ({ question, onClose, onSave }) => {
     );
 };
 
+const BulkUploadModal = ({ onClose, onUploadSuccess }) => {
+    const [file, setFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+
+    const handleDownloadTemplate = () => {
+        const headers = [
+            'title', 'description', 'difficulty', 'type', 'category',
+            'points', 'correctAnswer', 'isManualEvaluation',
+            'Option 1', 'Option 2', 'Option 3', 'Option 4',
+            'inputFormat', 'outputFormat', 'sampleInput', 'sampleOutput'
+        ];
+        const rows = [
+            [
+                'Example MCQ Question', 'What is 2+2?', 'EASY', 'MCQ', 'GENERAL',
+                '5', '4', 'FALSE',
+                '2', '3', '4', '5',
+                '', '', '', ''
+            ],
+            [
+                'Example Code Question', 'Write a function to add two numbers.', 'MEDIUM', 'CODE', 'GENERAL',
+                '10', '', 'FALSE',
+                '', '', '', '',
+                'Two integers a and b', 'Sum of a and b', '2 3', '5'
+            ]
+        ];
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(r => r.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'question_bank_template.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleUpload = async (e) => {
+        e.preventDefault();
+        if (!file) return setError('Please select a file first.');
+
+        setUploading(true);
+        setError('');
+        setResult(null);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await api.post(`${API}/bulk-upload-questions`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setResult(res.data);
+            toast.success(res.data.message);
+            if (onUploadSuccess) onUploadSuccess();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to upload file.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={e => e.target === e.currentTarget && onClose()}
+            >
+                <motion.div
+                    initial={{ scale: 0.95, y: 10 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.95, y: 10 }}
+                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+                >
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-emerald-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                <Upload size={18} />
+                            </div>
+                            <h2 className="font-bold text-slate-900 text-lg">Bulk Upload Questions</h2>
+                        </div>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-6" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Download Template</p>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Use this format for your upload</p>
+                            </div>
+                            <button
+                                onClick={handleDownloadTemplate}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 hover:border-emerald-500 hover:text-emerald-600 rounded-lg text-slate-600 text-xs font-bold transition-all shadow-sm"
+                            >
+                                <Download size={14} /> CSV Template
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpload} className="space-y-4">
+                            <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group">
+                                <input
+                                    type="file"
+                                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                                    onChange={e => setFile(e.target.files[0])}
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                                <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform mb-3">
+                                    <FileSpreadsheet size={24} className="text-emerald-500" />
+                                </div>
+                                <p className="text-sm font-bold text-slate-700">{file ? file.name : 'Click or Drag Excel/CSV File'}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Maximum size 5MB</p>
+                            </div>
+
+                            {error && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-600 text-xs font-bold">
+                                    <AlertTriangle size={14} /> {error}
+                                </div>
+                            )}
+
+                            {result && (
+                                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+                                    <p className="text-emerald-700 text-xs font-bold leading-none">{result.message}</p>
+                                    {result.errorCount > 0 && (
+                                        <p className="text-amber-600 text-[10px] font-bold uppercase tracking-wider">
+                                            {result.errorCount} rows had errors and were skipped.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-bold text-sm transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={uploading || !file}
+                                    className="flex-2 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
+                                >
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    Upload & Import
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
 const QuestionBankTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
     const [questions, setQuestions] = useState([]);
@@ -398,11 +566,17 @@ const QuestionBankTab = () => {
                     />
                 </div>
 
-                <div className="flex items-center gap-4 px-2 mt-2 sm:mt-0">
+                <div className="flex items-center gap-2 px-2 mt-2 sm:mt-0">
                     <div className="hidden sm:block text-right">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Library</p>
                         <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Items</p>
                     </div>
+                    <button
+                        onClick={() => setModal('bulk')}
+                        className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 rounded-xl font-bold text-sm transition-all active:scale-95"
+                    >
+                        <Upload size={16} /> <span className="hidden sm:inline">Bulk Upload</span>
+                    </button>
                     <button
                         onClick={() => setModal('add')}
                         className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-indigo-200 active:scale-95"
@@ -566,11 +740,17 @@ const QuestionBankTab = () => {
             </div>
 
             <AnimatePresence>
-                {modal && (
+                {modal && modal !== 'bulk' && (
                     <QuestionModal
                         question={modal === 'add' ? null : modal}
                         onClose={() => setModal(null)}
                         onSave={handleSave}
+                    />
+                )}
+                {modal === 'bulk' && (
+                    <BulkUploadModal
+                        onClose={() => setModal(null)}
+                        onUploadSuccess={handleSave}
                     />
                 )}
             </AnimatePresence>
