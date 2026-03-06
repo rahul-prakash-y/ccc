@@ -363,35 +363,49 @@ const CodeArena = ({ language = 'javascript' }) => {
                         <button
                             disabled={activeIdx === 0}
                             onClick={() => setActiveIdx(prev => prev - 1)}
-                            className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 transition-all shadow-sm"
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-30 transition-all shadow-sm group active:scale-95"
                         >
-                            <ChevronLeft size={18} />
+                            <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
+                            <span className="text-xs font-black uppercase tracking-widest hidden sm:inline">Previous</span>
+                            <span className="text-xs font-black uppercase tracking-widest sm:hidden">Prev</span>
                         </button>
 
-                        <div className="flex justify-center gap-1.5 px-4 overflow-x-auto no-scrollbar items-center">
-                            {questions.map((_, i) => {
-                                const isAns = answers[questions[i]._id];
-                                return (
-                                    <button
-                                        key={i}
-                                        onClick={() => setActiveIdx(i)}
-                                        className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-black transition-all border shadow-sm
-                                            ${activeIdx === i ? 'bg-indigo-600 border-indigo-700 text-white scale-110 shadow-indigo-200' :
-                                                isAns ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                                                    'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                );
-                            })}
+                        <div className="flex justify-center gap-1.5 px-4 items-center">
+                            {(() => {
+                                const maxVisible = 10;
+                                let start = Math.max(0, activeIdx - Math.floor(maxVisible / 2));
+                                let end = Math.min(questions.length, start + maxVisible);
+                                if (end - start < maxVisible) {
+                                    start = Math.max(0, end - maxVisible);
+                                }
+
+                                return questions.slice(start, end).map((q, idx) => {
+                                    const actualIdx = start + idx;
+                                    const isAns = answers[q._id];
+                                    return (
+                                        <button
+                                            key={actualIdx}
+                                            onClick={() => setActiveIdx(actualIdx)}
+                                            className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black transition-all border shadow-sm
+                                                ${activeIdx === actualIdx ? 'bg-indigo-600 border-indigo-700 text-white scale-110 shadow-indigo-200' :
+                                                    isAns ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                                        'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}
+                                        >
+                                            {actualIdx + 1}
+                                        </button>
+                                    );
+                                });
+                            })()}
                         </div>
 
                         <button
                             disabled={activeIdx === questions.length - 1}
                             onClick={() => setActiveIdx(prev => prev + 1)}
-                            className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 transition-all shadow-sm"
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-30 transition-all shadow-sm group active:scale-95"
                         >
-                            <ChevronRight size={18} />
+                            <span className="text-xs font-black uppercase tracking-widest hidden sm:inline">Next</span>
+                            <span className="text-xs font-black uppercase tracking-widest sm:hidden">Next</span>
+                            <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
                         </button>
                     </div>
 

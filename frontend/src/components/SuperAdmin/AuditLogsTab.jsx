@@ -1,12 +1,100 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock, Check } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API, STATUS_COLORS } from './constants';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
 import Pagination from './components/Pagination';
 import { SkeletonList } from '../Skeleton';
-import { AnimatePresence, motion } from 'framer-motion';
+
+// ─── Extra Time / Re-entry Modal ─────────────────────────────────────────────
+const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }) => {
+    const [minutes, setMinutes] = useState('10');
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            setMinutes(type === 'RE_ENTRY' ? '10' : '5');
+            setError('');
+        }
+    }, [isOpen, type]);
+
+    const handleConfirm = () => {
+        const num = parseInt(minutes, 10);
+        if (isNaN(num) || num < 0) {
+            setError('Please enter a valid number of minutes.');
+            return;
+        }
+        onConfirm(num);
+        onClose();
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden"
+            >
+                <div className="p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${type === 'RE_ENTRY' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                            {type === 'RE_ENTRY' ? <Unlock size={20} /> : <Clock size={20} />}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 leading-none">{title}</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">
+                                Target: {studentName}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                Extra Minutes to Grant
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={minutes}
+                                onChange={e => setMinutes(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                placeholder="Enter minutes..."
+                                autoFocus
+                            />
+                            {error && <p className="text-red-500 text-[10px] font-bold mt-1.5 flex items-center gap-1"><AlertTriangle size={10} /> {error}</p>}
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed font-medium bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            {type === 'RE_ENTRY'
+                                ? "This will reset their status to IN_PROGRESS and allow them to resume their session."
+                                : "The student will receive these minutes immediately in their active session."}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 flex items-center gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleConfirm}
+                        className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg ${type === 'RE_ENTRY' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
+                    >
+                        {type === 'RE_ENTRY' ? <Unlock size={14} /> : <Check size={14} />}
+                        {type === 'RE_ENTRY' ? 'Approve Re-entry' : 'Grant Time'}
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
 
 const AuditLogsTab = ({ rounds }) => {
     const showConfirm = useConfirm(state => state.showConfirm);
@@ -23,6 +111,7 @@ const AuditLogsTab = ({ rounds }) => {
     const [limit] = useState(20);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
     const [busy, setBusy] = useState({});
+    const [timeModal, setTimeModal] = useState({ isOpen: false, data: null, type: 'RE_ENTRY' });
 
     // 1. Fetch Logic (now server-side)
     const fetchLogs = useCallback(async () => {
@@ -95,51 +184,39 @@ const AuditLogsTab = ({ rounds }) => {
     };
 
     const handleAllowReEntry = (submissionId, studentName) => {
-        const mins = window.prompt(`How many extra minutes do you want to grant to ${studentName} for re-entry?`, "10");
-        if (mins === null) return; // Cancelled
-
-        const numericMins = parseInt(mins, 10);
-        if (isNaN(numericMins) || numericMins < 0) {
-            toast.error("Please enter a valid number of minutes.");
-            return;
-        }
-
-        showConfirm({
-            title: "Approve Re-Entry",
-            message: `Are you sure you want to allow ${studentName} to re-enter this test?\n\nThis will reset their status to IN_PROGRESS and grant them ${numericMins} extra minutes.`,
-            confirmLabel: "Approve Re-Entry",
-            onConfirm: async () => {
-                setBusy(b => ({ ...b, [submissionId]: true }));
-                try {
-                    await api.patch(`${API}/submissions/${submissionId}/allow-reentry`, { addMinutes: numericMins });
-                    toast.success(`Re-entry approved for ${studentName}`);
-                    fetchLogs();
-                } catch (e) {
-                    toast.error(e.response?.data?.error || "Failed to approve re-entry.");
-                } finally {
-                    setBusy(b => ({ ...b, [submissionId]: false }));
-                }
-            }
+        setTimeModal({
+            isOpen: true,
+            type: 'RE_ENTRY',
+            data: { submissionId, studentName },
+            title: 'Approve Re-Entry'
         });
     };
 
-    const handleAddTime = async (submissionId, studentName) => {
-        const mins = window.prompt(`How many extra minutes do you want to grant to ${studentName}?`);
-        if (!mins) return;
+    const handleAddTime = (submissionId, studentName) => {
+        setTimeModal({
+            isOpen: true,
+            type: 'EXTRA_TIME',
+            data: { submissionId, studentName },
+            title: 'Grant Extra Time'
+        });
+    };
 
-        const numericMins = parseInt(mins, 10);
-        if (isNaN(numericMins) || numericMins <= 0) {
-            toast.error("Please enter a valid positive number.");
-            return;
-        }
+    const confirmExtraTime = async (minutes) => {
+        const { submissionId, studentName } = timeModal.data;
+        const isReEntry = timeModal.type === 'RE_ENTRY';
 
         setBusy(b => ({ ...b, [submissionId]: true }));
         try {
-            await api.patch(`${API}/submissions/${submissionId}/extra-time`, { addMinutes: numericMins });
-            toast.success(`Successfully added ${numericMins} minutes to ${studentName}.`);
+            const endpoint = isReEntry ? 'allow-reentry' : 'extra-time';
+            await api.patch(`${API}/submissions/${submissionId}/${endpoint}`, { addMinutes: minutes });
+
+            toast.success(isReEntry
+                ? `Re-entry approved for ${studentName}`
+                : `Successfully added ${minutes} minutes to ${studentName}.`
+            );
             fetchLogs();
         } catch (e) {
-            toast.error(e.response?.data?.error || "Failed to grant extra time.");
+            toast.error(e.response?.data?.error || "Action failed.");
         } finally {
             setBusy(b => ({ ...b, [submissionId]: false }));
         }
@@ -511,6 +588,15 @@ const AuditLogsTab = ({ rounds }) => {
                             onPageChange={setPage}
                             totalRecords={pagination.totalRecords}
                             limit={limit}
+                        />
+
+                        <ExtraTimeModal
+                            isOpen={timeModal.isOpen}
+                            onClose={() => setTimeModal({ ...timeModal, isOpen: false })}
+                            onConfirm={confirmExtraTime}
+                            studentName={timeModal.data?.studentName}
+                            title={timeModal.title}
+                            type={timeModal.type}
                         />
                     </>
                 )}
