@@ -85,7 +85,7 @@ const start = async () => {
         // Start Node.js Server
         const port = process.env.PORT || 5000;
         await fastify.listen({ port, host: '0.0.0.0' });
-        fastify.log.info(`Code Circuit Club API is running live on port ${port}`);
+        fastify.log.info(`Code Circle Club API is running live on port ${port}`);
 
     } catch (err) {
         fastify.log.error('Fatal Server Error', err);

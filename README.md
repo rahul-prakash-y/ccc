@@ -1,4 +1,4 @@
-# Code Circuit Club (CCC) Platform 🚀
+# Code Circle Club (CCC) Platform 🚀
 A high-performance Hackathon & Competitive Coding Management Platform designed for scale.
 
 ## System Architecture Overview
