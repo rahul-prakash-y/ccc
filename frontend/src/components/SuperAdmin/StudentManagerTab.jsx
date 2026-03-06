@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check, Eye, Mail, Phone, FileText,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload,
-    Linkedin, Github, Calendar
+    Linkedin, Github, Calendar, Download
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -440,6 +440,41 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
 // ─── Main Student Manager Tab ───────────────────────────────────────────────────────
 // ─── Student Details Modal ──────────────────────────────────────────────────
 const StudentDetailsModal = ({ student, onClose }) => {
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownloadReport = async () => {
+        try {
+            setDownloading(true);
+            const response = await api.get(`${API}/students/${student._id}/report`, {
+                responseType: 'blob'
+            });
+
+            // Check if we actually got a PDF
+            if (response.data.type !== 'application/pdf') {
+                // If it's not a PDF, it's likely an error message in JSON format hidden as a blob
+                const text = await response.data.text();
+                const errorData = JSON.parse(text);
+                throw new Error(errorData.error || 'Failed to generate report');
+            }
+
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Report_${student.studentId || 'Student'}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('Report downloaded successfully');
+        } catch (error) {
+            console.error('Download error:', error);
+            toast.error(error.message || 'Failed to download report');
+        } finally {
+            setDownloading(false);
+        }
+    };
+
     return (
         <AnimatePresence>
             <motion.div
@@ -558,6 +593,22 @@ const StudentDetailsModal = ({ student, onClose }) => {
                                     <p className="text-xs font-black text-slate-700 uppercase tracking-wider">{student.isBanned ? 'Blocked' : 'Active'}</p>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="pt-6 border-t border-slate-100">
+                            <button
+                                onClick={handleDownloadReport}
+                                disabled={downloading}
+                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-2xl text-white font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"
+                            >
+                                {downloading ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                    <Download size={16} />
+                                )}
+                                Download Student Performance Report
+                            </button>
                         </div>
                     </div>
                 </motion.div>

@@ -7,6 +7,7 @@ const Team = require('../models/Team');
 const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
+const PDFDocument = require('pdfkit-table');
 
 module.exports = async function (fastify, opts) {
 
@@ -674,9 +675,44 @@ module.exports = async function (fastify, opts) {
             const adminQuestionIds = adminQuestions.map(q => q._id);
 
             // 2. Build filter for Submissions
+            // Only include submissions that have at least one question assigned to this admin 
+            // where no entry exists in manualScores for that admin/question pair yet.
             const submissionFilter = {
-                assignedQuestions: { $in: adminQuestionIds },
-                status: 'SUBMITTED'
+                status: 'SUBMITTED',
+                $and: [
+                    { assignedQuestions: { $in: adminQuestionIds } },
+                    {
+                        $expr: {
+                            $gt: [
+                                {
+                                    $size: {
+                                        $filter: {
+                                            input: adminQuestions,
+                                            as: "q",
+                                            cond: {
+                                                $and: [
+                                                    { $in: ["$$q._id", "$assignedQuestions"] },
+                                                    {
+                                                        $not: {
+                                                            $in: ["$$q._id", {
+                                                                $map: {
+                                                                    input: "$manualScores",
+                                                                    as: "ms",
+                                                                    in: "$$ms.questionId"
+                                                                }
+                                                            }]
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                },
+                                0
+                            ]
+                        }
+                    }
+                ]
             };
 
 
@@ -714,12 +750,14 @@ module.exports = async function (fastify, opts) {
 
                 const relevantQuestions = adminQuestions.filter(q =>
                     sub.assignedQuestions.some(aqId => aqId.toString() === q._id.toString())
-                ).map(q => {
-                    const existingScore = sub.manualScores?.find(ms => ms.questionId?.toString() === q._id.toString());
+                ).filter(q => {
+                    // Only include questions that have NOT been graded yet
+                    return !sub.manualScores?.some(ms => ms.questionId?.toString() === q._id.toString());
+                }).map(q => {
                     return {
                         question: q,
                         answer: answers[q._id.toString()],
-                        existingScore: existingScore || null
+                        existingScore: null // Since we filtered for ungraded, there's no existing score
                     };
                 });
 
@@ -1392,6 +1430,121 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to toggle block status' });
+        }
+    });
+
+    // GET /api/superadmin/students/:id/report — export student performance as PDF
+    fastify.get('/students/:id/report', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { id } = request.params;
+            const student = await User.findById(id).populate('team').lean();
+            if (!student) return reply.code(404).send({ error: 'Student not found' });
+
+            const submissions = await Submission.find({ student: id })
+                .populate('round')
+                .sort({ 'round.createdAt': 1 })
+                .lean();
+
+            const pdfBuffer = await new Promise(async (resolve, reject) => {
+                try {
+                    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+                    let buffers = [];
+                    doc.on('data', buffers.push.bind(buffers));
+                    doc.on('end', () => resolve(Buffer.concat(buffers)));
+                    doc.on('error', reject);
+
+                    // Title
+                    doc.fontSize(20).text('Student Performance Report', { align: 'center' });
+                    doc.moveDown();
+
+                    // 1. Overview Table
+                    const overviewTable = {
+                        title: "Student Overview",
+                        headers: ["Field", "Value"],
+                        rows: [
+                            ["Roll Number", student.studentId],
+                            ["Full Name", student.name || 'N/A'],
+                            ["Email", student.email || 'N/A'],
+                            ["Phone", student.phone || 'N/A'],
+                            ["Team", student.team?.name || 'No Team'],
+                            ["Joined At", student.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A']
+                        ]
+                    };
+                    await doc.table(overviewTable, { width: 500 });
+                    doc.moveDown();
+
+                    // 2. Individual Performance Table
+                    if (submissions.length > 0) {
+                        const individualTable = {
+                            title: "Individual Performance History",
+                            headers: ["Round Name", "Type", "Status", "Score", "Date"],
+                            rows: submissions.map(s => [
+                                s.round?.name || 'Unknown',
+                                s.round?.type || 'GENERAL',
+                                s.status,
+                                String(s.score ?? 'N/A'),
+                                new Date(s.createdAt).toLocaleDateString()
+                            ])
+                        };
+                        await doc.table(individualTable, { width: 500 });
+                        doc.moveDown();
+                    }
+
+                    // 3. Team Performance Table
+                    if (student.team) {
+                        const teamMemberIds = student.team.members;
+                        const teamSubmissions = await Submission.find({
+                            student: { $in: teamMemberIds }
+                        }).populate('round').lean();
+
+                        const groupedByRound = {};
+                        teamSubmissions.forEach(ts => {
+                            const rId = ts.round?._id?.toString();
+                            if (!rId) return;
+                            if (!ts.round.isTeamTest) return;
+
+                            if (!groupedByRound[rId]) {
+                                groupedByRound[rId] = {
+                                    roundName: ts.round.name,
+                                    totalTeamScore: 0,
+                                    studentScore: 0
+                                };
+                            }
+                            groupedByRound[rId].totalTeamScore += (ts.score || 0);
+                            if (ts.student.toString() === id) {
+                                groupedByRound[rId].studentScore = ts.score || 0;
+                            }
+                        });
+
+                        const teamRows = Object.values(groupedByRound).map(g => [
+                            g.roundName,
+                            String(g.totalTeamScore),
+                            String(g.studentScore)
+                        ]);
+
+                        if (teamRows.length > 0) {
+                            const teamTable = {
+                                title: "Team Performance Context",
+                                headers: ["Round Name", "Team Total Score", "Individual Contribution"],
+                                rows: teamRows
+                            };
+                            await doc.table(teamTable, { width: 500 });
+                        }
+                    }
+
+                    doc.end();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+
+            return reply
+                .header('Content-Type', 'application/pdf')
+                .header('Content-Disposition', `attachment; filename=Report_${student.studentId}.pdf`)
+                .send(pdfBuffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate report' });
         }
     });
     // GET /api/superadmin/students/upload-template - DOWNLOAD SAMPLE EXCEL
