@@ -52,6 +52,13 @@ module.exports = async function (fastify, opts) {
             // Sign token (valid for a typical hackathon duration plus warmup delay)
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 
+            // ENFORCE SINGLE SESSION: Any token issued before now becomes invalid
+            // Use current time, floored to nearest second to match JWT iat precision
+            const now = new Date();
+            now.setMilliseconds(0);
+            user.tokenIssuedAfter = now;
+            await user.save();
+
             // Log LOGIN event
             await logActivity({
                 action: 'LOGIN',
