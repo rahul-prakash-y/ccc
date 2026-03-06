@@ -979,7 +979,7 @@ module.exports = async function (fastify, opts) {
      */
 
     // GET /api/superadmin/admins — list all ADMIN users
-    fastify.get('/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.get('/admins', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { search, page = 1, limit = 20 } = request.query;
 
@@ -1025,7 +1025,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // POST /api/superadmin/admins — create a new ADMIN
-    fastify.post('/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/admins', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const bcrypt = require('bcryptjs');
             const { studentId, name, password } = request.body;
@@ -1054,7 +1054,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // DELETE /api/superadmin/admins/:adminId — remove an ADMIN permanently
-    fastify.delete('/admins/:adminId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.delete('/admins/:adminId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { adminId } = request.params;
             const admin = await User.findOneAndDelete({ _id: adminId, role: 'ADMIN' });
@@ -1075,7 +1075,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // PATCH /api/superadmin/admins/:adminId/block — toggle block/unblock an ADMIN
-    fastify.patch('/admins/:adminId/block', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/admins/:adminId/block', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { adminId } = request.params;
             const admin = await User.findOne({ _id: adminId, role: 'ADMIN' });
@@ -1101,7 +1101,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // PATCH /api/superadmin/admins/:adminId/force-logout — invalidate all existing sessions
-    fastify.patch('/admins/:adminId/force-logout', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/admins/:adminId/force-logout', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { adminId } = request.params;
             const admin = await User.findOneAndUpdate(
@@ -1126,7 +1126,7 @@ module.exports = async function (fastify, opts) {
     });
 
     // PATCH /api/superadmin/admins/:adminId/reset-password — set a new password for an admin
-    fastify.patch('/admins/:adminId/reset-password', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/admins/:adminId/reset-password', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const bcrypt = require('bcryptjs');
             const { adminId } = request.params;
@@ -1155,6 +1155,99 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to reset password' });
+        }
+    });
+
+    // GET /api/superadmin/admins/upload-template - DOWNLOAD SAMPLE EXCEL FOR ADMINS
+    fastify.get('/admins/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = [
+                { 'AdminId': 'admin_01', 'Name': 'John Doe', 'Password': 'secretpassword' },
+            ];
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Admins');
+            const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+            reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            reply.header('Content-Disposition', 'attachment; filename=admin_upload_template.xlsx');
+            return reply.send(buffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate template' });
+        }
+    });
+
+    // POST /api/superadmin/admins/upload - BULK CREATE ADMINS VIA EXCEL
+    fastify.post('/admins/upload', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data) return reply.code(400).send({ error: 'No file uploaded' });
+
+            const buffer = await data.toBuffer();
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            if (json.length === 0) {
+                return reply.code(400).send({ error: 'The uploaded file is empty' });
+            }
+
+            const bulkData = json.map(row => {
+                const idKey = Object.keys(row).find(k =>
+                    ['adminid', 'studentid', 'admin_id', 'username'].includes(k.toLowerCase().replace(/[\s_]/g, ''))
+                );
+                const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
+                const passwordKey = Object.keys(row).find(k => k.toLowerCase() === 'password' || k.toLowerCase() === 'secret');
+
+                if (!idKey) return null;
+
+                return {
+                    studentId: String(row[idKey]).trim(),
+                    name: row[nameKey] ? String(row[nameKey]).trim() : null,
+                    password: row[passwordKey] ? String(row[passwordKey]).trim() : '123456',
+                    role: 'ADMIN'
+                };
+            }).filter(Boolean);
+
+            if (bulkData.length === 0) {
+                return reply.code(400).send({ error: 'No valid admin records found in Excel' });
+            }
+
+            let createdCount = 0;
+            let skippedCount = 0;
+
+            for (const item of bulkData) {
+                const existing = await User.findOne({ studentId: item.studentId });
+                if (existing) {
+                    skippedCount++;
+                } else {
+                    const hashedPassword = await bcrypt.hash(item.password, 10);
+                    await User.create({
+                        ...item,
+                        password: hashedPassword
+                    });
+                    createdCount++;
+                }
+            }
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Admin', label: `Bulk Upload: ${createdCount} created, ${skippedCount} skipped` },
+                metadata: { createdCount, skippedCount },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({
+                success: true,
+                message: `Bulk creation complete. ${createdCount} admins created, ${skippedCount} skipped.`,
+                data: { createdCount, skippedCount }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to process bulk upload' });
         }
     });
 

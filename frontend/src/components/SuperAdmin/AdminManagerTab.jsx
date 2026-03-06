@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check, Search,
-    UserCog, UserX, UserCheck, KeyRound, LogIn, Trash2
+    UserCog, UserX, UserCheck, KeyRound, LogIn, Trash2, Upload
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -88,6 +88,174 @@ const AddAdminModal = ({ onClose, onCreated }) => {
                             </button>
                         </div>
                     </form>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
+// ─── Bulk Upload Modal ─────────────────────────────────────────────────────────
+const AdminBulkUploadModal = ({ onClose, onUploaded }) => {
+    const [file, setFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+
+    const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        if (selectedFile) {
+            if (!selectedFile.name.match(/\.(xlsx|xls|csv)$/)) {
+                setError('Please upload a valid Excel or CSV file.');
+                setFile(null);
+                return;
+            }
+            setFile(selectedFile);
+            setError('');
+        }
+    };
+
+    const handleUpload = async () => {
+        if (!file) return;
+        setUploading(true);
+        setError('');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await api.post(`${API}/admins/upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setResult(res.data.data);
+            if (onUploaded) onUploaded();
+        } catch (err) {
+            setError(err.response?.data?.error || "Failed to process file. Check format.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-100 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={e => e.target === e.currentTarget && !uploading && onClose()}
+            >
+                <motion.div
+                    initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+                >
+                    <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-emerald-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                <Upload size={18} />
+                            </div>
+                            <h2 className="font-bold text-slate-900 text-lg">Bulk Admin Upload</h2>
+                        </div>
+                        <button onClick={onClose} disabled={uploading} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors disabled:opacity-50">
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {!result ? (
+                            <>
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
+                                        <div className="p-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-slate-400">
+                                            <Upload size={24} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700">Choose Excel File</p>
+                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Expected columns: "AdminId", "Name", "Password"</p>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await api.get(`${API}/admins/upload-template`, { responseType: 'blob' });
+                                                        const url = window.URL.createObjectURL(new Blob([res.data]));
+                                                        const link = document.createElement('a');
+                                                        link.href = url;
+                                                        link.setAttribute('download', 'admin_upload_template.xlsx');
+                                                        document.body.appendChild(link);
+                                                        link.click();
+                                                        link.remove();
+                                                    } catch (err) {
+                                                        console.error("Failed to download template", err);
+                                                    }
+                                                }}
+                                                className="mt-2 text-[10px] text-indigo-600 font-black uppercase tracking-wider hover:underline"
+                                            >
+                                                Download Template
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="file"
+                                            accept=".xlsx,.xls,.csv"
+                                            onChange={handleFileChange}
+                                            className="hidden"
+                                            id="admin-bulk-upload-input"
+                                        />
+                                        <label
+                                            htmlFor="admin-bulk-upload-input"
+                                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer shadow-sm active:scale-95 transition-all"
+                                        >
+                                            {file ? file.name : 'Select File'}
+                                        </label>
+                                    </div>
+
+                                    {error && (
+                                        <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 border border-red-200 rounded-xl p-3">
+                                            <AlertTriangle size={16} className="shrink-0" />
+                                            <p>{error}</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={onClose} disabled={uploading} className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors font-bold text-sm">
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleUpload}
+                                            disabled={uploading || !file}
+                                            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 active:scale-95 text-sm"
+                                        >
+                                            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                            Start Upload
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="space-y-6">
+                                <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl text-center space-y-4">
+                                    <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                                        <Check size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">Upload Complete</h3>
+                                        <p className="text-xs text-slate-500 font-bold mt-1">The file has been processed successfully.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <div className="p-3 bg-white border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Created</p>
+                                            <p className="text-xl font-black text-emerald-600">{result.createdCount}</p>
+                                        </div>
+                                        <div className="p-3 bg-white border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Skipped</p>
+                                            <p className="text-xl font-black text-slate-400">{result.skippedCount}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={onClose}
+                                    className="w-full py-3 bg-slate-900 border border-slate-800 rounded-xl text-white font-bold text-sm shadow-lg active:scale-95 transition-all"
+                                >
+                                    Close Window
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </motion.div>
             </motion.div>
         </AnimatePresence>
@@ -207,6 +375,7 @@ const AdminManagerTab = () => {
 
     // UI State
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showBulkModal, setShowBulkModal] = useState(false);
     const [resetTarget, setResetTarget] = useState(null);
     const [busy, setBusy] = useState({});
     const [globalError, setGlobalError] = useState('');
@@ -328,12 +497,20 @@ const AdminManagerTab = () => {
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Security Clearance</p>
                         <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Admins</p>
                     </div>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
-                    >
-                        <Plus size={16} /> <span className="hidden sm:inline">Add Admin</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowBulkModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-emerald-700 font-bold text-sm transition-all active:scale-95"
+                        >
+                            <Upload size={16} /> <span className="hidden sm:inline">Bulk Upload</span>
+                        </button>
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+                        >
+                            <Plus size={16} /> <span className="hidden sm:inline">Add Admin</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -450,6 +627,16 @@ const AdminManagerTab = () => {
             </div>
 
             {/* Mounted Modals */}
+            {showBulkModal && (
+                <AdminBulkUploadModal
+                    onClose={() => setShowBulkModal(false)}
+                    onUploaded={() => {
+                        fetchAdmins();
+                        setShowBulkModal(false);
+                    }}
+                />
+            )}
+
             {showAddModal && (
                 <AddAdminModal
                     onClose={() => setShowAddModal(false)}
