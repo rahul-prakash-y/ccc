@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check } from 'lucide-react';
 import OtpGate from './OtpGate';
 import { useAuthStore, api } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,11 @@ const StudentDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
+    const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
+    const [attendanceOtp, setAttendanceOtp] = useState('');
+    const [marking, setMarking] = useState(false);
+    const [attendanceStatus, setAttendanceStatus] = useState(null); // 'success', 'error', null
+    const [attendanceMessage, setAttendanceMessage] = useState('');
 
     const fetchRounds = useCallback(async () => {
         try {
@@ -123,6 +128,15 @@ const StudentDashboard = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-4">
+                        {/* Standalone Attendance Button */}
+                        <button
+                            onClick={() => setIsAttendanceOpen(true)}
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
+                        >
+                            <UserCheck size={14} />
+                            Mark Attendance
+                        </button>
+
                         <div className="hidden md:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                             <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
@@ -189,7 +203,7 @@ const StudentDashboard = () => {
                                         `}
                                     >
                                         {/* Subtle internal gradient for live rounds */}
-                                        {isLive && <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent pointer-events-none" />}
+                                        {isLive && <div className="absolute inset-0 bg-linear-to-br from-emerald-50/50 to-transparent pointer-events-none" />}
 
                                         <div className="relative z-10">
                                             <div className="flex justify-between items-start mb-8">
@@ -251,6 +265,104 @@ const StudentDashboard = () => {
                 onClose={() => setIsOtpOpen(false)}
                 onUnlock={handleOtpUnlock}
             />
+
+            {/* Attendance Modal */}
+            <AnimatePresence>
+                {isAttendanceOpen && (
+                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden"
+                        >
+                            <div className="p-6">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                                        <UserCheck size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-slate-900 leading-none">Mark Attendance</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">
+                                            Roll Call Protocol
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {attendanceStatus === 'success' ? (
+                                    <div className="py-4 text-center space-y-3">
+                                        <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                                            <Check size={24} />
+                                        </div>
+                                        <h4 className="font-black text-slate-900">Attendance Marked!</h4>
+                                        <p className="text-sm text-slate-500 font-medium">{attendanceMessage}</p>
+                                        <button
+                                            onClick={() => {
+                                                setIsAttendanceOpen(false);
+                                                setAttendanceStatus(null);
+                                            }}
+                                            className="w-full mt-4 py-3 bg-slate-900 text-white rounded-xl font-black text-sm hover:bg-slate-800 transition-colors"
+                                        >
+                                            CONTINUE
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                                Enter Attendance Key
+                                            </label>
+                                            <input
+                                                type="text"
+                                                maxLength={6}
+                                                value={attendanceOtp}
+                                                onChange={e => setAttendanceOtp(e.target.value.toUpperCase())}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-center text-2xl font-mono font-black tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                                placeholder="••••••"
+                                                autoFocus
+                                            />
+                                            {attendanceStatus === 'error' && (
+                                                <p className="text-red-500 text-[10px] font-bold mt-2 flex items-center gap-1">
+                                                    <AlertTriangle size={10} /> {attendanceMessage}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => setIsAttendanceOpen(false)}
+                                                className="flex-1 py-3 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs hover:bg-slate-100 transition-colors border border-slate-100"
+                                            >
+                                                CANCEL
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    setMarking(true);
+                                                    setAttendanceStatus(null);
+                                                    try {
+                                                        const res = await api.post('/attendance/mark', { otp: attendanceOtp });
+                                                        setAttendanceStatus('success');
+                                                        setAttendanceMessage(res.data.message);
+                                                    } catch (e) {
+                                                        setAttendanceStatus('error');
+                                                        setAttendanceMessage(e.response?.data?.error || 'Validation failed');
+                                                    } finally {
+                                                        setMarking(false);
+                                                    }
+                                                }}
+                                                disabled={marking || attendanceOtp.length < 6}
+                                                className="flex-2 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 disabled:opacity-50"
+                                            >
+                                                {marking ? <Loader2 size={14} className="animate-spin" /> : 'VERIFY & MARK'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

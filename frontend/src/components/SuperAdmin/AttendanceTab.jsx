@@ -13,6 +13,11 @@ const AttendanceTab = () => {
     const [limit] = useState(20);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
+    // Roll Call States
+    const [activeOtp, setActiveOtp] = useState(null);
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(0);
+
     const fetchAttendance = useCallback(async () => {
         setLoading(true);
         try {
@@ -21,7 +26,7 @@ const AttendanceTab = () => {
             params.append('page', page);
             params.append('limit', limit);
 
-            const res = await api.get(`${API}/attendance?${params.toString()}`);
+            const res = await api.get(`/attendance/records?${params.toString()}`);
             setAttendance(res.data.data || []);
             setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
         } catch (e) {
@@ -31,9 +36,51 @@ const AttendanceTab = () => {
         }
     }, [search, page, limit]);
 
+    const fetchActiveOtp = useCallback(async () => {
+        try {
+            const res = await api.get('/attendance/active');
+            if (res.data.success) {
+                setActiveOtp(res.data.data.otp);
+                setTimeLeft(res.data.data.secondsLeft);
+            } else {
+                setActiveOtp(null);
+            }
+        } catch (e) {
+            console.error("Failed to fetch active attendance OTP:", e);
+        }
+    }, []);
+
+    const generateOtp = async () => {
+        setOtpLoading(true);
+        try {
+            const res = await api.post('/attendance/generate');
+            setActiveOtp(res.data.data.otp);
+            setTimeLeft(res.data.data.secondsLeft);
+        } catch (e) {
+            console.error("Failed to generate attendance OTP:", e);
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchAttendance();
-    }, [fetchAttendance]);
+        fetchActiveOtp();
+    }, [fetchAttendance, fetchActiveOtp]);
+
+    // Timer logic
+    useEffect(() => {
+        if (timeLeft <= 0) {
+            if (timeLeft === 0 && activeOtp) {
+                setActiveOtp(null);
+            }
+            return;
+        }
+        const timer = setInterval(() => {
+            setTimeLeft(prev => prev - 1);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [timeLeft, activeOtp]);
 
     // Reset page on search
     useEffect(() => {
@@ -41,7 +88,68 @@ const AttendanceTab = () => {
     }, [search]);
 
     return (
-        <div className="space-y-4 h-full flex flex-col">
+        <div className="space-y-6 h-full flex flex-col">
+            {/* Roll Call Card */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm overflow-hidden relative group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-indigo-100/50 transition-colors" />
+
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-1">
+                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                            <UserCheck className="text-indigo-600" size={22} />
+                            Roll Call Pulse
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                            Broadcast a standalone attendance key to all students
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        {activeOtp ? (
+                            <div className="flex items-center gap-3 bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100 shadow-sm animate-in fade-in slide-in-from-right-4 duration-500">
+                                <div>
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">Active Code</p>
+                                    <div className="flex items-center gap-1.5 font-mono text-2xl font-black text-indigo-700 tracking-tighter">
+                                        {activeOtp.split('').map((char, i) => (
+                                            <span key={i} className="bg-white w-7 h-9 flex items-center justify-center rounded-lg border border-indigo-200/50 shadow-inner">
+                                                {char}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="hidden sm:block w-px h-8 bg-indigo-200/50 mx-1" />
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">Expires In</p>
+                                    <p className="text-sm font-black text-indigo-600 tabular-nums">
+                                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={generateOtp}
+                                disabled={otpLoading}
+                                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                            >
+                                {otpLoading ? <Loader2 size={18} className="animate-spin" /> : <UserCheck size={18} />}
+                                GENERATE ROLL CALL KEY
+                            </button>
+                        )}
+
+                        {activeOtp && (
+                            <button
+                                onClick={generateOtp}
+                                disabled={otpLoading}
+                                className="p-3 bg-white text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 rounded-2xl transition-all active:scale-90"
+                                title="Regenerate Key"
+                            >
+                                <Clock size={20} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/60">
                 <div className="relative flex-1">

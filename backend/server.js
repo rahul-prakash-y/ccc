@@ -43,6 +43,7 @@ fastify.register(require('./routes/auth'), { prefix: '/api/auth' });
 fastify.register(require('./routes/rounds'), { prefix: '/api/rounds' });
 fastify.register(require('./routes/admin'), { prefix: '/api/admin' });
 fastify.register(require('./routes/superadmin'), { prefix: '/api/superadmin' });
+fastify.register(require('./routes/attendance'), { prefix: '/api/attendance' });
 
 // Graceful Shutdown Logic
 const closeServer = async (signal) => {
