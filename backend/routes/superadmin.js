@@ -128,6 +128,73 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * GET /api/superadmin/attendance
+     * Returns student attendance based on successful OTP entry
+     */
+    fastify.get('/attendance', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { search, page = 1, limit = 20 } = request.query;
+
+            let filter = { conductedBy: { $ne: null } };
+
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                const [matchingStudents, matchingAdmins, matchingRounds] = await Promise.all([
+                    User.find({
+                        $or: [
+                            { studentId: searchRegex },
+                            { name: searchRegex }
+                        ]
+                    }).select('_id'),
+                    User.find({ name: searchRegex, role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id'),
+                    Round.find({ name: searchRegex }).select('_id')
+                ]);
+
+                const studentIds = matchingStudents.map(s => s._id);
+                const adminIds = matchingAdmins.map(a => a._id);
+                const roundIds = matchingRounds.map(r => r._id);
+
+                filter.$or = [
+                    { student: { $in: studentIds } },
+                    { conductedBy: { $in: adminIds } },
+                    { round: { $in: roundIds } }
+                ];
+            }
+
+            const pageNum = Math.max(1, Number(page));
+            const limitNum = Math.max(1, Number(limit));
+            const skip = (pageNum - 1) * limitNum;
+
+            const [attendance, total] = await Promise.all([
+                Submission.find(filter)
+                    .populate('student', 'studentId name')
+                    .populate('conductedBy', 'name')
+                    .populate('round', 'name')
+                    .sort({ startTime: -1 })
+                    .skip(skip)
+                    .limit(limitNum),
+                Submission.countDocuments(filter)
+            ]);
+
+            const totalPages = Math.ceil(total / limitNum);
+
+            return reply.send({
+                success: true,
+                data: attendance,
+                pagination: {
+                    totalRecords: total,
+                    totalPages,
+                    currentPage: pageNum,
+                    limit: limitNum
+                }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch attendance' });
+        }
+    });
+
+    /**
      * 1b. GET /api/superadmin/activity-logs
      * Returns platform activity logs (login, logout, create, update, delete, etc.)
      */

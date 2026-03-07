@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
-  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy
+  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck
 } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from './constants';
@@ -19,6 +19,7 @@ import EvaluationTab from './EvaluationTab';
 import StudentScoreDashboard from './StudentScoreDashboard';
 import TeamManagerTab from './TeamManagerTab';
 import TeamScoreTab from './TeamScoreTab';
+import AttendanceTab from './AttendanceTab';
 
 const TABS = [
   { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -32,6 +33,7 @@ const TABS = [
   { id: 'scores', label: 'Student Scores', icon: Trophy },
   { id: 'teams', label: 'Teams', icon: Users },
   { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
+  { id: 'attendance', label: 'Attendance', icon: UserCheck },
 ];
 
 const SuperAdminDashboard = () => {
@@ -163,6 +165,7 @@ const SuperAdminDashboard = () => {
                 {activeTab === 'scores' && <StudentScoreDashboard />}
                 {activeTab === 'teams' && <TeamManagerTab />}
                 {activeTab === 'team-scores' && <TeamScoreTab />}
+                {activeTab === 'attendance' && <AttendanceTab />}
               </div>
             </div>
 
