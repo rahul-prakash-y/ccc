@@ -1,18 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Filter, Search, Loader2, ChevronDown, RefreshCw } from 'lucide-react';
-import { api } from '../../store/authStore';
 import { API, ACTION_STYLES, ALL_ACTIONS } from './constants';
 import Pagination from './components/Pagination';
+import { useActivityStore } from '../../store/activityStore';
 import { SkeletonRow } from '../Skeleton';
 
 const ActivityLogsTab = () => {
-    // 1. Data Source & Pagination State
-    const [logs, setLogs] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // 1. Global Store State
+    const { logs, loading, pagination, fetchLogs } = useActivityStore();
 
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(20);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
     // 2. Filter States
     const [search, setSearch] = useState('');
@@ -27,36 +25,18 @@ const ActivityLogsTab = () => {
         return () => clearTimeout(handler);
     }, [search]);
 
-    // Reset page to 1 whenever filters change
+    // Unified Fetch Effect: Fetch logs and reset page when filters change
     useEffect(() => {
+        // Reset page to 1 if filters change (this will trigger the next effect)
         setPage(1);
     }, [actionFilter, debouncedSearch, limit]);
 
-    // Fetch Logs Master Effect
-    const fetchLogs = useCallback(async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({
-                page: page,
-                limit: limit
-            });
-            if (actionFilter) params.append('action', actionFilter);
-            if (debouncedSearch) params.append('search', debouncedSearch);
-
-            const res = await api.get(`${API}/activity-logs?${params.toString()}`);
-            setLogs(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (e) {
-            console.error('Failed to fetch activity logs:', e);
-        } finally {
-            setLoading(false);
-        }
-    }, [page, limit, actionFilter, debouncedSearch]);
-
-    // Call fetchLogs on any dependency change
     useEffect(() => {
-        fetchLogs();
-    }, [fetchLogs]);
+        const params = { page, limit };
+        if (actionFilter) params.action = actionFilter;
+        if (debouncedSearch) params.search = debouncedSearch;
+        fetchLogs(params);
+    }, [page, limit, actionFilter, debouncedSearch, fetchLogs]);
 
     return (
         <div className="space-y-5 h-full flex flex-col">
@@ -85,7 +65,12 @@ const ActivityLogsTab = () => {
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
                 <button
-                    onClick={fetchLogs}
+                    onClick={() => {
+                        const params = { page, limit };
+                        if (actionFilter) params.action = actionFilter;
+                        if (debouncedSearch) params.search = debouncedSearch;
+                        fetchLogs(params, true);
+                    }}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm group"
                     title="Refresh Logs"
                 >

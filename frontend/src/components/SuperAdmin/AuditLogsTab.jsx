@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock, Check } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
 import { API, STATUS_COLORS } from './constants';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { useAuditStore } from '../../store/auditStore';
 import Pagination from './components/Pagination';
 import { SkeletonList } from '../Skeleton';
 
@@ -17,9 +18,13 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
 
     useEffect(() => {
         if (isOpen) {
-            setMinutes(type === 'RE_ENTRY' ? '10' : '5');
-            setMode('ADD');
-            setError('');
+            // Use setTimeout to avoid synchronous setState during effect execution
+            const timer = setTimeout(() => {
+                setMinutes(type === 'RE_ENTRY' ? '10' : '5');
+                setMode('ADD');
+                setError('');
+            }, 0);
+            return () => clearTimeout(timer);
         }
     }, [isOpen, type]);
 
@@ -131,45 +136,27 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
 const AuditLogsTab = () => {
     const { rounds } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
-    const [logs, setLogs] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState('');
     const [viewingLog, setViewingLog] = useState(null);
     const [roundQuestions, setRoundQuestions] = useState([]);
     const [loadingQuestions, setLoadingQuestions] = useState(false);
 
-    // Pagination & Search States
+    // 1. Global Store State
+    const { auditLogs: logs, loading, pagination, fetchAuditLogs, removeAuditLog } = useAuditStore();
+
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
     const [busy, setBusy] = useState({});
     const [timeModal, setTimeModal] = useState({ isOpen: false, data: null, type: 'RE_ENTRY' });
 
-    // 1. Fetch Logic (now server-side)
-    const fetchLogs = useCallback(async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (selectedRound) params.append('roundId', selectedRound);
-            if (search) params.append('search', search);
-            params.append('page', page);
-            params.append('limit', limit);
-
-            const res = await api.get(`${API}/audit-logs?${params.toString()}`);
-            setLogs(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (e) {
-            console.error("Failed to fetch audit logs:", e);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedRound, search, page, limit]);
-
-    // 2. Dependency Fetch
+    // 1. Fetch Logic
     useEffect(() => {
-        fetchLogs();
-    }, [fetchLogs]);
+        const params = { page, limit };
+        if (selectedRound) params.roundId = selectedRound;
+        if (search) params.search = search;
+        fetchAuditLogs(params);
+    }, [selectedRound, search, page, limit, fetchAuditLogs]);
 
     // 2b. Fetch Questions for Round (for MCQ viewing)
     useEffect(() => {
@@ -206,7 +193,7 @@ const AuditLogsTab = () => {
                 try {
                     await api.delete(`${API}/submissions/${submissionId}`);
                     toast.success("Submission deleted successfully");
-                    fetchLogs();
+                    removeAuditLog(submissionId);
                 } catch (e) {
                     toast.error(e.response?.data?.error || "Delete failed");
                 } finally {
@@ -247,7 +234,7 @@ const AuditLogsTab = () => {
                 ? `Re-entry approved for ${studentName}`
                 : `Successfully added ${minutes} minutes to ${studentName}.`
             );
-            fetchLogs();
+            fetchAuditLogs({ page, limit, roundId: selectedRound, search }, true);
         } catch (e) {
             toast.error(e.response?.data?.error || "Action failed.");
         } finally {

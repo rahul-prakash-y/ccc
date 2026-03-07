@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check, Eye, Mail, Phone, FileText,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload,
@@ -10,6 +10,8 @@ import { API } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { useStudentStore } from '../../store/studentStore';
+import { useTeamStore } from '../../store/teamStore';
 import { SkeletonList } from '../Skeleton';
 
 // ─── Refined Student Creation Modal ─────────────────────────────────────────────────────────
@@ -642,17 +644,23 @@ const StudentDetailsModal = ({ student, onClose }) => {
 
 const StudentManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
-    const [students, setStudents] = useState([]);
-    const [teams, setTeams] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
 
-    // Pagination States
-    const [page, setPage] = useState(1);
-    const [limit] = useState(20);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+    // Global Store State
+    const {
+        students,
+        loading,
+        pagination,
+        fetchStudents,
+        addStudent,
+        removeStudent,
+        updateStudent
+    } = useStudentStore();
+    const { teams, fetchTeams } = useTeamStore();
 
     // UI State
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [limit] = useState(20);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [viewingStudent, setViewingStudent] = useState(null);
@@ -660,39 +668,14 @@ const StudentManagerTab = () => {
     const [busy, setBusy] = useState({});
     const [globalError, setGlobalError] = useState('');
 
-    const fetchTeams = useCallback(async () => {
-        try {
-            const res = await api.get(`${API}/teams`);
-            setTeams(res.data.data || []);
-        } catch (e) {
-            console.error("Failed to fetch teams:", e);
-        }
-    }, []);
-
-    // 1. Fetch Logic (now server-side)
-    const fetchStudents = useCallback(async () => {
-        setLoading(students.length === 0);
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            params.append('page', page);
-            params.append('limit', limit);
-
-            const res = await api.get(`${API}/students?${params.toString()}`);
-            setStudents(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (e) {
-            console.error("Failed to fetch students:", e);
-        } finally {
-            setLoading(false);
-        }
-    }, [search, page, limit]);
-
-    // 2. Initial Mount & Background Polling
+    // 1. Fetch Logic
     useEffect(() => {
-        fetchStudents();
+        fetchStudents({ search, page, limit });
+    }, [search, page, limit, fetchStudents]);
+
+    useEffect(() => {
         fetchTeams();
-    }, [fetchStudents, fetchTeams]);
+    }, [fetchTeams]);
 
     // Reset page on search change
     useEffect(() => {
@@ -751,7 +734,7 @@ const StudentManagerTab = () => {
                 const res = await act(student._id, 'block');
                 if (res) {
                     toast.success(`Student ${verb.toLowerCase()}ed successfully.`);
-                    setStudents(prev => prev.map(s => s._id === student._id ? { ...s, isBanned: res.isBanned } : s));
+                    updateStudent(student._id, { isBanned: res.isBanned });
                 }
             }
         });
@@ -768,7 +751,7 @@ const StudentManagerTab = () => {
                 try {
                     await api.delete(`${API}/students/${student._id}`);
                     toast.success("Student deleted successfully.");
-                    fetchStudents();
+                    removeStudent(student._id);
                 } catch (e) {
                     toast.error(e.response?.data?.error || "Deletion failed.");
                     setGlobalError(e.response?.data?.error || "Deletion failed.");
@@ -992,8 +975,8 @@ const StudentManagerTab = () => {
             {showAddModal && (
                 <AddStudentModal
                     onClose={() => setShowAddModal(false)}
-                    onCreated={() => {
-                        fetchStudents();
+                    onCreated={(newStudent) => {
+                        addStudent(newStudent);
                         setShowAddModal(false);
                     }}
                 />
@@ -1003,7 +986,7 @@ const StudentManagerTab = () => {
                 <BulkUploadModal
                     onClose={() => setShowBulkModal(false)}
                     onUploaded={() => {
-                        fetchStudents();
+                        fetchStudents({ search, page, limit }, true);
                     }}
                 />
             )}

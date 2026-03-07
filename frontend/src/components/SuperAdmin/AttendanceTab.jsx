@@ -1,102 +1,61 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Users, UserCheck, Clock, Calendar, Trash2 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import { useAttendanceStore } from '../../store/attendanceStore';
 import { SkeletonList } from '../Skeleton';
 
 const AttendanceTab = () => {
-    const [attendance, setAttendance] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // 1. Global Store State
+    const {
+        attendanceRecords: attendance,
+        loading,
+        pagination,
+        activeOtp,
+        timeLeft,
+        otpLoading,
+        fetchAttendance,
+        fetchActiveOtp,
+        generateOtp,
+        removeAttendance,
+        decrementTimer
+    } = useAttendanceStore();
+
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
-    // Roll Call States
-    const [activeOtp, setActiveOtp] = useState(null);
-    const [otpLoading, setOtpLoading] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(0);
+    // 1. Fetch Logic
+    useEffect(() => {
+        fetchAttendance({ search, page, limit });
+    }, [search, page, limit, fetchAttendance]);
 
-    const fetchAttendance = useCallback(async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            params.append('page', page);
-            params.append('limit', limit);
+    useEffect(() => {
+        fetchActiveOtp();
+    }, [fetchActiveOtp]);
 
-            const res = await api.get(`/attendance/records?${params.toString()}`);
-            setAttendance(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (e) {
-            console.error("Failed to fetch attendance:", e);
-        } finally {
-            setLoading(false);
-        }
-    }, [search, page, limit]);
+    // 2. Timer Logic
+    useEffect(() => {
+        if (!activeOtp || timeLeft <= 0) return;
+        const timer = setInterval(() => {
+            decrementTimer();
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [activeOtp, timeLeft, decrementTimer]);
 
-    const fetchActiveOtp = useCallback(async () => {
-        try {
-            const res = await api.get('/attendance/active');
-            if (res.data.success) {
-                setActiveOtp(res.data.data.otp);
-                setTimeLeft(res.data.data.secondsLeft);
-            } else {
-                setActiveOtp(null);
-            }
-        } catch (e) {
-            console.error("Failed to fetch active attendance OTP:", e);
-        }
-    }, []);
-
-    const generateOtp = async () => {
-        setOtpLoading(true);
-        try {
-            const res = await api.post('/attendance/generate');
-            setActiveOtp(res.data.data.otp);
-            setTimeLeft(res.data.data.secondsLeft);
-        } catch (e) {
-            console.error("Failed to generate attendance OTP:", e);
-        } finally {
-            setOtpLoading(false);
-        }
-    };
 
     const handleDeleteAttendance = async (id) => {
         if (!window.confirm("Are you sure you want to remove this attendance record?")) return;
         try {
             await api.delete(`/attendance/${id}`);
-            fetchAttendance();
+            removeAttendance(id);
         } catch (e) {
             console.error("Failed to delete attendance:", e);
             alert("Failed to delete record");
         }
     };
 
-    useEffect(() => {
-        fetchAttendance();
-        fetchActiveOtp();
-    }, [fetchAttendance, fetchActiveOtp]);
-
-    // Timer logic
-    useEffect(() => {
-        if (timeLeft <= 0) {
-            if (timeLeft === 0 && activeOtp) {
-                setActiveOtp(null);
-            }
-            return;
-        }
-        const timer = setInterval(() => {
-            setTimeLeft(prev => prev - 1);
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [timeLeft, activeOtp]);
-
-    // Reset page on search
-    useEffect(() => {
-        setPage(1);
-    }, [search]);
 
     return (
         <div className="space-y-6 h-full flex flex-col">

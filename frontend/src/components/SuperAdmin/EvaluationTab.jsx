@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
+import toast from 'react-hot-toast';
+import { useEvaluationStore } from '../../store/evaluationStore';
 import { SkeletonList } from '../Skeleton';
 
 // ─── Single question evaluation row (inside a student's submission card) ─────
@@ -180,8 +182,8 @@ const TransferEvalModal = ({ question, isOpen, onClose, onTransferred }) => {
                 try {
                     const res = await api.get(`${API}/admins/list`);
                     setAdmins(res.data.data.filter(a => a._id !== JSON.parse(localStorage.getItem('user'))?.userId));
-                } catch (_err) {
-                    setError('Failed to load admin list');
+                } catch {
+                    toast.error('Failed to load admin list');
                 } finally {
                     setLoading(false);
                 }
@@ -415,43 +417,26 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
 
 // ─── Main Evaluation Tab ─────────────────────────────────────────────────────
 const EvaluationTab = () => {
-    const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    // 1. Global Store State
+    const {
+        evaluationQueue: data,
+        loading,
+        error,
+        pagination,
+        fetchQueue: fetchEvaluations,
+        updateEvaluation,
+        removeQuestionFromEvaluation
+    } = useEvaluationStore();
 
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+    const [transferModal, setTransferModal] = useState({ isOpen: false, question: null, submissionId: null });
 
-    const [transferModal, setTransferModal] = useState({ isOpen: false, question: null });
-
-    const fetchEvaluations = useCallback(async () => {
-        setLoading(data.length === 0);
-        setError('');
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            params.append('page', page);
-            params.append('limit', limit);
-
-            const res = await api.get(`${API}/manual-evaluations?${params.toString()}`);
-            setData(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (err) {
-            setError(err.response?.data?.error || 'Failed to load evaluations');
-        } finally {
-            setLoading(false);
-        }
-    }, [search, page, limit, data.length]);
-
+    // 1. Fetch Logic
     useEffect(() => {
-        setPage(1);
-    }, [search]);
-
-    useEffect(() => {
-        fetchEvaluations();
-    }, [fetchEvaluations]);
+        fetchEvaluations({ search, page, limit });
+    }, [search, page, limit, fetchEvaluations]);
 
     const totalQuestions = data.reduce((sum, sub) => sum + sub.questions.length, 0);
     const totalGraded = data.reduce((sum, sub) =>
@@ -516,8 +501,10 @@ const EvaluationTab = () => {
                         <SubmissionEvalCard
                             key={submission.submissionId || idx}
                             submission={submission}
-                            onScoreSaved={fetchEvaluations}
-                            onTransfer={(q) => setTransferModal({ isOpen: true, question: q })}
+                            onScoreSaved={(questionId, scoreData) => {
+                                updateEvaluation(submission._id, questionId, scoreData);
+                            }}
+                            onTransfer={(q) => setTransferModal({ isOpen: true, question: q, submissionId: submission._id })}
                         />
                     ))
                 )}
@@ -535,8 +522,11 @@ const EvaluationTab = () => {
             <TransferEvalModal
                 isOpen={transferModal.isOpen}
                 question={transferModal.question}
-                onClose={() => setTransferModal({ isOpen: false, question: null })}
-                onTransferred={fetchEvaluations}
+                onClose={() => setTransferModal({ isOpen: false, question: null, submissionId: null })}
+                onTransferred={() => {
+                    removeQuestionFromEvaluation(transferModal.submissionId, transferModal.question._id);
+                    toast.success("Evaluation transferred successfully");
+                }}
             />
         </div>
     );

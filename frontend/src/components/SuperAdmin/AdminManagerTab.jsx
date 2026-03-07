@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check, Search,
     UserCog, UserX, UserCheck, KeyRound, LogIn, Trash2, Upload
@@ -9,6 +9,7 @@ import { API } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
+import { useAdminStore } from '../../store/adminStore';
 import { SkeletonList } from '../Skeleton';
 
 // ─── Refined Add Admin Modal ───────────────────────────────────────────────────────────
@@ -364,44 +365,32 @@ const ResetPasswordModal = ({ admin, onClose }) => {
 // ─── Main Admin Manager Tab ─────────────────────────────────────────────────────────
 const AdminManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
-    const [admins, setAdmins] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
 
-    // Pagination States
-    const [page, setPage] = useState(1);
-    const [limit] = useState(20);
-    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+    // Global Store State
+    const {
+        admins,
+        loading,
+        pagination,
+        fetchAdmins,
+        addAdmin,
+        removeAdmin,
+        updateAdmin
+    } = useAdminStore();
 
     // UI State
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [limit] = useState(20);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [resetTarget, setResetTarget] = useState(null);
     const [busy, setBusy] = useState({});
     const [globalError, setGlobalError] = useState('');
 
-    // Isolated Fetch Logic
-    const fetchAdmins = useCallback(async () => {
-        setLoading(admins.length === 0);
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            params.append('page', page);
-            params.append('limit', limit);
-
-            const res = await api.get(`${API}/admins?${params.toString()}`);
-            setAdmins(res.data.data || []);
-            setPagination(res.data.pagination || { totalPages: 1, totalRecords: 0 });
-        } catch (e) {
-            console.error("Failed to fetch admins", e);
-        } finally {
-            setLoading(false);
-        }
-    }, [search, page, limit, admins.length]);
-
+    // 1. Fetch Logic
     useEffect(() => {
-        fetchAdmins();
-    }, [fetchAdmins]);
+        fetchAdmins({ search, page, limit });
+    }, [search, page, limit, fetchAdmins]);
 
     // Reset page on search change
     useEffect(() => {
@@ -448,7 +437,7 @@ const AdminManagerTab = () => {
                 const res = await act(admin._id, 'block');
                 if (res) {
                     toast.success(`Admin ${verb.toLowerCase()}ed successfully.`);
-                    setAdmins(prev => prev.map(a => a._id === admin._id ? { ...a, isBanned: res.isBanned } : a));
+                    updateAdmin(admin._id, { isBanned: res.isBanned });
                 }
             }
         });
@@ -465,7 +454,7 @@ const AdminManagerTab = () => {
                 try {
                     await api.delete(`${API}/admins/${admin._id}`);
                     toast.success("Admin deleted successfully.");
-                    fetchAdmins();
+                    removeAdmin(admin._id);
                 } catch (e) {
                     toast.error(e.response?.data?.error || "Deletion failed.");
                     setGlobalError(e.response?.data?.error || "Deletion failed.");
@@ -631,7 +620,7 @@ const AdminManagerTab = () => {
                 <AdminBulkUploadModal
                     onClose={() => setShowBulkModal(false)}
                     onUploaded={() => {
-                        fetchAdmins();
+                        fetchAdmins({ search, page, limit }, true);
                         setShowBulkModal(false);
                     }}
                 />
@@ -640,8 +629,8 @@ const AdminManagerTab = () => {
             {showAddModal && (
                 <AddAdminModal
                     onClose={() => setShowAddModal(false)}
-                    onCreated={() => {
-                        fetchAdmins();
+                    onCreated={(newAdmin) => {
+                        addAdmin(newAdmin);
                         setShowAddModal(false);
                     }}
                 />
