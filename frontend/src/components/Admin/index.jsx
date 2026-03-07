@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -14,6 +14,7 @@ import AuditLogsTab from '../SuperAdmin/AuditLogsTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
 import TeamScoreTab from '../SuperAdmin/TeamScoreTab';
 import AdminManagerTab from '../SuperAdmin/AdminManagerTab';
+import AttendanceTab from "../SuperAdmin/AttendanceTab";
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -25,6 +26,7 @@ const TABS = [
     { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
     { id: 'teams', label: 'Teams', icon: Users },
     { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
+    { id: 'attendance', label: 'Attendance', icon: UserCheck },
 ];
 
 const AdminDashboard = () => {
@@ -156,6 +158,8 @@ const AdminDashboard = () => {
                                 {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
                                 {activeTab === 'teams' && <TeamManagerTab />}
                                 {activeTab === 'team-scores' && <TeamScoreTab />}
+                                {activeTab === 'attendance' && <AttendanceTab />}
+
                             </div>
                         </div>
 
