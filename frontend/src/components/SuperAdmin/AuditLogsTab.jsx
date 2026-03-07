@@ -466,8 +466,8 @@ const AuditLogsTab = ({ rounds }) => {
                             <table className="w-full text-left text-sm border-collapse">
                                 <thead className="bg-slate-50 border-b border-slate-200">
                                     <tr>
-                                        {['Student Details', 'Round Context', 'Status', 'Score', 'Anomalies', 'Actions'].map((h, i) => (
-                                            <th key={h} className={`px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap ${i === 5 ? 'text-right' : ''}`}>
+                                        {['Student Details', 'Round Context', 'Conducted By', 'Status', 'Score', 'Anomalies', 'Actions'].map((h, i) => (
+                                            <th key={h} className={`px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap ${i === 6 ? 'text-right' : ''}`}>
                                                 {h}
                                             </th>
                                         ))}
@@ -495,6 +495,11 @@ const AuditLogsTab = ({ rounds }) => {
                                                 {/* Round Column */}
                                                 <td className="px-4 py-3">
                                                     <p className="text-xs font-bold text-slate-800">{log.round?.name || '—'}</p>
+                                                </td>
+
+                                                {/* Conducted By Column */}
+                                                <td className="px-4 py-3">
+                                                    <p className="text-[11px] font-bold text-indigo-600">{log.conductedBy?.name || '—'}</p>
                                                 </td>
 
                                                 {/* Status Column */}

@@ -4,6 +4,7 @@ const Submission = require('../models/Submission');
 const Round = require('../models/Round');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
+const AdminOTP = require('../models/AdminOTP');
 const Team = require('../models/Team');
 const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
@@ -98,6 +99,7 @@ module.exports = async function (fastify, opts) {
                 Submission.find(filter)
                     .populate('student', 'studentId name role isBanned')
                     .populate('round', 'name status type')
+                    .populate('conductedBy', 'name')
                     .populate('manualScores.questionId', 'title points type')
                     .populate('manualScores.adminId', 'name')
                     .sort({ createdAt: -1 })
@@ -1961,26 +1963,38 @@ module.exports = async function (fastify, opts) {
      * Allows SuperAdmin to generate Start/End OTPs and unlock a round.
      */
     fastify.post('/rounds/:roundId/generate-otp', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
-        const { roundId } = request.params;
         try {
+            const { roundId } = request.params;
+            const adminId = request.user.userId;
             const crypto = require('crypto');
+
             const startOtp = crypto.randomInt(100000, 999999).toString();
             const endOtp = crypto.randomInt(100000, 999999).toString();
 
-            const round = await Round.findByIdAndUpdate(
-                roundId,
-                { startOtp, endOtp, status: 'WAITING_FOR_OTP', isOtpActive: true },
-                { new: true }
+            // Store in AdminOTP model (per admin)
+            await AdminOTP.findOneAndUpdate(
+                { adminId, roundId },
+                { startOtp, endOtp, otpIssuedAt: new Date() },
+                { upsert: true, new: true }
             );
-            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Also update the round status to waiting if it's currently locked
+            const round = await Round.findById(roundId);
+            if (round && round.status === 'LOCKED') {
+                round.status = 'WAITING_FOR_OTP';
+                round.isOtpActive = true;
+                await round.save();
+            }
 
             await logActivity({
                 action: 'OTP_GENERATED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Round', id: roundId, label: round.name },
+                target: { type: 'Round', id: roundId, label: round?.name || 'Round' },
+                metadata: { adminId },
                 ip: request.ip
             });
-            return reply.send({ success: true, data: round });
+
+            return reply.code(200).send({ success: true, startOtp, endOtp });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to generate OTPs' });

@@ -29,7 +29,10 @@ const OtpPanel = ({ section, onOtpChange }) => {
         onOtpChange?.(section._id, d);
       }
       setOtp({ startOtp: d.startOtp, endOtp: d.endOtp, secondsLeft: d.secondsLeft });
-    } catch { /* silently skip */ }
+    } catch {
+      // Fallback to section data if refresh fails (might be stale but better than empty)
+      setOtp(prev => ({ ...prev, startOtp: section.startOtp, endOtp: section.endOtp }));
+    }
   }, [active, section._id, onOtpChange]);
 
   useEffect(() => {
@@ -246,7 +249,7 @@ const QuestionSettings = ({ section, onSave, busy }) => {
 };
 
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection, onProjector }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -346,15 +349,15 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
             </div>
           )}
 
-          {/* {(section.status === 'WAITING_FOR_OTP' || section.status === 'RUNNING') && (
+          {(section.status === 'WAITING_FOR_OTP' || section.status === 'RUNNING') && (
             <button
-              onClick={() => setProjectorSection(section)}
+              onClick={onProjector}
               className="h-10 w-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-sm"
               title="Projector Mode"
             >
               <Eye size={16} />
             </button>
-          )} */}
+          )}
 
           <button
             onClick={() => isMulti ? onDeleteSection(section) : onDeleteGroup(group)}
@@ -598,7 +601,7 @@ const LiveOpsTab = () => {
             onDeleteGroup={handleDeleteGroup}
             onAddTime={handleAddTime}
             onDeleteSection={handleDeleteSection}
-            setProjectorSection={setProjectorSection}
+            onProjector={() => setProjectorSection(group.sections[0])}
           />
         ))}
       </div>

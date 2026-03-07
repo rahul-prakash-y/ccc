@@ -78,7 +78,13 @@ const submissionSchema = new mongoose.Schema({
     // Shuffled question IDs assigned to this student for this round
     assignedQuestions: [
         { type: mongoose.Schema.Types.ObjectId, ref: 'Question' }
-    ]
+    ],
+    // The admin whose OTP was used to start the test
+    conductedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    }
 }, {
     timestamps: true
 });

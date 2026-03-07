@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Round = require('../models/Round');
 const Submission = require('../models/Submission');
 const User = require('../models/User');
+const AdminOTP = require('../models/AdminOTP');
 const { logActivity } = require('../utils/logger');
 
 // Helper to generate a secure 6-digit OTP
@@ -47,37 +48,39 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/:roundId/refresh-otp', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
+        const adminId = request.user.userId;
 
         try {
-            let round = await Round.findById(roundId);
+            const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             const OTP_TTL_MS = 60 * 1000; // 1 minute
             const now = new Date();
-            const issuedAt = round.otpIssuedAt ? new Date(round.otpIssuedAt) : null;
+
+            let adminOtpDoc = await AdminOTP.findOne({ adminId, roundId });
+            const issuedAt = adminOtpDoc?.otpIssuedAt ? new Date(adminOtpDoc.otpIssuedAt) : null;
             const age = issuedAt ? now - issuedAt : Infinity;
 
-            // Auto-rotate if OTP is expired or was never issued
-            if (!round.startOtp || !round.endOtp || age >= OTP_TTL_MS) {
+            // Auto-rotate if OTP is expired or was never issued for this admin
+            if (!adminOtpDoc || age >= OTP_TTL_MS) {
                 const startOtp = generateOtp();
                 const endOtp = generateOtp();
-                round = await Round.findByIdAndUpdate(
-                    roundId,
+                adminOtpDoc = await AdminOTP.findOneAndUpdate(
+                    { adminId, roundId },
                     { startOtp, endOtp, otpIssuedAt: now },
-                    { new: true }
+                    { upsert: true, new: true }
                 );
             }
 
-            const freshIssuedAt = new Date(round.otpIssuedAt);
-            const expiresAt = new Date(freshIssuedAt.getTime() + OTP_TTL_MS);
+            const expiresAt = new Date(new Date(adminOtpDoc.otpIssuedAt).getTime() + OTP_TTL_MS);
             const secondsLeft = Math.max(0, Math.ceil((expiresAt - new Date()) / 1000));
 
             return reply.code(200).send({
                 success: true,
                 data: {
-                    startOtp: round.startOtp,
-                    endOtp: round.endOtp,
-                    otpIssuedAt: round.otpIssuedAt,
+                    startOtp: adminOtpDoc.startOtp,
+                    endOtp: adminOtpDoc.endOtp,
+                    otpIssuedAt: adminOtpDoc.otpIssuedAt,
                     expiresAt,
                     secondsLeft
                 }
@@ -103,10 +106,19 @@ module.exports = async function (fastify, opts) {
 
             const startOtp = generateOtp();
             const endOtp = generateOtp();
+            const adminId = request.user.userId;
 
+            // Save for this admin
+            await AdminOTP.findOneAndUpdate(
+                { adminId, roundId: firstRound._id, testGroupId },
+                { startOtp, endOtp, otpIssuedAt: new Date() },
+                { upsert: true, new: true }
+            );
+
+            // Update round status global flag
             const round = await Round.findByIdAndUpdate(
                 firstRound._id,
-                { startOtp, endOtp, otpIssuedAt: new Date(), status: 'WAITING_FOR_OTP', isOtpActive: true },
+                { status: 'WAITING_FOR_OTP', isOtpActive: true },
                 { new: true }
             );
 
@@ -123,8 +135,8 @@ module.exports = async function (fastify, opts) {
                 message: 'Test keys generated successfully',
                 data: {
                     roundName: round.name,
-                    startOtp: round.startOtp,
-                    endOtp: round.endOtp
+                    startOtp,
+                    endOtp
                 }
             });
         } catch (error) {
@@ -179,10 +191,18 @@ module.exports = async function (fastify, opts) {
         try {
             const startOtp = generateOtp();
             const endOtp = generateOtp();
+            const adminId = request.user.userId;
+
+            // Save for this admin
+            await AdminOTP.findOneAndUpdate(
+                { adminId, roundId },
+                { startOtp, endOtp, otpIssuedAt: new Date() },
+                { upsert: true, new: true }
+            );
 
             const round = await Round.findByIdAndUpdate(
                 roundId,
-                { startOtp, endOtp, otpIssuedAt: new Date(), status: 'WAITING_FOR_OTP', isOtpActive: true },
+                { status: 'WAITING_FOR_OTP', isOtpActive: true },
                 { new: true }
             );
 
@@ -203,8 +223,8 @@ module.exports = async function (fastify, opts) {
                 message: 'OTPs generated successfully',
                 data: {
                     roundName: round.name,
-                    startOtp: round.startOtp,
-                    endOtp: round.endOtp
+                    startOtp,
+                    endOtp
                 }
             });
         } catch (error) {
@@ -221,6 +241,7 @@ module.exports = async function (fastify, opts) {
         const { roundId } = request.params;
         const { startOtp, isAutoJoin } = request.body;
         const studentId = request.user.userId;
+        let submissionDetails = {};
 
         try {
             const round = await Round.findById(roundId);
@@ -254,7 +275,18 @@ module.exports = async function (fastify, opts) {
             } else {
                 if (!startOtp) return reply.code(400).send({ error: 'startOtp is required' });
                 if (round.status === 'LOCKED' || !round.isOtpActive) return reply.code(403).send({ error: 'Round is currently locked by admin' });
-                if (round.startOtp !== startOtp) return reply.code(401).send({ error: 'Invalid Start OTP' });
+
+                // Verify OTP against AdminOTP collection
+                const validOtpDoc = await AdminOTP.findOne({
+                    roundId,
+                    startOtp,
+                    otpIssuedAt: { $gte: new Date(Date.now() - 2 * 60 * 1000) } // Allow 2 min window for safety
+                });
+
+                if (!validOtpDoc) return reply.code(401).send({ error: 'Invalid or expired Start OTP' });
+
+                // Track who conducted it
+                submissionDetails = { conductedBy: validOtpDoc.adminId };
             }
 
             // Determine if we should inherit the clock from Round 1 of the Test Group
@@ -263,7 +295,13 @@ module.exports = async function (fastify, opts) {
                 const firstRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: 1 });
                 if (firstRound) {
                     const firstSub = await Submission.findOne({ student: studentId, round: firstRound._id });
-                    if (firstSub) startTime = firstSub.startTime;
+                    if (firstSub) {
+                        startTime = firstSub.startTime;
+                        // Inherit conductedBy as well for multi-section tests
+                        if (firstSub.conductedBy) {
+                            submissionDetails = { conductedBy: firstSub.conductedBy };
+                        }
+                    }
                 }
             }
 
@@ -272,7 +310,8 @@ module.exports = async function (fastify, opts) {
                 student: studentId,
                 round: roundId,
                 status: 'IN_PROGRESS',
-                startTime
+                startTime,
+                ...submissionDetails
             });
 
             await submission.save();
@@ -319,7 +358,15 @@ module.exports = async function (fastify, opts) {
 
             if (!nextRoundId) {
                 if (!endOtp) return reply.code(400).send({ error: 'endOtp is required to finalize the test' });
-                if (round.endOtp !== endOtp) return reply.code(401).send({ error: 'Invalid End OTP' });
+
+                // Verify End OTP
+                const validOtpDoc = await AdminOTP.findOne({
+                    roundId,
+                    endOtp,
+                    otpIssuedAt: { $gte: new Date(Date.now() - 10 * 60 * 60 * 1000) } // endOtp is usually more stable, 10h window
+                });
+
+                if (!validOtpDoc) return reply.code(401).send({ error: 'Invalid End OTP' });
             }
 
             const submission = await Submission.findOne({ student: studentId, round: roundId });
