@@ -60,7 +60,7 @@ const AttendanceTab = () => {
     return (
         <div className="space-y-6 h-full flex flex-col">
             {/* Roll Call Card */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm overflow-hidden relative group">
+            <div className="bg-white border shrink-0 border-slate-200 rounded-3xl p-6 shadow-sm overflow-hidden relative group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-indigo-100/50 transition-colors" />
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
