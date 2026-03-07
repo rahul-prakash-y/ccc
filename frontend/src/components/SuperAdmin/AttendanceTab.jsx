@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Loader2, Users, UserCheck, Clock, Calendar } from 'lucide-react';
+import { Search, Loader2, Users, UserCheck, Clock, Calendar, Trash2 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
@@ -60,6 +60,17 @@ const AttendanceTab = () => {
             console.error("Failed to generate attendance OTP:", e);
         } finally {
             setOtpLoading(false);
+        }
+    };
+
+    const handleDeleteAttendance = async (id) => {
+        if (!window.confirm("Are you sure you want to remove this attendance record?")) return;
+        try {
+            await api.delete(`/attendance/${id}`);
+            fetchAttendance();
+        } catch (e) {
+            console.error("Failed to delete attendance:", e);
+            alert("Failed to delete record");
         }
     };
 
@@ -187,9 +198,9 @@ const AttendanceTab = () => {
                             <thead>
                                 <tr className="bg-slate-50/50 border-b border-slate-200">
                                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Student</th>
-                                    <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Test / Section</th>
-                                    <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Entry Time</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Marked At</th>
                                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Provided By (Admin)</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -210,21 +221,11 @@ const AttendanceTab = () => {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                                                    <Calendar size={14} />
-                                                </div>
-                                                <span className="text-sm font-bold text-slate-700 truncate max-w-[200px]">
-                                                    {record.round?.name || 'Round Expired'}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 text-slate-500">
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="inline-flex items-center gap-2 text-slate-500">
                                                 <Clock size={14} />
                                                 <span className="text-xs font-bold">
-                                                    {record.startTime ? new Date(record.startTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Pending'}
+                                                    {new Date(record.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                                                 </span>
                                             </div>
                                         </td>
@@ -232,9 +233,18 @@ const AttendanceTab = () => {
                                             <div className="inline-flex items-center gap-2 bg-indigo-50/50 px-3 py-1.5 rounded-full border border-indigo-100/50">
                                                 <UserCheck size={14} className="text-indigo-600" />
                                                 <span className="text-xs font-black text-indigo-700">
-                                                    {record.conductedBy?.name || 'System / Auto'}
+                                                    {record.markedBy?.name || 'System / Auto'}
                                                 </span>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                onClick={() => handleDeleteAttendance(record._id)}
+                                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                title="Remove Attendance"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

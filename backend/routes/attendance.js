@@ -145,37 +145,39 @@ module.exports = async function (fastify, opts) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch attendance records' });
         }
-        // ─── ADMIN: Delete Attendance Record ─────────────────────────────────────
-        fastify.delete('/:id', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
-            try {
-                const { id } = request.params;
+    });
 
-                const attendance = await Attendance.findById(id);
-                if (!attendance) {
-                    return reply.code(404).send({ error: 'Attendance record not found' });
-                }
+    // ─── ADMIN: Delete Attendance Record ─────────────────────────────────────
+    fastify.delete('/:id', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { id } = request.params;
 
-                // Optional: Only allow the admin who marked it or a SuperAdmin to delete it
-                // if (request.user.role !== 'SUPERADMIN' && attendance.markedBy.toString() !== request.user.userId) {
-                //     return reply.code(403).send({ error: 'Unauthorized to delete this record' });
-                // }
-
-                await Attendance.findByIdAndDelete(id);
-
-                await logActivity({
-                    action: 'ATTENDANCE_REMOVED',
-                    performedBy: { userId: request.user.userId, studentId: request.user.studentId, name: request.user.name, role: request.user.role },
-                    target: { type: 'Attendance', id: id, label: `Removed record for student ${attendance.student}` },
-                    ip: request.ip
-                });
-
-                return reply.send({
-                    success: true,
-                    message: 'Attendance record removed successfully'
-                });
-            } catch (error) {
-                fastify.log.error(error);
-                return reply.code(500).send({ error: 'Failed to delete attendance record' });
+            const attendance = await Attendance.findById(id);
+            if (!attendance) {
+                return reply.code(404).send({ error: 'Attendance record not found' });
             }
-        });
-    };
+
+            // Optional: Only allow the admin who marked it or a SuperAdmin to delete it
+            // if (request.user.role !== 'SUPERADMIN' && attendance.markedBy.toString() !== request.user.userId) {
+            //     return reply.code(403).send({ error: 'Unauthorized to delete this record' });
+            // }
+
+            await Attendance.findByIdAndDelete(id);
+
+            await logActivity({
+                action: 'ATTENDANCE_REMOVED',
+                performedBy: { userId: request.user.userId, studentId: request.user.studentId, name: request.user.name, role: request.user.role },
+                target: { type: 'Attendance', id: id, label: `Removed record for student ${attendance.student}` },
+                ip: request.ip
+            });
+
+            return reply.send({
+                success: true,
+                message: 'Attendance record removed successfully'
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete attendance record' });
+        }
+    });
+};
