@@ -11,29 +11,40 @@ import { SkeletonList } from '../Skeleton';
 // ─── Extra Time / Re-entry Modal ─────────────────────────────────────────────
 const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }) => {
     const [minutes, setMinutes] = useState('10');
+    const [mode, setMode] = useState('ADD'); // 'ADD' or 'SUBTRACT'
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (isOpen) {
             setMinutes(type === 'RE_ENTRY' ? '10' : '5');
+            setMode('ADD');
             setError('');
         }
     }, [isOpen, type]);
 
     const handleConfirm = () => {
         const num = parseInt(minutes, 10);
-        if (isNaN(num) || num < 0) {
+        if (isNaN(num)) {
             setError('Please enter a valid number of minutes.');
             return;
         }
-        onConfirm(num);
+
+        if (num <= 0) {
+            setError('Minutes must be greater than zero.');
+            return;
+        }
+
+        // Apply negative if subtracting
+        const adjustment = mode === 'ADD' ? num : -num;
+
+        onConfirm(adjustment);
         onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -53,16 +64,34 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
                     </div>
 
                     <div className="space-y-4">
+                        {/* Direction Toggle for Time Adjustment */}
+                        {type !== 'RE_ENTRY' && (
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                <button
+                                    onClick={() => setMode('ADD')}
+                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${mode === 'ADD' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Increase Time
+                                </button>
+                                <button
+                                    onClick={() => setMode('SUBTRACT')}
+                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${mode === 'SUBTRACT' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Decrease Time
+                                </button>
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                Extra Minutes to Grant
+                                {mode === 'ADD' ? 'Minutes to Add' : 'Minutes to Subtract'}
                             </label>
                             <input
                                 type="number"
-                                min="0"
+                                min="1"
                                 value={minutes}
                                 onChange={e => setMinutes(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 transition-all ${mode === 'ADD' ? 'focus:ring-indigo-500/50' : 'focus:ring-red-500/50'}`}
                                 placeholder="Enter minutes..."
                                 autoFocus
                             />
@@ -71,7 +100,9 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
                         <p className="text-[11px] text-slate-500 leading-relaxed font-medium bg-slate-50 p-3 rounded-xl border border-slate-100">
                             {type === 'RE_ENTRY'
                                 ? "This will reset their status to IN_PROGRESS and allow them to resume their session."
-                                : "The student will receive these minutes immediately in their active session."}
+                                : mode === 'ADD'
+                                    ? "The student will receive these minutes immediately in their active session."
+                                    : "The student's remaining time will be reduced by these minutes immediately."}
                         </p>
                     </div>
                 </div>
@@ -85,10 +116,10 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
                     </button>
                     <button
                         onClick={handleConfirm}
-                        className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg ${type === 'RE_ENTRY' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
+                        className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg ${type === 'RE_ENTRY' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : mode === 'ADD' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-red-600 hover:bg-red-700 shadow-red-100'}`}
                     >
                         {type === 'RE_ENTRY' ? <Unlock size={14} /> : <Check size={14} />}
-                        {type === 'RE_ENTRY' ? 'Approve Re-entry' : 'Grant Time'}
+                        {type === 'RE_ENTRY' ? 'Approve Re-entry' : mode === 'ADD' ? 'Update Time' : 'Reduce Time'}
                     </button>
                 </div>
             </motion.div>

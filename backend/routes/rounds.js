@@ -259,7 +259,8 @@ module.exports = async function (fastify, opts) {
                     success: true,
                     message: 'Round resumed successfully',
                     startTime: submission.startTime,
-                    durationMinutes: round.testDurationMinutes || round.durationMinutes
+                    durationMinutes: round.testDurationMinutes || round.durationMinutes,
+                    extraTimeMinutes: submission.extraTimeMinutes || 0
                 });
             }
 
@@ -297,10 +298,9 @@ module.exports = async function (fastify, opts) {
                     const firstSub = await Submission.findOne({ student: studentId, round: firstRound._id });
                     if (firstSub) {
                         startTime = firstSub.startTime;
-                        // Inherit conductedBy as well for multi-section tests
-                        if (firstSub.conductedBy) {
-                            submissionDetails = { conductedBy: firstSub.conductedBy };
-                        }
+                        // Inherit conductedBy and extraTimeMinutes for continuity
+                        submissionDetails.conductedBy = firstSub.conductedBy || submissionDetails.conductedBy;
+                        submissionDetails.extraTimeMinutes = firstSub.extraTimeMinutes || 0;
                     }
                 }
             }
@@ -328,7 +328,8 @@ module.exports = async function (fastify, opts) {
                 success: true,
                 message: 'Round unlocked successfully',
                 startTime: submission.startTime,
-                durationMinutes: round.testDurationMinutes || round.durationMinutes
+                durationMinutes: round.testDurationMinutes || round.durationMinutes,
+                extraTimeMinutes: submission.extraTimeMinutes || 0
             });
 
         } catch (error) {

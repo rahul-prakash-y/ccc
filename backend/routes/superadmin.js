@@ -1790,8 +1790,8 @@ module.exports = async function (fastify, opts) {
             const { submissionId } = request.params;
             const { addMinutes } = request.body;
 
-            if (!addMinutes || isNaN(addMinutes) || addMinutes <= 0) {
-                return reply.code(400).send({ error: 'Valid minutes to add are required' });
+            if (addMinutes === undefined || isNaN(addMinutes) || Number(addMinutes) === 0) {
+                return reply.code(400).send({ error: 'Valid minutes adjustment is required' });
             }
 
             const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
@@ -1840,6 +1840,15 @@ module.exports = async function (fastify, opts) {
             // Clear disqualification reason
             submission.disqualificationReason = null;
 
+            // CRITICAL: Also un-ban the student and restore session validity
+            const student = await User.findById(submission.student);
+            if (student) {
+                student.isBanned = false;
+                student.banReason = null;
+                student.tokenIssuedAfter = null;
+                await student.save();
+            }
+
             await submission.save();
 
             // Log activity
@@ -1850,7 +1859,7 @@ module.exports = async function (fastify, opts) {
                 ip: request.ip
             });
 
-            return reply.code(200).send({ success: true, message: 'Re-entry approved. Student granted 10 extra minutes.' });
+            return reply.code(200).send({ success: true, message: `Re-entry approved. Student granted ${addMinutes} extra minutes.` });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to approve re-entry' });
