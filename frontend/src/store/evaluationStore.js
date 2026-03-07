@@ -19,7 +19,7 @@ export const useEvaluationStore = create((set, get) => ({
         set({ loading: true, error: null });
         try {
             const queryParams = new URLSearchParams(params);
-            const res = await api.get(`${API}/manual-evaluations/queue?${queryParams.toString()}`);
+            const res = await api.get(`${API}/manual-evaluations?${queryParams.toString()}`);
             set({
                 evaluationQueue: res.data.data || [],
                 pagination: res.data.pagination || { totalPages: 1, totalRecords: 0 },
