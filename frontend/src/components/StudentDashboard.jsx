@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check } from 'lucide-react';
+import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check, ShieldAlert } from 'lucide-react';
 import OtpGate from './OtpGate';
 import { useAuthStore, api } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -182,10 +182,21 @@ const StudentDashboard = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <AnimatePresence>
                             {displayRounds.map((round, index) => {
-                                const config = statusConfig[round.status];
+                                const eligibility = round.eligibility || { eligible: true };
+                                const isEligible = eligibility.eligible !== false;
+
+                                const config = isEligible ? statusConfig[round.status] : {
+                                    icon: ShieldAlert,
+                                    label: 'RESTRICTED',
+                                    bg: 'bg-red-50',
+                                    border: 'border-red-100',
+                                    color: 'text-red-500',
+                                    badge: 'border-red-200 bg-red-50 text-red-600'
+                                };
+
                                 const Icon = config.icon;
-                                const isInteractable = round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING';
-                                const isLive = round.status === 'RUNNING';
+                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && isEligible;
+                                const isLive = round.status === 'RUNNING' && isEligible;
 
                                 return (
                                     <motion.div
@@ -218,18 +229,27 @@ const StudentDashboard = () => {
                                             <div className="space-y-2">
                                                 <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">{round.name}</h3>
 
-                                                <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                                                    <Clock size={14} className="text-slate-400" />
-                                                    {round.testDurationMinutes || round.durationMinutes} Minutes Limit
-                                                    {round.totalSections > 1 && (
-                                                        <>
-                                                            <span className="text-slate-300">|</span>
-                                                            <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
-                                                                {round.totalSections} Sections
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </div>
+                                                {!isEligible ? (
+                                                    <div className="bg-red-50/50 rounded-xl p-3 border border-red-100/50">
+                                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-widest leading-none mb-1">Rank Requirement Failed</p>
+                                                        <p className="text-xs font-bold text-red-800 leading-tight">
+                                                            Top {eligibility.maxRank} only. Your rank: #{eligibility.rank}
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                                                        <Clock size={14} className="text-slate-400" />
+                                                        {round.testDurationMinutes || round.durationMinutes} Minutes Limit
+                                                        {round.totalSections > 1 && (
+                                                            <>
+                                                                <span className="text-slate-300">|</span>
+                                                                <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
+                                                                    {round.totalSections} Sections
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -238,10 +258,11 @@ const StudentDashboard = () => {
                                             ${isLive ? 'border-emerald-100/50' : 'border-slate-100'}
                                         `}>
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                                {round.status === 'LOCKED' ? 'Access Restricted' :
-                                                    round.status === 'COMPLETED' ? 'Data Sealed' :
-                                                        round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
-                                                            'Session Ready'}
+                                                {!isEligible ? 'Access Locked' :
+                                                    round.status === 'LOCKED' ? 'Access Restricted' :
+                                                        round.status === 'COMPLETED' ? 'Data Sealed' :
+                                                            round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
+                                                                'Session Ready'}
                                             </p>
 
                                             {isInteractable && (

@@ -383,6 +383,7 @@ const LiveOpsTab = () => {
   const [testDurationMinutes, setTestDurationMinutes] = useState(60);
   const [roundsConfig, setRoundsConfig] = useState([{ type: 'GENERAL', questionCount: '' }]);
   const [isTeamTest, setIsTeamTest] = useState(false);
+  const [maxParticipants, setMaxParticipants] = useState('');
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null
@@ -525,12 +526,14 @@ const LiveOpsTab = () => {
         testDurationMinutes,
         roundOrder: 1,
         questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount),
-        isTeamTest
+        isTeamTest,
+        maxParticipants: maxParticipants === '' ? null : Number(maxParticipants)
       });
       setShowAddModal(false);
       setTestName('');
       setTestDurationMinutes(60);
       setIsTeamTest(false);
+      setMaxParticipants('');
       setRoundsConfig([{ type: 'GENERAL', questionCount: '' }]);
       fetchSections();
     } catch (err) { console.error(err); }
@@ -673,6 +676,16 @@ const LiveOpsTab = () => {
                           newConf[0].questionCount = e.target.value;
                           setRoundsConfig(newConf);
                         }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-indigo-100/30">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight italic">Max Participants (Top X Rank)</label>
+                      <input
+                        type="number"
+                        placeholder="No Limit"
+                        className="w-24 bg-white border border-indigo-100 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-600 placeholder:text-slate-300"
+                        value={maxParticipants}
+                        onChange={e => setMaxParticipants(e.target.value)}
                       />
                     </div>
                   </div>

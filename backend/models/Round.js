@@ -68,7 +68,16 @@ const roundSchema = new mongoose.Schema({
     isTeamTest: {
         type: Boolean,
         default: false // If true, scores are halved for individual students
-    }
+    },
+    // Eligibility & Participation Limits
+    maxParticipants: {
+        type: Number,
+        default: null // null = no limit (open to all)
+    },
+    allowedStudentIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }]
 }, {
     timestamps: true
 });

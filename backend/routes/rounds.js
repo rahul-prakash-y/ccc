@@ -5,6 +5,7 @@ const Submission = require('../models/Submission');
 const User = require('../models/User');
 const AdminOTP = require('../models/AdminOTP');
 const { logActivity } = require('../utils/logger');
+const { isStudentEligible } = require('../utils/eligibility');
 
 // Helper to generate a secure 6-digit OTP
 const generateOtp = () => {
@@ -25,12 +26,16 @@ module.exports = async function (fastify, opts) {
                 .lean();
             const studentId = request.user.userId;
 
-            // Enrich rounds with the student's submission status
+            // Enrich rounds with the student's submission status & eligibility
             const enrichedRounds = await Promise.all(rounds.map(async (round) => {
-                const submission = await Submission.findOne({ student: studentId, round: round._id }).select('status');
+                const [submission, eligibility] = await Promise.all([
+                    Submission.findOne({ student: studentId, round: round._id }).select('status'),
+                    isStudentEligible(studentId, round._id)
+                ]);
                 return {
                     ...round,
-                    mySubmissionStatus: submission ? submission.status : null
+                    mySubmissionStatus: submission ? submission.status : null,
+                    eligibility
                 };
             }));
 
@@ -246,6 +251,15 @@ module.exports = async function (fastify, opts) {
         try {
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // ─── Participation Eligibility Check ─────────────────────────────────────
+            const eligibility = await isStudentEligible(studentId, roundId);
+            if (!eligibility.eligible) {
+                return reply.code(403).send({
+                    error: 'Access Denied',
+                    message: eligibility.message
+                });
+            }
 
             // Check if student already has a submission for this round first
             let submission = await Submission.findOne({ student: studentId, round: roundId });

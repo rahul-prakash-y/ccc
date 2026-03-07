@@ -22,7 +22,8 @@ module.exports = async function (fastify, opts) {
             const {
                 name, description, durationMinutes, type,
                 questionCount, shuffleQuestions,
-                testGroupId, testDurationMinutes, roundOrder
+                testGroupId, testDurationMinutes, roundOrder,
+                maxParticipants
             } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
@@ -38,7 +39,8 @@ module.exports = async function (fastify, opts) {
                 shuffleQuestions: shuffleQuestions === undefined ? true : Boolean(shuffleQuestions),
                 testGroupId: testGroupId || null,
                 testDurationMinutes: testDurationMinutes || null,
-                roundOrder: roundOrder || 1
+                roundOrder: roundOrder || 1,
+                maxParticipants: maxParticipants || null
             });
 
             const savedRound = await round.save();
@@ -2083,13 +2085,14 @@ module.exports = async function (fastify, opts) {
      */
     fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { status, isOtpActive, durationMinutes } = request.body;
+        const { status, isOtpActive, durationMinutes, maxParticipants } = request.body;
 
         try {
             const updates = {};
             if (status) updates.status = status;
             if (isOtpActive !== undefined) updates.isOtpActive = isOtpActive;
             if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
+            if (maxParticipants !== undefined) updates.maxParticipants = maxParticipants;
 
             const round = await Round.findByIdAndUpdate(roundId, updates, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
@@ -2104,6 +2107,52 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to update round status' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/rounds/:roundId/allow-student
+     * Add student to round whitelist
+     */
+    fastify.post('/rounds/:roundId/allow-student', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const { studentId } = request.body; // Internal ObjectId
+
+        try {
+            const round = await Round.findByIdAndUpdate(
+                roundId,
+                { $addToSet: { allowedStudentIds: studentId } },
+                { new: true }
+            );
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            return reply.send({ success: true, data: round.allowedStudentIds });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to allow student' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/rounds/:roundId/disallow-student
+     * Remove student from round whitelist
+     */
+    fastify.post('/rounds/:roundId/disallow-student', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        const { roundId } = request.params;
+        const { studentId } = request.body;
+
+        try {
+            const round = await Round.findByIdAndUpdate(
+                roundId,
+                { $pull: { allowedStudentIds: studentId } },
+                { new: true }
+            );
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            return reply.send({ success: true, data: round.allowedStudentIds });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to disallow student' });
         }
     });
     /**

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-    Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp,
-    User, BarChart2, Calendar, Medal, RefreshCw
+    User, BarChart2, Calendar, Medal, RefreshCw,
+    ShieldCheck, ShieldX, UserPlus, UserMinus,
+    Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -65,9 +66,13 @@ const RoundPills = ({ rounds }) => (
 );
 
 // ─── Single student row (expandable) ─────────────────────────────────────────
-const StudentRow = ({ entry, maxScore }) => {
+const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEligibility }) => {
     const [expanded, setExpanded] = useState(false);
     const pct = maxScore > 0 ? Math.min((entry.totalScore / maxScore) * 100, 100) : 0;
+
+    const isWhitelisted = selectedRound?.allowedStudentIds?.includes(entry.student?._id);
+    const isTopRank = selectedRound?.maxParticipants ? entry.rank <= selectedRound.maxParticipants : true;
+    const isEligible = isWhitelisted || isTopRank;
 
     return (
         <div className={`border rounded-2xl overflow-hidden transition-all ${entry.rank === 1 ? 'border-amber-200 bg-amber-50/30' :
@@ -151,6 +156,36 @@ const StudentRow = ({ entry, maxScore }) => {
                                 </p>
                                 <DayWiseTable dayWise={entry.dayWise} />
                             </div>
+
+                            {/* Eligibility Management */}
+                            {selectedRound && (
+                                <div className="sm:col-span-2 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-xl ${isEligible ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                                            {isEligible ? <ShieldCheck size={18} /> : <ShieldX size={18} />}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Participation Status</p>
+                                            <p className="text-sm font-bold text-slate-800">
+                                                {isEligible ? 'Eligible for Participation' : 'Currently Restricted (Rank Too Low)'}
+                                                {isWhitelisted && <span className="ml-2 text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">ADMIN WHITELIST</span>}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onToggleAllow(entry.student?._id, isWhitelisted); }}
+                                        disabled={updatingEligibility}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${isWhitelisted
+                                            ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'
+                                            } disabled:opacity-50`}
+                                    >
+                                        {updatingEligibility ? <Loader2 size={14} className="animate-spin" /> : (isWhitelisted ? <UserMinus size={14} /> : <UserPlus size={14} />)}
+                                        {isWhitelisted ? 'REVOKE ACCESS' : 'MANUAL ALLOW'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -169,6 +204,11 @@ const StudentScoreDashboard = () => {
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+
+    // Participation Management
+    const [rounds, setRounds] = useState([]);
+    const [selectedRoundId, setSelectedRoundId] = useState('');
+    const [updatingEligibility, setUpdatingEligibility] = useState(false);
 
     const fetchScores = useCallback(async () => {
         setLoading(data.length === 0);
@@ -193,9 +233,36 @@ const StudentScoreDashboard = () => {
         setPage(1);
     }, [search]);
 
+    const fetchRounds = useCallback(async () => {
+        try {
+            const res = await api.get(`${API}/rounds`);
+            setRounds(res.data.data || []);
+        } catch (e) {
+            console.error("Failed to fetch rounds:", e);
+        }
+    }, []);
+
     useEffect(() => {
         fetchScores();
-    }, [fetchScores]);
+        fetchRounds();
+    }, [fetchScores, fetchRounds]);
+
+    const handleToggleAllow = async (studentId, isCurrentlyWhitelisted) => {
+        if (!selectedRoundId) return;
+        setUpdatingEligibility(true);
+        try {
+            const endpoint = isCurrentlyWhitelisted ? 'disallow-student' : 'allow-student';
+            await api.post(`${API}/rounds/${selectedRoundId}/${endpoint}`, { studentId });
+            // Refresh rounds to get updated whitelists
+            await fetchRounds();
+        } catch (e) {
+            console.error("Failed to update student eligibility:", e);
+        } finally {
+            setUpdatingEligibility(false);
+        }
+    };
+
+    const activeRound = rounds.find(r => r._id === selectedRoundId);
 
     const maxScore = data.length > 0 ? data[0].totalScore : 1;
     const totalStudents = pagination.totalRecords;
@@ -218,6 +285,23 @@ const StudentScoreDashboard = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Round Selector */}
+                    <div className="hidden md:flex items-center gap-2 mr-4">
+                        <ShieldCheck size={14} className="text-indigo-400" />
+                        <select
+                            className="bg-white border border-indigo-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+                            value={selectedRoundId}
+                            onChange={(e) => setSelectedRoundId(e.target.value)}
+                        >
+                            <option value="">Participation Manager (All)</option>
+                            {rounds.map(r => (
+                                <option key={r._id} value={r._id}>
+                                    {r.name} {r.maxParticipants ? `(Limit: Top ${r.maxParticipants})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Search */}
                     <input
                         type="text"
@@ -259,6 +343,9 @@ const StudentScoreDashboard = () => {
                             key={entry.student?._id}
                             entry={entry}
                             maxScore={maxScore}
+                            selectedRound={activeRound}
+                            onToggleAllow={handleToggleAllow}
+                            updatingEligibility={updatingEligibility}
                         />
                     ))
                 )}
