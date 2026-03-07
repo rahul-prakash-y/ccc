@@ -55,7 +55,7 @@ const Login = () => {
                             <Terminal size={22} className="sm:size-[26px]" />
                         </div>
                         <div>
-                            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-tight">Code Circuit Club</h1>
+                            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-tight">Code Circle Club</h1>
                             <p className="text-[9px] sm:text-xs text-gray-400 font-mono tracking-widest uppercase mt-0.5">Participant Login</p>
                         </div>
                     </div>
