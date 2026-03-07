@@ -1,44 +1,87 @@
 const Submission = require('../models/Submission');
 const Round = require('../models/Round');
 
+// In-memory cache for rankings to prevent DB bottleneck during high concurrency
+let rankingCache = {
+    data: null, // Array of { id, totalScore, rank }
+    lastFetched: 0,
+    TTL: 60 * 1000 // 1 minute TTL
+};
+
 /**
- * Calculates student rank based on total score across the platform.
- * Reuses logic similar to StudentScoreDashboard.
+ * Calculates student rank based on total score across the platform using MongoDB Aggregation.
  */
 async function getStudentRank(studentObjectId) {
-    // Fetch all submissions with scores
-    const allSubmissions = await Submission.find({
-        $or: [
-            { 'manualScores.0': { $exists: true } },
-            { score: { $ne: null } }
-        ]
-    }).select('student score autoScore manualScores');
+    const now = Date.now();
 
-    const studentMap = {};
-
-    for (const sub of allSubmissions) {
-        if (!sub.student) continue;
-        const sid = sub.student.toString();
-
-        if (!studentMap[sid]) {
-            studentMap[sid] = { totalScore: 0 };
-        }
-
-        const manualTotal = (sub.manualScores || []).reduce((s, ms) => s + (ms.score || 0), 0);
-        const submissionScore = (sub.autoScore || 0) + manualTotal;
-        studentMap[sid].totalScore += submissionScore;
+    // Check cache
+    if (rankingCache.data && (now - rankingCache.lastFetched < rankingCache.TTL)) {
+        const found = rankingCache.data.find(s => s.id === studentObjectId.toString());
+        return found ? found.rank : rankingCache.data.length + 1;
     }
 
-    // Convert to sorted array
-    const sortedStudents = Object.entries(studentMap)
-        .map(([id, data]) => ({ id, totalScore: data.totalScore }))
-        .sort((a, b) => b.totalScore - a.totalScore);
+    // Pipeline to sum scores per student
+    const pipeline = [
+        {
+            $match: {
+                $or: [
+                    { 'manualScores.0': { $exists: true } },
+                    { score: { $ne: null } },
+                    { autoScore: { $gt: 0 } }
+                ]
+            }
+        },
+        {
+            $project: {
+                student: 1,
+                submissionScore: {
+                    $add: [
+                        { $ifNull: ["$autoScore", 0] },
+                        {
+                            $reduce: {
+                                input: { $ifNull: ["$manualScores", []] },
+                                initialValue: 0,
+                                in: { $add: ["$$value", { $ifNull: ["$$this.score", 0] }] }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            $group: {
+                _id: "$student",
+                totalScore: { $sum: "$submissionScore" }
+            }
+        },
+        {
+            $sort: { totalScore: -1 }
+        }
+    ];
 
-    // Find our student's index
-    const rankIndex = sortedStudents.findIndex(s => s.id === studentObjectId.toString());
+    const results = await Submission.aggregate(pipeline);
 
-    // If student has no recorded scores, they are at the end
-    return rankIndex === -1 ? sortedStudents.length + 1 : rankIndex + 1;
+    // Map with rank
+    const rankedResults = results.map((r, index) => ({
+        id: r._id ? r._id.toString() : 'unknown',
+        totalScore: r.totalScore,
+        rank: index + 1
+    }));
+
+    // Update Cache
+    rankingCache.data = rankedResults;
+    rankingCache.lastFetched = now;
+
+    const found = rankedResults.find(s => s.id === studentObjectId.toString());
+    return found ? found.rank : rankedResults.length + 1;
+}
+
+/**
+ * Force clear the ranking cache (e.g. after manual grading)
+ */
+function invalidateRankingCache() {
+    rankingCache.data = null;
+    rankingCache.lastFetched = 0;
 }
 
 /**
@@ -54,7 +97,8 @@ async function isStudentEligible(studentObjectId, roundId) {
     }
 
     // 2. Check if student is manually whitelisted
-    if (round.allowedStudentIds && round.allowedStudentIds.includes(studentObjectId)) {
+    // Ensure string comparison for ObjectIds
+    if (round.allowedStudentIds && round.allowedStudentIds.some(id => id.toString() === studentObjectId.toString())) {
         return { eligible: true, reason: 'ADMIN_ALLOWED' };
     }
 
@@ -74,5 +118,6 @@ async function isStudentEligible(studentObjectId, roundId) {
 
 module.exports = {
     getStudentRank,
-    isStudentEligible
+    isStudentEligible,
+    invalidateRankingCache
 };

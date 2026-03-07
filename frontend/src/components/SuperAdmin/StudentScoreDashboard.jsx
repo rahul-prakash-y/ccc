@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     User, BarChart2, Calendar, Medal, RefreshCw,
     ShieldCheck, ShieldX, UserPlus, UserMinus,
     Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { api } from '../../store/authStore';
+import { useRoundStore } from '../../store/roundStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
 import { SkeletonList } from '../Skeleton';
@@ -206,12 +207,12 @@ const StudentScoreDashboard = () => {
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
     // Participation Management
-    const [rounds, setRounds] = useState([]);
+    const { rounds, fetchRounds } = useRoundStore();
     const [selectedRoundId, setSelectedRoundId] = useState('');
     const [updatingEligibility, setUpdatingEligibility] = useState(false);
 
-    const fetchScores = useCallback(async () => {
-        setLoading(data.length === 0);
+    const fetchScores = useCallback(async (isInitial = false) => {
+        if (isInitial) setLoading(true);
         try {
             const params = new URLSearchParams();
             if (search) params.append('search', search);
@@ -224,28 +225,27 @@ const StudentScoreDashboard = () => {
         } catch (err) {
             console.error('Failed to load student scores:', err);
         } finally {
-            setLoading(false);
+            if (isInitial) setLoading(false);
         }
-    }, [search, page, limit, data.length]);
+    }, [search, page, limit]);
 
     // Reset page on search
     useEffect(() => {
         setPage(1);
     }, [search]);
 
-    const fetchRounds = useCallback(async () => {
-        try {
-            const res = await api.get(`${API}/rounds`);
-            setRounds(res.data.data || []);
-        } catch (e) {
-            console.error("Failed to fetch rounds:", e);
-        }
-    }, []);
-
+    // Initial mount logic
     useEffect(() => {
-        fetchScores();
-        fetchRounds();
-    }, [fetchScores, fetchRounds]);
+        const init = async () => {
+            setLoading(true);
+            await Promise.all([
+                fetchScores(true),
+                fetchRounds()
+            ]);
+            setLoading(false);
+        };
+        init();
+    }, [fetchRounds, fetchScores]);
 
     const handleToggleAllow = async (studentId, isCurrentlyWhitelisted) => {
         if (!selectedRoundId) return;

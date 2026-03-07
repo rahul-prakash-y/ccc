@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck
 } from 'lucide-react';
-import { api, useAuthStore } from '../../store/authStore';
+import { useAuthStore } from '../../store/authStore';
+import { useRoundStore } from '../../store/roundStore';
 import { API } from './constants';
 
 // Tab Components
@@ -38,17 +39,8 @@ const TABS = [
 
 const SuperAdminDashboard = () => {
   const { user, logout } = useAuthStore();
+  const { fetchRounds } = useRoundStore();
   const [activeTab, setActiveTab] = useState('liveops');
-  const [rounds, setRounds] = useState([]);
-
-  const fetchRounds = useCallback(async () => {
-    try {
-      const res = await api.get(`${API}/rounds`);
-      setRounds(res.data.data || []);
-    } catch (e) {
-      console.error("Failed to fetch rounds for dashboard:", e);
-    }
-  }, []);
 
   useEffect(() => {
     fetchRounds();
@@ -158,9 +150,9 @@ const SuperAdminDashboard = () => {
                 {activeTab === 'activity' && <ActivityLogsTab />}
                 {activeTab === 'students' && <StudentManagerTab />}
                 {activeTab === 'admins' && <AdminManagerTab />}
-                {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
+                {activeTab === 'audit' && <AuditLogsTab />}
                 {activeTab === 'question-bank' && <QuestionBankTab />}
-                {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
+                {activeTab === 'questions' && <QuestionManagerTab />}
                 {activeTab === 'evaluations' && <EvaluationTab />}
                 {activeTab === 'scores' && <StudentScoreDashboard />}
                 {activeTab === 'teams' && <TeamManagerTab />}

@@ -686,7 +686,7 @@ const StudentManagerTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [search, page, limit, students.length]);
+    }, [search, page, limit]);
 
     // 2. Initial Mount & Background Polling
     useEffect(() => {

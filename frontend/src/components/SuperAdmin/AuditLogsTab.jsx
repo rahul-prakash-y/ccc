@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Filter, Search, Loader2, ChevronDown, Trash2, ClipboardList, AlertTriangle, Clock, Unlock, Check } from 'lucide-react';
 import { api } from '../../store/authStore';
+import { useRoundStore } from '../../store/roundStore';
 import { API, STATUS_COLORS } from './constants';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
@@ -127,7 +128,8 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
     );
 };
 
-const AuditLogsTab = ({ rounds }) => {
+const AuditLogsTab = () => {
+    const { rounds } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);

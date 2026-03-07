@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
     ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search
 } from 'lucide-react';
 import { api } from '../../store/authStore';
+import { useRoundStore } from '../../store/roundStore';
 import { API, DIFFICULTY_COLORS } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
@@ -550,7 +551,8 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
 };
 
 // ─── Main Question Manager Tab ──────────────────────────────────────────────────────
-const QuestionManagerTab = ({ rounds }) => {
+const QuestionManagerTab = () => {
+    const { rounds } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
     const [selectedRound, setSelectedRound] = useState('');
     const [questions, setQuestions] = useState([]);
@@ -564,9 +566,9 @@ const QuestionManagerTab = ({ rounds }) => {
     const [limit] = useState(15);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
 
-    const fetchQuestions = useCallback(async (roundId) => {
+    const fetchQuestions = useCallback(async (roundId, isInitial = false) => {
         if (!roundId) return;
-        setLoading(questions.length === 0);
+        if (isInitial) setLoading(true);
         try {
             const params = new URLSearchParams();
             if (search) params.append('search', search);
@@ -579,9 +581,9 @@ const QuestionManagerTab = ({ rounds }) => {
         } catch (e) {
             console.error("Failed to fetch questions:", e);
         } finally {
-            setLoading(false);
+            if (isInitial) setLoading(false);
         }
-    }, [search, page, limit, questions.length]);
+    }, [search, page, limit]);
 
     // Reset page on search or round change
     useEffect(() => {
@@ -592,7 +594,7 @@ const QuestionManagerTab = ({ rounds }) => {
     // Removed the aggressive polling interval; admins editing questions don't need real-time syncing unless working concurrently.
     useEffect(() => {
         if (selectedRound) {
-            fetchQuestions(selectedRound);
+            fetchQuestions(selectedRound, true);
         } else {
             setQuestions([]);
         }

@@ -7,6 +7,7 @@ import {
   Play, LayoutGrid
 } from 'lucide-react';
 import { api } from '../../store/authStore';
+import { useRoundStore } from '../../store/roundStore';
 import { API, STATUS_COLORS } from './constants';
 import { SkeletonGrid } from '../Skeleton';
 
@@ -33,7 +34,7 @@ const OtpPanel = ({ section, onOtpChange }) => {
       // Fallback to section data if refresh fails (might be stale but better than empty)
       setOtp(prev => ({ ...prev, startOtp: section.startOtp, endOtp: section.endOtp }));
     }
-  }, [active, section._id, onOtpChange]);
+  }, [active, section._id, section.startOtp, section.endOtp, onOtpChange]);
 
   useEffect(() => {
     if (!active) return;
@@ -373,8 +374,8 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
 };
 
 const LiveOpsTab = () => {
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { rounds: sections, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
+  const [loading, setLoading] = useState(!sections.length);
   const [projectorSection, setProjectorSection] = useState(null);
   const [busy, setBusy] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
@@ -389,20 +390,14 @@ const LiveOpsTab = () => {
     isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null
   });
 
-  const fetchSections = useCallback(async () => {
-    try {
-      const res = await api.get(`${API}/rounds`);
-      setSections(res.data.data || []);
-    } catch (e) {
-      console.error("Fetch Error:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchSections = useCallback(async (force = false) => {
+    await fetchRounds(force);
+    setLoading(false);
+  }, [fetchRounds]);
 
   useEffect(() => {
     fetchSections();
-    const t = setInterval(fetchSections, 15000);
+    const t = setInterval(() => fetchSections(true), 15000);
     return () => clearInterval(t);
   }, [fetchSections]);
 
@@ -415,7 +410,7 @@ const LiveOpsTab = () => {
       const res = await api({ method: resolvedMethod, url: `${API}${path}`, data: body });
 
       const updatedSection = res.data.data;
-      setSections(prev => prev.map(r => r._id === sectionId ? { ...r, ...updatedSection } : r));
+      updateRound(sectionId, updatedSection);
 
       if (projectorSection && projectorSection._id === sectionId) {
         setProjectorSection({ ...projectorSection, ...updatedSection });
@@ -432,7 +427,7 @@ const LiveOpsTab = () => {
     try {
       const res = await api.patch(`${API}/rounds/${sectionId}/question-settings`, { questionCount, shuffleQuestions });
       const updatedSection = res.data.data;
-      setSections(prev => prev.map(r => r._id === sectionId ? { ...r, ...updatedSection } : r));
+      updateRound(sectionId, updatedSection);
     } catch (err) {
       console.error('Failed to save question settings:', err);
     } finally {
@@ -473,7 +468,7 @@ const LiveOpsTab = () => {
         setBusy(b => ({ ...b, [`${section._id}-delete`]: true }));
         try {
           await api.delete(`${API}/rounds/${section._id}`);
-          setSections(prev => prev.filter(r => r._id !== section._id));
+          removeRound(section._id);
         } catch (e) { console.error(e); }
         finally {
           setBusy(b => ({ ...b, [`${section._id}-delete`]: false }));
@@ -496,7 +491,7 @@ const LiveOpsTab = () => {
         try {
           // Delete sections individually (or we could add a bulk endpoint, but this is safer with existing backend)
           await Promise.all(ids.map(id => api.delete(`${API}/rounds/${id}`)));
-          setSections(prev => prev.filter(r => (r.testGroupId || r._id) !== group.id));
+          filterRounds(r => (r.testGroupId || r._id) !== group.id);
         } catch (e) { console.error("Bulk delete failed:", e); }
         finally {
           setBusy(b => ({ ...b, [`${group.id}-delete`]: false }));

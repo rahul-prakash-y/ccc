@@ -30,7 +30,7 @@ const TeamManagerTab = () => {
 
     const fetchStudents = useCallback(async () => {
         try {
-            const res = await api.get(`${API}/students?limit=1000`);
+            const res = await api.get(`${API}/students?limit=100`);
             setStudents(res.data.data || []);
         } catch {
             toast.error("Failed to load students");

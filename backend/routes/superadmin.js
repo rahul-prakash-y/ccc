@@ -918,6 +918,10 @@ module.exports = async function (fastify, opts) {
 
             await submission.save();
 
+            // Invalidate ranking cache since scores have changed
+            const { invalidateRankingCache } = require('../utils/eligibility');
+            invalidateRankingCache();
+
             await logActivity({
                 action: 'UPDATED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
@@ -940,89 +944,116 @@ module.exports = async function (fastify, opts) {
     fastify.get('/student-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { search, page = 1, limit = 20 } = request.query;
-
-            // Fetch all submissions with a numeric score or manual scores
-            const allSubmissions = await Submission.find({
-                $or: [
-                    { 'manualScores.0': { $exists: true } },
-                    { score: { $ne: null } }
-                ]
-            })
-                .populate('student', 'studentId name')
-                .populate('round', 'name')
-                .lean();
-
-            // Build per-student map
-            const studentMap = {};
-
-            for (const sub of allSubmissions) {
-                if (!sub.student) continue;
-
-                // If search is provided, filter students here
-                if (search) {
-                    const searchRegex = new RegExp(search, 'i');
-                    const matches = searchRegex.test(sub.student.studentId) || searchRegex.test(sub.student.name);
-                    if (!matches) continue;
-                }
-
-                const sid = sub.student._id.toString();
-
-                if (!studentMap[sid]) {
-                    studentMap[sid] = {
-                        student: sub.student,
-                        totalScore: 0,
-                        rounds: [],
-                        dayWise: {}
-                    };
-                }
-
-                const entry = studentMap[sid];
-                const manualTotal = (sub.manualScores || []).reduce((s, ms) => s + (ms.score || 0), 0);
-                // The total submission score is now autoScore + manualScores
-                const submissionScore = (sub.autoScore || 0) + manualTotal;
-
-                entry.totalScore += submissionScore;
-                entry.rounds.push({
-                    roundId: sub.round?._id,
-                    roundName: sub.round?.name || 'Unknown Round',
-                    score: submissionScore,
-                    status: sub.status,
-                    evaluatedAt: sub.updatedAt
-                });
-
-                const evalDates = (sub.manualScores || []).map(ms => ms.evaluatedAt).filter(Boolean);
-                const dates = evalDates.length > 0 ? evalDates : [sub.updatedAt];
-
-                for (const d of dates) {
-                    if (!d) continue;
-                    const dayKey = new Date(d).toISOString().slice(0, 10);
-                    entry.dayWise[dayKey] = (entry.dayWise[dayKey] || 0) + submissionScore;
-                }
-            }
-
-            // Convert to sorted array
-            let result = Object.values(studentMap)
-                .sort((a, b) => b.totalScore - a.totalScore)
-                .map((entry, index) => ({
-                    // We'll calculate rank AFTER pagination if we want global rank, 
-                    // or keep it here for absolute across all matching students.
-                    // Better to keep absolute rank.
-                    absoluteRank: index + 1,
-                    student: entry.student,
-                    totalScore: entry.totalScore,
-                    rounds: entry.rounds,
-                    dayWise: Object.entries(entry.dayWise)
-                        .map(([date, score]) => ({ date, score }))
-                        .sort((a, b) => a.date.localeCompare(b.date))
-                }));
-
-            const total = result.length;
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
-            const totalPages = Math.ceil(total / limitNum);
             const skip = (pageNum - 1) * limitNum;
 
-            const paginatedData = result.slice(skip, skip + limitNum);
+            // 1. Build Match Stage
+            const matchStage = {
+                $or: [
+                    { 'manualScores.0': { $exists: true } },
+                    { score: { $ne: null } },
+                    { autoScore: { $gt: 0 } }
+                ]
+            };
+
+            // 2. Fetch Aggregated Data
+            const pipeline = [
+                { $match: matchStage },
+                // Calculate score per submission
+                {
+                    $project: {
+                        student: 1,
+                        round: 1,
+                        updatedAt: 1,
+                        status: 1,
+                        submissionScore: {
+                            $add: [
+                                { $ifNull: ["$autoScore", 0] },
+                                {
+                                    $reduce: {
+                                        input: { $ifNull: ["$manualScores", []] },
+                                        initialValue: 0,
+                                        in: { $add: ["$$value", { $ifNull: ["$$this.score", 0] }] }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                // Join Round name
+                {
+                    $lookup: {
+                        from: 'rounds',
+                        localField: 'round',
+                        foreignField: '_id',
+                        as: 'roundDetails'
+                    }
+                },
+                { $unwind: { path: '$roundDetails', preserveNullAndEmptyArrays: true } },
+                // Group by Student
+                {
+                    $group: {
+                        _id: "$student",
+                        totalScore: { $sum: "$submissionScore" },
+                        rounds: {
+                            $push: {
+                                roundId: "$round",
+                                roundName: { $ifNull: ["$roundDetails.name", "Unknown Round"] },
+                                score: "$submissionScore",
+                                status: "$status",
+                                evaluatedAt: "$updatedAt"
+                            }
+                        }
+                    }
+                },
+                // Join Student details
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'studentDetails'
+                    }
+                },
+                { $unwind: '$studentDetails' },
+                // Apply Search
+                ...(search ? [{
+                    $match: {
+                        $or: [
+                            { 'studentDetails.studentId': { $regex: search, $options: 'i' } },
+                            { 'studentDetails.name': { $regex: search, $options: 'i' } }
+                        ]
+                    }
+                }] : []),
+                // Sort by total score
+                { $sort: { totalScore: -1 } }
+            ];
+
+            // Get total count (for pagination)
+            const countPipeline = [...pipeline, { $count: "total" }];
+            const countResult = await Submission.aggregate(countPipeline);
+            const total = countResult[0]?.total || 0;
+
+            // Get paginated results
+            const results = await Submission.aggregate([
+                ...pipeline,
+                { $skip: skip },
+                { $limit: limitNum }
+            ]);
+
+            const paginatedData = results.map((r, index) => ({
+                absoluteRank: skip + index + 1,
+                student: {
+                    _id: r._id,
+                    studentId: r.studentDetails.studentId,
+                    name: r.studentDetails.name
+                },
+                totalScore: r.totalScore,
+                rounds: r.rounds,
+                // Optional: add dummy dayWise if still needed by frontend (or refactor frontend)
+                dayWise: []
+            }));
 
             return reply.code(200).send({
                 success: true,
@@ -1032,7 +1063,7 @@ module.exports = async function (fastify, opts) {
                     total,
                     page: pageNum,
                     limit: limitNum,
-                    totalPages
+                    totalPages: Math.ceil(total / limitNum)
                 }
             });
         } catch (error) {
