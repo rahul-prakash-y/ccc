@@ -70,7 +70,15 @@ const CodeArena = ({ language = 'javascript' }) => {
         }
     }, [roundId, updateUser]);
 
+
+    // Determine if this is a creative round (UI/UX or Hackathon).
+    // For creative rounds, copy/paste/right-click are allowed so students can submit links.
+    const isCreativeRound = roundInfo?.type === 'UI_UX_CHALLENGE' || roundInfo?.type === 'MINI_HACKATHON';
+
     useEffect(() => {
+        // Do NOT block clipboard or context menu for creative rounds — students need to paste URLs.
+        if (isCreativeRound) return;
+
         const handlePaste = (e) => {
             e.preventDefault();
             handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
@@ -96,7 +104,7 @@ const CodeArena = ({ language = 'javascript' }) => {
             window.removeEventListener('contextmenu', blockAction, { capture: true });
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
         };
-    }, [handleCheatDetected]);
+    }, [handleCheatDetected, isCreativeRound]);
 
     // --- Data Loading ---
     useEffect(() => {
@@ -150,7 +158,8 @@ const CodeArena = ({ language = 'javascript' }) => {
         durationMinutes: roundInfo?.durationMinutes || 60,
         extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        onCheatDetected: handleCheatDetected
+        // Disable cheat detection entirely for creative rounds (UI/UX, Mini Hackathon)
+        onCheatDetected: isCreativeRound ? null : handleCheatDetected
     });
 
     const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned, (responsePayload) => {

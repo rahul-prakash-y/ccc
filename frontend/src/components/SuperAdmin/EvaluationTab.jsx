@@ -16,6 +16,36 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(!!existingScore);
     const [error, setError] = useState('');
+    const [autoGraded, setAutoGraded] = useState(false);
+
+    const isAnswerEmpty = answer === null || answer === undefined || String(answer).trim() === '';
+
+    // Auto-grade: if the student's answer is empty and hasn't been graded yet, save 0 automatically
+    useEffect(() => {
+        if (isAnswerEmpty && !existingScore) {
+            const autoSave = async () => {
+                setSaving(true);
+                try {
+                    await api.post(`${API}/manual-evaluations/${submissionId}/score`, {
+                        questionId: question._id,
+                        score: 0,
+                        feedback: 'No answer submitted'
+                    });
+                    setScore(0);
+                    setFeedback('No answer submitted');
+                    setSaved(true);
+                    setAutoGraded(true);
+                    onScoreSaved();
+                } catch (err) {
+                    console.error('Auto-grade failed:', err);
+                } finally {
+                    setSaving(false);
+                }
+            };
+            autoSave();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const formatFigmaUrl = (url) => {
         if (!url || typeof url !== 'string') return url;
@@ -42,6 +72,7 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                 feedback
             });
             setSaved(true);
+            setAutoGraded(false);
             onScoreSaved();
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to save score');
@@ -54,9 +85,14 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             {/* Question Header */}
             <div className="px-4 py-2.5 bg-indigo-50/50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <BookOpen size={14} className="text-indigo-500" />
                     <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{question.title}</p>
+                    {autoGraded && (
+                        <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-orange-200">
+                            Auto-graded: 0
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{question.points} Points Max</p>
@@ -76,7 +112,7 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Student's Answer</p>
-                        {answer !== null && answer !== undefined && String(answer).trim() !== '' ? (
+                        {!isAnswerEmpty ? (
                             <div>
                                 {(question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') ? (
                                     <a
@@ -94,7 +130,10 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                                 )}
                             </div>
                         ) : (
-                            <p className="text-xs text-slate-400 italic">No text answer submitted.</p>
+                            <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                                <p className="text-xs text-orange-600 font-bold">No answer submitted</p>
+                            </div>
                         )}
                     </div>
 
@@ -129,7 +168,7 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                             min="0"
                             max={question.points}
                             value={score}
-                            onChange={e => { setScore(e.target.value); setSaved(false); }}
+                            onChange={e => { setScore(e.target.value); setSaved(false); setAutoGraded(false); }}
                             placeholder="0"
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
                         />
@@ -141,7 +180,7 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                         <textarea
                             rows={2}
                             value={feedback}
-                            onChange={e => { setFeedback(e.target.value); setSaved(false); }}
+                            onChange={e => { setFeedback(e.target.value); setSaved(false); setAutoGraded(false); }}
                             placeholder="Add remarks for the student..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none shadow-sm"
                         />
