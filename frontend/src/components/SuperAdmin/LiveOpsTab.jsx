@@ -13,41 +13,46 @@ import { SkeletonGrid } from '../Skeleton';
 
 // ── Per-section OTP panel with live countdown ───────────────────────────────────
 const OtpPanel = ({ section, onOtpChange }) => {
-  const [otp, setOtp] = useState({ startOtp: section.startOtp, endOtp: section.endOtp, secondsLeft: null });
+  const [otp, setOtp] = useState({ startOtp: null, endOtp: null, secondsLeft: null });
   const [flashing, setFlashing] = useState(false);
-  const prevOtpRef = useRef(section.startOtp);
+  const [loadingOtp, setLoadingOtp] = useState(true);
+  const prevOtpRef = useRef(null);
   const active = section.status === 'WAITING_FOR_OTP' || section.status === 'RUNNING';
 
-  const poll = useCallback(async () => {
-    if (!active) return;
+  // Always fetch on mount so each admin sees THEIR OWN keys
+  const fetchOtp = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoadingOtp(true);
     try {
       const res = await api.get(`/rounds/${section._id}/refresh-otp`);
       const d = res.data.data;
-      if (d.startOtp !== prevOtpRef.current) {
+      if (d.startOtp !== prevOtpRef.current && prevOtpRef.current !== null) {
         setFlashing(true);
         setTimeout(() => setFlashing(false), 800);
-        prevOtpRef.current = d.startOtp;
         onOtpChange?.(section._id, d);
       }
+      prevOtpRef.current = d.startOtp;
       setOtp({ startOtp: d.startOtp, endOtp: d.endOtp, secondsLeft: d.secondsLeft });
     } catch {
-      // Fallback to section data if refresh fails (might be stale but better than empty)
-      setOtp(prev => ({ ...prev, startOtp: section.startOtp, endOtp: section.endOtp }));
+      // If no OTP has been generated yet for this admin, show dashes
+      setOtp(prev => ({ ...prev, startOtp: prev.startOtp ?? '------', endOtp: prev.endOtp ?? '------' }));
+    } finally {
+      if (isInitial) setLoadingOtp(false);
     }
-  }, [active, section._id, section.startOtp, section.endOtp, onOtpChange]);
+  }, [section._id, onOtpChange]);
 
+  // Initial fetch on mount — always, regardless of active state
+  useEffect(() => {
+    fetchOtp(true);
+  }, [fetchOtp]);
+
+  // Continuous polling only while active
   useEffect(() => {
     if (!active) return;
-    // Initial fetch pushed to next tick to avoid cascading renders
-    const init = setTimeout(poll, 0);
-    const t = setInterval(poll, 5000);
-    return () => {
-      clearTimeout(init);
-      clearInterval(t);
-    };
-  }, [active, poll]);
+    const t = setInterval(() => fetchOtp(false), 5000);
+    return () => clearInterval(t);
+  }, [active, fetchOtp]);
 
-  // Per-second visual countdown (client-side only)
+  // Per-second visual countdown (client-side only, active only)
   useEffect(() => {
     if (!active || otp.secondsLeft === null) return;
     const tick = setInterval(() => {
@@ -59,16 +64,27 @@ const OtpPanel = ({ section, onOtpChange }) => {
   const pct = otp.secondsLeft !== null ? (otp.secondsLeft / 60) * 100 : 0;
   const danger = otp.secondsLeft !== null && otp.secondsLeft <= 10;
 
+  if (loadingOtp) {
+    return (
+      <div className="grid grid-cols-2 gap-3 mb-4 animate-pulse">
+        <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center h-16" />
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-center h-16" />
+      </div>
+    );
+  }
+
   if (!active) {
     return (
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
           <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Start Auth OTP</p>
-          <p className="text-lg font-mono font-bold text-slate-700 tracking-widest">{section.startOtp || '------'}</p>
+          <p className="text-lg font-mono font-bold text-slate-500 tracking-widest opacity-60">{otp.startOtp || '------'}</p>
+          <p className="text-[8px] text-slate-300 font-bold uppercase tracking-widest mt-0.5">Not Broadcasting</p>
         </div>
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-center">
           <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Final Auth OTP</p>
-          <p className="text-lg font-mono font-bold text-indigo-600 tracking-widest">{section.endOtp || '------'}</p>
+          <p className="text-lg font-mono font-bold text-indigo-400 tracking-widest opacity-60">{otp.endOtp || '------'}</p>
+          <p className="text-[8px] text-indigo-300 font-bold uppercase tracking-widest mt-0.5">Not Broadcasting</p>
         </div>
       </div>
     );
@@ -106,11 +122,12 @@ const OtpPanel = ({ section, onOtpChange }) => {
         </div>
       </div>
       <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest">
-        Auto-rotates every 60s
+        Auto-rotates every 60s · Your personal keys
       </p>
     </div>
   );
 };
+
 
 // ── Projector live OTP (polls independently) ─────────────────────────────────
 const ProjectorOtp = ({ section }) => {
