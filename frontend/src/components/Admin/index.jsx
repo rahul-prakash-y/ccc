@@ -15,7 +15,7 @@ import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
 import TeamScoreTab from '../SuperAdmin/TeamScoreTab';
 import AdminManagerTab from '../SuperAdmin/AdminManagerTab';
 import AttendanceTab from "../SuperAdmin/AttendanceTab";
-import QuestionBankTab from './QuestionBankTab';
+import QuestionBankTab from '../SuperAdmin/QuestionBankTab';
 
 
 const TABS = [
