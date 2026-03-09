@@ -89,6 +89,7 @@ const start = async () => {
         fastify.log.info(`Code Circle Club API is running live on port ${port}`);
 
     } catch (err) {
+        console.error('Fatal Startup Error:', err);
         fastify.log.error('Fatal Server Error', err);
         process.exit(1);
     }

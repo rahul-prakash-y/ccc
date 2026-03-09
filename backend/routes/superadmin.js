@@ -332,6 +332,7 @@ module.exports = async function (fastify, opts) {
             const [questions, total] = await Promise.all([
                 Question.find(filter)
                     .populate('assignedAdmin', 'name studentId')
+                    .populate('createdBy', 'name email role')
                     .sort({ order: 1, createdAt: 1 })
                     .skip(skip)
                     .limit(limitNum),
@@ -397,7 +398,8 @@ module.exports = async function (fastify, opts) {
                 options: options || [],
                 correctAnswer: correctAnswer || '',
                 isManualEvaluation: isManualEvaluation || false,
-                assignedAdmin: isManualEvaluation ? assignedAdmin : null
+                assignedAdmin: isManualEvaluation ? assignedAdmin : null,
+                createdBy: request.user?.userId || null
             });
 
             await question.save();
@@ -481,6 +483,7 @@ module.exports = async function (fastify, opts) {
             const [questions, total] = await Promise.all([
                 Question.find(filter)
                     .populate('assignedAdmin', 'name studentId')
+                    .populate('createdBy', 'name email role')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),
@@ -537,7 +540,8 @@ module.exports = async function (fastify, opts) {
                 options: options || [],
                 correctAnswer: correctAnswer || '',
                 isManualEvaluation: isManualEvaluation || false,
-                assignedAdmin: isManualEvaluation ? assignedAdmin : null
+                assignedAdmin: isManualEvaluation ? assignedAdmin : null,
+                createdBy: request.user?.userId || null
             });
 
             await question.save();

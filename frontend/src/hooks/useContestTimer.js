@@ -16,12 +16,10 @@ export const useContestTimer = ({
     serverStartTime,
     durationMinutes = 60,
     extraTimeMinutes = 0,
-    onTimeUp,
-    onCheatDetected
+    onTimeUp
 }) => {
     const [timeLeft, setTimeLeft] = useState(null);
     const [isTimeUp, setIsTimeUp] = useState(false);
-    const [tabSwitches, setTabSwitches] = useState(0);
 
     const timerRef = useRef(null);
     const isStarted = !!serverStartTime;
@@ -72,55 +70,6 @@ export const useContestTimer = ({
         };
     }, [isStarted, isTimeUp, calculateTimeLeft, onTimeUp]);
 
-    // Anti-Cheat: Visibility/Tab Switch Tracking
-    useEffect(() => {
-        if (!isStarted || isTimeUp) return;
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
-                const newCount = tabSwitches + 1;
-                setTabSwitches(newCount);
-
-                // Report cheat to backend
-                if (onCheatDetected) {
-                    onCheatDetected({
-                        type: 'TAB_SWITCH',
-                        count: newCount,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-
-                // Strict anti-cheat mode logging
-                if (newCount >= 3) {
-                    console.warn(`[ANTI-CHEAT WARNING] User exceeded tab visibility thresholds. Flags: ${newCount}`);
-                }
-            }
-        };
-
-        const handleBeforeUnload = (e) => {
-            // Trying to close/refresh the tab during active contest
-            if (onCheatDetected) {
-                onCheatDetected({
-                    type: 'FORCE_EXIT_ATTEMPT',
-                    timestamp: new Date().toISOString()
-                });
-            }
-
-            const msg = "UNAUTHORIZED EXIT DETECTED. Force-exiting or refreshing triggers an anti-cheat protocol resulting in a zero score.";
-            e.preventDefault();
-            e.returnValue = msg;
-            return msg;
-        };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        window.addEventListener("beforeunload", handleBeforeUnload);
-
-        return () => {
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-            window.removeEventListener("beforeunload", handleBeforeUnload);
-        };
-    }, [isStarted, isTimeUp, tabSwitches, onCheatDetected]);
-
     // Format time for UI (HH:MM:SS)
     const formatTime = (seconds) => {
         if (seconds === null) return "--:--:--";
@@ -138,7 +87,6 @@ export const useContestTimer = ({
         timeLeft,
         formattedTime: formatTime(timeLeft),
         isTimeUp,
-        tabSwitches,
         isDangerZone: timeLeft !== null && timeLeft < 300 // Last 5 minutes warning state
     };
 };

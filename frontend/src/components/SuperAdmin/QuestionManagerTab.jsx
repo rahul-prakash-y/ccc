@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
-    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search
+    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -850,6 +850,17 @@ const QuestionManagerTab = () => {
                                                             <div>
                                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Assigned Evaluator</p>
                                                                 <p className="font-bold text-slate-800 text-sm mt-0.5">{q.assignedAdmin.name} <span className="font-normal text-slate-400 text-xs ml-1">({q.assignedAdmin.studentId})</span></p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Creator Information */}
+                                                    {q.createdBy && (
+                                                        <div className="pt-3 border-t border-slate-200/60 mt-4 flex flex-col gap-1 text-xs text-slate-500">
+                                                            <div className="flex items-center gap-1.5 font-medium">
+                                                                <UserIcon size={12} className="text-slate-400" />
+                                                                Created by: <span className="font-bold text-slate-700">{q.createdBy.name}</span>
+                                                                {q.createdBy.role && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-black uppercase tracking-widest ml-1">{q.createdBy.role}</span>}
                                                             </div>
                                                         </div>
                                                     )}

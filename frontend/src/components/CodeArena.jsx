@@ -32,11 +32,6 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
     const [showPreview, setShowPreview] = useState(true);
 
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 1024);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     // Anti-Cheat State
     const [isBanned, setIsBanned] = useState(false);
@@ -101,25 +96,11 @@ const CodeArena = ({ language = 'javascript' }) => {
             }
         };
 
-        const handleVisibilityChange = () => {
-            if (document.hidden || document.visibilityState === 'hidden') {
-                handleCheatDetected({ type: 'TAB_SWITCH', count: 1, detail: 'Split Screen / Tab Switch Detected (Visibility Lost).' });
-            }
-        };
-
-        const handleBlur = () => {
-            handleCheatDetected({ type: 'TAB_SWITCH', count: 1, detail: 'Window Focus Lost (Possible Split Screen).' });
-        };
-
         window.addEventListener('paste', handlePaste, { capture: true });
         window.addEventListener('copy', blockAction, { capture: true });
         window.addEventListener('cut', blockAction, { capture: true });
         window.addEventListener('contextmenu', blockAction, { capture: true });
         window.addEventListener('keydown', handleKeyDown, { capture: true });
-
-        // Add Visibility and Blur Listeners for Strict Mode
-        document.addEventListener('visibilitychange', handleVisibilityChange, { capture: true });
-        window.addEventListener('blur', handleBlur, { capture: true });
 
         return () => {
             window.removeEventListener('paste', handlePaste, { capture: true });
@@ -127,8 +108,6 @@ const CodeArena = ({ language = 'javascript' }) => {
             window.removeEventListener('cut', blockAction, { capture: true });
             window.removeEventListener('contextmenu', blockAction, { capture: true });
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
-            document.removeEventListener('visibilitychange', handleVisibilityChange, { capture: true });
-            window.removeEventListener('blur', handleBlur, { capture: true });
         };
     }, [handleCheatDetected, isCreativeRound]);
 
