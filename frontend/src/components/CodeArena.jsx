@@ -150,10 +150,19 @@ const CodeArena = ({ language = 'javascript' }) => {
                 const draft = localStorage.getItem(`draft_${roundId}`);
                 if (draft) {
                     try {
-                        setAnswers(JSON.parse(draft));
-                    } catch {
+                        const parsedDraft = JSON.parse(draft);
+                        // Merge draft with server questions just in case draft is missing some
                         const initialAnswers = {};
-                        res.data.data.questions.forEach((q, i) => initialAnswers[q._id] = i === 0 ? draft : (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
+                        res.data.data.questions.forEach(q => {
+                            initialAnswers[q._id] = parsedDraft[q._id] !== undefined
+                                ? parsedDraft[q._id]
+                                : (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : ''));
+                        });
+                        setAnswers(initialAnswers);
+                    } catch {
+                        // Draft parsing failed, fallback 
+                        const initialAnswers = {};
+                        res.data.data.questions.forEach(q => initialAnswers[q._id] = (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
                         setAnswers(initialAnswers);
                     }
                 } else {
@@ -188,7 +197,7 @@ const CodeArena = ({ language = 'javascript' }) => {
         onCheatDetected: isCreativeRound ? null : handleCheatDetected
     });
 
-    const { saveStatus } = useAutoSave(answers, roundId, 5000, isTimeUp || isBanned, (responsePayload) => {
+    const { saveStatus } = useAutoSave(answers, roundId, 60000, isTimeUp || isBanned, (responsePayload) => {
         if (responsePayload.extraTimeMinutes !== undefined && responsePayload.extraTimeMinutes !== extraTimeMinutes) {
             setExtraTimeMinutes(responsePayload.extraTimeMinutes);
         }

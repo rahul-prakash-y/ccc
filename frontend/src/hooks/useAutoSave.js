@@ -2,18 +2,27 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../store/authStore';
 
 /**
- * Custom hook for debounced automatic saving during the active session.
+ * Custom hook for interval-based automatic saving during the active session.
  * 
  * @param {any} data - The current answers or code state.
  * @param {string} roundId - The currently active round ID.
- * @param {number} delayMs - Milliseconds to debounce (default 5000 = 5 seconds)
+ * @param {number} intervalMs - Milliseconds between enforced saves (e.g., 60000 = 60s)
  * @param {boolean} isLocked - Stops saving if true.
  * @returns {string} The auto-save status (e.g., 'SAVED', 'SAVING', 'ERROR').
  */
-export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false, onSaveSuccess = null) => {
+export const useAutoSave = (data, roundId, intervalMs = 60000, isLocked = false, onSaveSuccess = null) => {
     const [saveStatus, setSaveStatus] = useState('SAVED'); // 'SAVED' | 'SAVING' | 'ERROR'
-    const isFirstRender = useRef(true);
-    const syncTimerRef = useRef(null);
+    const syncIntervalRef = useRef(null);
+    const onSaveSuccessRef = useRef(onSaveSuccess);
+    const dataRef = useRef(data);
+
+    useEffect(() => {
+        onSaveSuccessRef.current = onSaveSuccess;
+    }, [onSaveSuccess]);
+
+    useEffect(() => {
+        dataRef.current = data;
+    }, [data]);
 
     const performSave = useCallback(async (content) => {
         if (isLocked) return;
@@ -26,8 +35,8 @@ export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false, onS
             const payload = typeof content === 'object' ? { answers: content } : { codeContent: content };
             const response = await api.post(`/rounds/${roundId}/autosave`, payload);
 
-            if (onSaveSuccess && response.data) {
-                onSaveSuccess(response.data);
+            if (onSaveSuccessRef.current && response.data) {
+                onSaveSuccessRef.current(response.data);
             }
 
             // Fallback: Persistent Local Storage Draft in case of complete network outtage
@@ -42,29 +51,23 @@ export const useAutoSave = (data, roundId, delayMs = 5000, isLocked = false, onS
             console.error('AutoSave failed:', error);
             setSaveStatus('ERROR');
         }
-    }, [roundId, isLocked, onSaveSuccess]);
+    }, [roundId, isLocked]);
 
     useEffect(() => {
-        // Prevent auto-save on initial mount mounting
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
-
         if (isLocked) {
+            if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
             return;
         }
 
-        if (syncTimerRef.current) {
-            clearTimeout(syncTimerRef.current);
-        }
+        // Setup strict interval
+        syncIntervalRef.current = setInterval(() => {
+            performSave(dataRef.current);
+        }, intervalMs);
 
-        syncTimerRef.current = setTimeout(() => {
-            performSave(data);
-        }, delayMs);
-
-        return () => clearTimeout(syncTimerRef.current);
-    }, [data, delayMs, isLocked, performSave]);
+        return () => {
+            if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+        };
+    }, [intervalMs, isLocked, performSave]);
 
     const statusToReturn = isLocked ? 'LOCKED' : saveStatus;
 
