@@ -41,13 +41,21 @@ const SuperAdminDashboard = () => {
   const { user, logout } = useAuthStore();
   const { fetchRounds } = useRoundStore();
   const [activeTab, setActiveTab] = useState('liveops');
+  const [hoveredTab, setHoveredTab] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
+
+  const handleMouseEnter = (e, tabId) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltipPos({ top: rect.top + rect.height / 2, left: rect.right + 12 });
+    setHoveredTab(tabId);
+  };
 
   useEffect(() => {
     fetchRounds();
   }, [fetchRounds]);
 
   return (
-    <div className=" bg-[#f8fafc] font-sans selection:bg-indigo-100 selection:text-indigo-700 overflow-hidden">
+    <div className="bg-[#f8fafc] font-sans selection:bg-indigo-100 selection:text-indigo-700 h-screen flex flex-col overflow-hidden">
       {/* 1. GLASS-MORPHISM HEADER */}
       <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -83,92 +91,147 @@ const SuperAdminDashboard = () => {
           </button>
         </div>
 
-        {/* 2. TAB NAVIGATION (PILL STYLE) */}
-        <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex gap-1 overflow-x-auto no-scrollbar border-t border-slate-100/60 py-1">
-            {TABS.map((tab) => {
+      </header>
+
+      {/* MAIN LAYOUT WRAPPER (Sidebar + Content) */}
+      <div className="flex flex-1 overflow-hidden h-[calc(100vh-61px)]">
+
+        {/* 2. SIDEBAR NAVIGATION (ICONS WITH TOOLTIPS) */}
+        <aside className="w-16 sm:w-20 bg-white border-r border-slate-200/60 flex flex-col items-center py-4 gap-2 z-30 shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] overflow-y-auto no-scrollbar">
+          {
+            TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
-                <button
+                <div
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-2.5 px-5 py-3 text-[13px] font-bold transition-all rounded-lg whitespace-nowrap group
-                    ${isActive ? 'text-indigo-600 bg-indigo-50/30' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
+                  className="relative w-full flex justify-center px-2"
+                  onMouseEnter={(e) => handleMouseEnter(e, tab.id)}
+                  onMouseLeave={() => setHoveredTab(null)}
                 >
-                  <Icon size={17} className={isActive ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600"} />
-                  {tab.label}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTabUnderline"
-                      className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full"
-                    />
-                  )}
-                </button>
+                  <button
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative flex items-center justify-center p-3 rounded-xl transition-all w-12 h-12 sm:w-14 sm:h-14
+                    ${isActive ? 'bg-indigo-50 text-indigo-600 shadow-inner' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700'}`}
+                  >
+                    <Icon size={22} className={`transition-transform duration-300 ${isActive ? "scale-110" : (hoveredTab === tab.id ? "scale-110" : "")}`} />
+
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabSidebar"
+                        className="absolute inset-0 bg-indigo-100/50 rounded-xl"
+                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        style={{ zIndex: -1 }}
+                      />
+                    )}
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-600 rounded-r-full" />
+                    )}
+                  </button>
+                </div>
               );
             })}
-          </nav>
-        </div>
-      </header>
+        </aside>
 
-      {/* 3. MAIN CONTENT (STRICT HEIGHT) */}
-      <main className="max-w-7xl mx-auto px-6 py-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="relative bg-white rounded-2xl border border-slate-200/80 shadow-xl shadow-slate-200/40 overflow-hidden"
-            style={{ height: 'calc(100vh - 170px)' }} // Strict height control
-          >
-            {/* Scrollable Container */}
-            <div className="h-full overflow-y-auto custom-scrollbar p-6">
+        {/* Global Fixed Tooltip to escape 'overflow-y-auto' clipping */}
+        <AnimatePresence>
+          {hoveredTab && (
+            <div
+              style={{
+                position: 'fixed',
+                top: tooltipPos.top,
+                left: tooltipPos.left,
+                zIndex: 100,
+                pointerEvents: 'none'
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, x: -10, y: "-50%", scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, y: "-50%", scale: 1 }}
+                exit={{ opacity: 0, x: -10, y: "-50%", scale: 0.95 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="absolute left-0 top-0 px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-xl whitespace-nowrap shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200 flex items-center gap-2.5 backdrop-blur-md"
+              >
+                {(() => {
+                  const tabData = TABS.find(t => t.id === hoveredTab);
+                  if (!tabData) return null;
+                  const HoverIcon = tabData.icon;
+                  const isActiveHover = activeTab === hoveredTab;
 
-              {/* Dynamic View Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sticky top-0 bg-white/95 backdrop-blur-md z-30 pb-2 border-b border-slate-50">
-                <div className="flex items-center gap-3">
-                  <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
-                    {React.createElement(TABS.find(t => t.id === activeTab)?.icon, { size: 14 })}
-                  </div>
-                  <h2 className="text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-[0.15em]">
-                    {TABS.find(t => t.id === activeTab)?.label} Control
-                  </h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">
-                    Kernel: {activeTab}_v3.2
-                  </span>
-                </div>
-              </div>
+                  return (
+                    <>
+                      <div className={`p-1 rounded-md ${isActiveHover ? 'bg-indigo-50' : 'bg-slate-50'}`}>
+                        <HoverIcon size={14} className={isActiveHover ? "text-indigo-600" : "text-slate-400"} />
+                      </div>
+                      <span className="tracking-wide text-slate-700">{tabData.label}</span>
 
-              {/* Component Injection */}
-              <div className="relative text-slate-600">
-                {activeTab === 'liveops' && <LiveOpsTab />}
-                {activeTab === 'activity' && <ActivityLogsTab />}
-                {activeTab === 'students' && <StudentManagerTab />}
-                {activeTab === 'admins' && <AdminManagerTab />}
-                {activeTab === 'audit' && <AuditLogsTab />}
-                {activeTab === 'question-bank' && <QuestionBankTab />}
-                {activeTab === 'questions' && <QuestionManagerTab />}
-                {activeTab === 'evaluations' && <EvaluationTab />}
-                {activeTab === 'scores' && <StudentScoreDashboard />}
-                {activeTab === 'teams' && <TeamManagerTab />}
-                {activeTab === 'team-scores' && <TeamScoreTab />}
-                {activeTab === 'attendance' && <AttendanceTab />}
-              </div>
+                      {/* Tooltip Arrow */}
+                      <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white rotate-45 border-l border-b border-slate-200 rounded-bl-sm" />
+                    </>
+                  );
+                })()}
+              </motion.div>
             </div>
-
-            {/* Bottom Gradient Overlay (Depth Indicator) */}
-            <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-t from-white via-white/80 to-transparent pointer-events-none z-20" />
-          </motion.div>
+          )}
         </AnimatePresence>
-      </main>
+
+        {/* 3. MAIN CONTENT (STRICT HEIGHT) */}
+        <main className="flex-1 bg-slate-50 p-4 sm:p-6 overflow-hidden relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full h-full relative bg-white rounded-2xl border border-slate-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col"
+            >
+              {/* Scrollable Container */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+
+                {/* Dynamic View Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sticky top-0 bg-white/95 backdrop-blur-md z-30 pb-2 border-b border-slate-50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
+                      {React.createElement(TABS.find(t => t.id === activeTab)?.icon, { size: 14 })}
+                    </div>
+                    <h2 className="text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-[0.15em]">
+                      {TABS.find(t => t.id === activeTab)?.label} Control
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">
+                      Kernel: {activeTab}_v3.2
+                    </span>
+                  </div>
+                </div>
+
+                {/* Component Injection */}
+                <div className="relative text-slate-600">
+                  {activeTab === 'liveops' && <LiveOpsTab />}
+                  {activeTab === 'activity' && <ActivityLogsTab />}
+                  {activeTab === 'students' && <StudentManagerTab />}
+                  {activeTab === 'admins' && <AdminManagerTab />}
+                  {activeTab === 'audit' && <AuditLogsTab />}
+                  {activeTab === 'question-bank' && <QuestionBankTab />}
+                  {activeTab === 'questions' && <QuestionManagerTab />}
+                  {activeTab === 'evaluations' && <EvaluationTab />}
+                  {activeTab === 'scores' && <StudentScoreDashboard />}
+                  {activeTab === 'teams' && <TeamManagerTab />}
+                  {activeTab === 'team-scores' && <TeamScoreTab />}
+                  {activeTab === 'attendance' && <AttendanceTab />}
+                </div>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-8 bg-linear-to-t from-white to-transparent pointer-events-none z-20" />
+            </motion.div>
+          </AnimatePresence>
+        </main >
+      </div >
 
       {/* Global CSS for the Custom Scrollbar */}
-      <style dangerouslySetInnerHTML={{
+      < style dangerouslySetInnerHTML={{
         __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 5px;
@@ -187,7 +250,7 @@ const SuperAdminDashboard = () => {
           display: none;
         }
       `}} />
-    </div>
+    </div >
   );
 };
 
