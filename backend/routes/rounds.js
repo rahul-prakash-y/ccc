@@ -504,10 +504,18 @@ module.exports = async function (fastify, opts) {
             // Using >= 1 for immediate disqualification as requested
             if (submission.tabSwitches >= 1) {
                 shouldBan = true;
-                reason = 'Anti-cheat threshold (Tab Switch) exceeded.';
+                if (type === 'TAB_SWITCH' && request.body.detail) {
+                    reason = request.body.detail;
+                } else {
+                    reason = 'Anti-cheat threshold (Split Screen / Tab Switch) exceeded.';
+                }
             } else if (submission.cheatFlags >= 1) {
                 shouldBan = true;
-                reason = 'Anti-cheat threshold (Copy-Paste detected) exceeded.';
+                if (type === 'CHEAT_FLAG' && request.body.detail) {
+                    reason = request.body.detail;
+                } else {
+                    reason = 'Anti-cheat threshold (Copy-Paste / Dev Tools) exceeded.';
+                }
             }
 
             if (shouldBan) {

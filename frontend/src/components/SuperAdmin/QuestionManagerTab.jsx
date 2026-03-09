@@ -253,6 +253,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         outputFormat: question?.outputFormat || '',
         sampleInput: question?.sampleInput || '',
         sampleOutput: question?.sampleOutput || '',
+        starterCode: question?.starterCode || '',
         difficulty: question?.difficulty || 'MEDIUM',
         points: question?.points || 10,
         order: question?.order || 0,
@@ -376,7 +377,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                     >
                                         <option value="CODE">Programming / Code</option>
                                         <option value="MCQ">Multiple Choice (MCQ)</option>
-                                        <option value="DEBUG">Bug Fix / Debug</option>
+                                        <option value="DEBUG">Bug Fix / Missing Code Block</option>
                                         <option value="FILL_BLANKS">Fill in Blanks</option>
                                         <option value="EXPLAIN">Short Answer / Explain</option>
                                         <option value="UI_UX">UI/UX Submission</option>
@@ -502,6 +503,12 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                         <div className="grid grid-cols-2 gap-4">
                                             {field('Sample Test Input', 'sampleInput', 'text', 3)}
                                             {field('Sample Test Output', 'sampleOutput', 'text', 3)}
+                                        </div>
+                                    )}
+                                    {(form.type === 'DEBUG' || form.type === 'FILL_BLANKS') && (
+                                        <div className="p-4 bg-indigo-50/30 rounded-2xl border border-indigo-100 mt-4">
+                                            {field('Starter Code / Buggy Code', 'starterCode', 'text', 6)}
+                                            <p className="text-[10px] text-slate-500 mt-2 font-medium leading-relaxed">This code will be pre-filled in the student's editor when the assessment starts.</p>
                                         </div>
                                     )}
                                     {(form.type !== 'CODE' || form.isManualEvaluation) && form.type !== 'UI_UX' && (

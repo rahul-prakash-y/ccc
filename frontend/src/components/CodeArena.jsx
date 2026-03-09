@@ -81,14 +81,34 @@ const CodeArena = ({ language = 'javascript' }) => {
 
         const handlePaste = (e) => {
             e.preventDefault();
-            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+            handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Copy/Paste Detected.' });
         };
         const blockAction = (e) => e.preventDefault();
+
         const handleKeyDown = (e) => {
+            // Block Copy/Paste/Cut via Keyboard
             if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
                 e.preventDefault();
-                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Keyboard Paste Detected.' });
             }
+
+            // Block DevTools Shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U)
+            if (e.key === 'F12' ||
+                ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+                ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u'))) {
+                e.preventDefault();
+                handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Developer Tools / Source View Attempted.' });
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden || document.visibilityState === 'hidden') {
+                handleCheatDetected({ type: 'TAB_SWITCH', count: 1, detail: 'Split Screen / Tab Switch Detected (Visibility Lost).' });
+            }
+        };
+
+        const handleBlur = () => {
+            handleCheatDetected({ type: 'TAB_SWITCH', count: 1, detail: 'Window Focus Lost (Possible Split Screen).' });
         };
 
         window.addEventListener('paste', handlePaste, { capture: true });
@@ -97,12 +117,18 @@ const CodeArena = ({ language = 'javascript' }) => {
         window.addEventListener('contextmenu', blockAction, { capture: true });
         window.addEventListener('keydown', handleKeyDown, { capture: true });
 
+        // Add Visibility and Blur Listeners for Strict Mode
+        document.addEventListener('visibilitychange', handleVisibilityChange, { capture: true });
+        window.addEventListener('blur', handleBlur, { capture: true });
+
         return () => {
             window.removeEventListener('paste', handlePaste, { capture: true });
             window.removeEventListener('copy', blockAction, { capture: true });
             window.removeEventListener('cut', blockAction, { capture: true });
             window.removeEventListener('contextmenu', blockAction, { capture: true });
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            document.removeEventListener('visibilitychange', handleVisibilityChange, { capture: true });
+            window.removeEventListener('blur', handleBlur, { capture: true });
         };
     }, [handleCheatDetected, isCreativeRound]);
 
@@ -127,12 +153,12 @@ const CodeArena = ({ language = 'javascript' }) => {
                         setAnswers(JSON.parse(draft));
                     } catch {
                         const initialAnswers = {};
-                        res.data.data.questions.forEach((q, i) => initialAnswers[q._id] = i === 0 ? draft : '');
+                        res.data.data.questions.forEach((q, i) => initialAnswers[q._id] = i === 0 ? draft : (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
                         setAnswers(initialAnswers);
                     }
                 } else {
                     const initialAnswers = {};
-                    res.data.data.questions.forEach(q => initialAnswers[q._id] = '');
+                    res.data.data.questions.forEach(q => initialAnswers[q._id] = (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
                     setAnswers(initialAnswers);
                 }
             } catch (err) {
@@ -499,7 +525,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                             <Terminal size={14} className="text-indigo-400" />
                             <span>
                                 {q?.type === 'MCQ' ? 'Selection_Matrix.exe' :
-                                    (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ?
+                                    (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'FILL_BLANKS' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ?
                                         `solution.${(q?.category === 'SQL' || roundInfo?.type === 'SQL_CONTEST') ? 'sql' :
                                             (q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? 'html' :
                                                 q?.category === 'CSS' ? 'css' : language}` :
@@ -641,7 +667,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     </div>
                                 </div>
                             </div>
-                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? (
+                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'FILL_BLANKS' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? (
                             !q ? (
                                 <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
                                     <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
@@ -666,7 +692,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                 height="100%"
                                                 language={(q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? 'html' : 'css'}
                                                 theme="light"
-                                                value={currentAnswer || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                                value={currentAnswer || q?.starterCode || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
                                                 onChange={(val) => handleAnswerChange(q?._id, val)}
                                                 options={{
                                                     minimap: { enabled: false },
@@ -705,7 +731,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                 q?.category === 'CSS' ? 'css' :
                                                     'javascript'}
                                         theme="light" // Switched to Monaco's built-in light theme
-                                        value={currentAnswer || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                        value={currentAnswer || q?.starterCode || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
                                         onChange={(val) => handleAnswerChange(q?._id, val)}
                                         options={{
                                             minimap: { enabled: false },

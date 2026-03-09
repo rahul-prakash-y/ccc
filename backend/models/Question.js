@@ -41,6 +41,10 @@ const questionSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    starterCode: {
+        type: String,
+        default: ''
+    },
     difficulty: {
         type: String,
         enum: ['EASY', 'MEDIUM', 'HARD'],
