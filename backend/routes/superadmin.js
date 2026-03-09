@@ -331,6 +331,7 @@ module.exports = async function (fastify, opts) {
 
             const [questions, total] = await Promise.all([
                 Question.find(filter)
+                    .populate('assignedAdmin', 'name studentId')
                     .sort({ order: 1, createdAt: 1 })
                     .skip(skip)
                     .limit(limitNum),
@@ -479,6 +480,7 @@ module.exports = async function (fastify, opts) {
 
             const [questions, total] = await Promise.all([
                 Question.find(filter)
+                    .populate('assignedAdmin', 'name studentId')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),

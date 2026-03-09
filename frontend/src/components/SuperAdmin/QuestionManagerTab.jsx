@@ -734,7 +734,7 @@ const QuestionManagerTab = () => {
                                                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{q.type}</span>
                                                 {q.isManualEvaluation && (
                                                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-amber-50 border-amber-200 text-amber-700 flex items-center gap-1">
-                                                        <ClipboardCheck size={9} /> Manual
+                                                        <ClipboardCheck size={9} /> {q.assignedAdmin ? `Eval: ${q.assignedAdmin.name.split(' ')[0]}` : 'Manual'}
                                                     </span>
                                                 )}
                                                 {q.isBank && (
@@ -839,6 +839,18 @@ const QuestionManagerTab = () => {
                                                                 {q.type === 'CODE' ? 'Reference Code Solution' : 'Expected Answer Engine Match'}
                                                             </p>
                                                             <pre className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-lg font-mono text-xs overflow-x-auto">{q.correctAnswer}</pre>
+                                                        </div>
+                                                    )}
+
+                                                    {q.isManualEvaluation && q.assignedAdmin && (
+                                                        <div className="pt-3 border-t border-slate-200/60 mt-4 flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                                                                <ClipboardCheck size={14} className="text-amber-600" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Assigned Evaluator</p>
+                                                                <p className="font-bold text-slate-800 text-sm mt-0.5">{q.assignedAdmin.name} <span className="font-normal text-slate-400 text-xs ml-1">({q.assignedAdmin.studentId})</span></p>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
