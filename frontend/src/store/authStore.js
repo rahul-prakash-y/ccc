@@ -51,9 +51,9 @@ export const useAuthStore = create((set, get) => ({
         set({ user: updatedUser });
     },
 
-    onboard: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password) => {
+    onboard: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation) => {
         try {
-            const res = await api.post('/auth/onboard', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password });
+            const res = await api.post('/auth/onboard', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation });
             const { token, user } = res.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
@@ -61,6 +61,19 @@ export const useAuthStore = create((set, get) => ({
             return { success: true };
         } catch (err) {
             return { success: false, error: err.response?.data?.error || 'Onboarding failed' };
+        }
+    },
+
+    updateProfile: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation) => {
+        try {
+            const res = await api.put('/auth/profile', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation });
+            const { token, user } = res.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(user));
+            set({ user, token });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.response?.data?.error || 'Profile update failed' };
         }
     },
 

@@ -151,7 +151,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/onboard', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, password } = request.body;
+            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation } = request.body;
             if (!name || name.trim().length < 2) {
                 return reply.code(400).send({ error: 'Valid name is required' });
             }
@@ -164,6 +164,9 @@ module.exports = async function (fastify, opts) {
                 phone: phone ? phone.trim() : null,
                 bio: bio ? bio.trim() : null,
                 dob: dob ? new Date(dob) : null,
+                department: department ? department.trim() : null,
+                gender: gender ? gender.trim() : null,
+                accommodation: accommodation ? accommodation.trim() : null,
                 isOnboarded: true
             };
 
@@ -191,7 +194,16 @@ module.exports = async function (fastify, opts) {
                 name: user.name,
                 isBanned: user.isBanned,
                 banReason: user.banReason,
-                isOnboarded: user.isOnboarded
+                isOnboarded: user.isOnboarded,
+                department: user.department,
+                gender: user.gender,
+                accommodation: user.accommodation,
+                linkedinProfile: user.linkedinProfile,
+                githubProfile: user.githubProfile,
+                phone: user.phone,
+                bio: user.bio,
+                dob: user.dob,
+                email: user.email,
             };
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 
@@ -206,6 +218,80 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to complete onboarding' });
+        }
+    });
+
+    /**
+     * ROUTE: PUT /api/auth/profile
+     * Authenticated route for students to explicitly update their profile data post-onboarding.
+     */
+    fastify.put('/profile', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation } = request.body;
+            if (!name || name.trim().length < 2) {
+                return reply.code(400).send({ error: 'Valid name is required' });
+            }
+
+            const updateData = {
+                name: name.trim(),
+                email: email ? email.trim() : null,
+                linkedinProfile: linkedinProfile ? linkedinProfile.trim() : null,
+                githubProfile: githubProfile ? githubProfile.trim() : null,
+                phone: phone ? phone.trim() : null,
+                bio: bio ? bio.trim() : null,
+                dob: dob ? new Date(dob) : null,
+                department: department ? department.trim() : null,
+                gender: gender ? gender.trim() : null,
+                accommodation: accommodation ? accommodation.trim() : null
+            };
+
+            if (password) {
+                if (password.length < 6) {
+                    return reply.code(400).send({ error: 'Password must be at least 6 characters long' });
+                }
+                const hashedPassword = await bcrypt.hash(password, 10);
+                updateData.password = hashedPassword;
+            }
+
+            const user = await User.findByIdAndUpdate(
+                request.user.userId,
+                updateData,
+                { new: true }
+            );
+
+            if (!user) return reply.code(404).send({ error: 'User not found' });
+
+            // Ensure JWT token matches latest data exactly
+            const payload = {
+                userId: user._id,
+                studentId: user.studentId,
+                role: user.role,
+                name: user.name,
+                isBanned: user.isBanned,
+                banReason: user.banReason,
+                isOnboarded: user.isOnboarded,
+                department: user.department,
+                gender: user.gender,
+                accommodation: user.accommodation,
+                linkedinProfile: user.linkedinProfile,
+                githubProfile: user.githubProfile,
+                phone: user.phone,
+                bio: user.bio,
+                dob: user.dob
+            };
+            const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: user._id, studentId: user.studentId, name: user.name, role: user.role },
+                target: { type: 'User', id: user._id.toString(), label: `${user.studentId} — Profile Update` },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, user: payload, token });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update user profile' });
         }
     });
 

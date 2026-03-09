@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check, ShieldAlert } from 'lucide-react';
 import OtpGate from './OtpGate';
+import ProfileModal from './ProfileModal';
 import { useAuthStore, api } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { SkeletonGrid } from './Skeleton';
@@ -32,6 +33,7 @@ const StudentDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
     const [attendanceOtp, setAttendanceOtp] = useState('');
     const [marking, setMarking] = useState(false);
@@ -128,6 +130,15 @@ const StudentDashboard = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-4">
+                        {/* Profile Button */}
+                        <button
+                            onClick={() => setIsProfileOpen(true)}
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-600 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 hover:text-indigo-600 transition-all active:scale-95 shadow-sm"
+                        >
+                            <UserCheck size={14} />
+                            My Profile
+                        </button>
+
                         {/* Standalone Attendance Button */}
                         <button
                             onClick={() => setIsAttendanceOpen(true)}
@@ -285,6 +296,11 @@ const StudentDashboard = () => {
                 roundName={selectedRound?.name}
                 onClose={() => setIsOtpOpen(false)}
                 onUnlock={handleOtpUnlock}
+            />
+
+            <ProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
             />
 
             {/* Attendance Modal */}
