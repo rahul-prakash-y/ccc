@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -124,7 +124,7 @@ const AdminDashboard = () => {
                         title="Sign Out"
                         className="w-full aspect-square flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all group"
                     >
-                        <LogOut size={20} strokeWidth={2} className="group-hover:scale-110 transition-transform duration-300" />
+                        <Power size={20} strokeWidth={2} className="group-hover:scale-110 transition-transform duration-300" />
                     </button>
                 </div>
             </aside>

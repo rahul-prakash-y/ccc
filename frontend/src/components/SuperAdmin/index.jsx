@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
-  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck
+  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck,
+  Power
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -86,7 +87,7 @@ const SuperAdminDashboard = () => {
             onClick={logout}
             className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-500 hover:text-red-600 bg-white hover:bg-red-50 rounded-lg transition-all border border-slate-200 hover:border-red-100 active:scale-95"
           >
-            <LogOut size={14} />
+            <Power size={14} />
             <span className="hidden xs:inline">Sign Out</span>
           </button>
         </div>

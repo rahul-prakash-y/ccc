@@ -6,7 +6,8 @@ import {
     Terminal, Lock, Send, AlertTriangle, Save,
     ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Code2, LogOut,
     Clock, ArrowRight,
-    Loader2, Eye, EyeOff
+    Loader2, Eye, EyeOff,
+    Power
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, useAuthStore } from '../store/authStore';
@@ -257,7 +258,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                     </p>
                 </div>
                 <button onClick={() => navigate('/dashboard')} className="mt-10 px-8 py-4 bg-indigo-600 text-white font-black tracking-wide rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 active:scale-95">
-                    <LogOut size={18} /> Return to Dashboard
+                    <Power size={18} /> Return to Dashboard
                 </button>
             </div>
         );
@@ -281,7 +282,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                     </div>
                 </div>
                 <button onClick={() => navigate('/dashboard')} className="mt-10 px-8 py-4 bg-red-600 text-white font-black tracking-wide rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center gap-2 active:scale-95">
-                    <LogOut size={18} /> Return to Base
+                    <Power size={18} /> Return to Base
                 </button>
             </div>
         );

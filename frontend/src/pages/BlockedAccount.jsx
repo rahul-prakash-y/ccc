@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldX, Mail, ArrowLeft, LogOut, AlertOctagon } from 'lucide-react';
+import { ShieldX, Mail, ArrowLeft, LogOut, AlertOctagon, Power } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -66,7 +66,7 @@ const BlockedAccount = () => {
                             onClick={handleLogout}
                             className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl transition-all font-bold text-sm shadow-sm"
                         >
-                            <LogOut size={18} /> Disconnect Session
+                            <Power size={18} /> Disconnect Session
                         </button>
                     </div>
 
