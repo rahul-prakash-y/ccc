@@ -22,26 +22,12 @@ import { useAuthStore } from './store/authStore';
  */
 const PublicRoute = ({ children }) => {
     const { user } = useAuthStore();
-    
-    React.useEffect(() => {
-        if (user && user.role === 'STUDENT' && user.allocatedServer) {
-            const currentOrigin = window.location.origin;
-            if (user.allocatedServer !== currentOrigin) {
-                window.location.replace(`${user.allocatedServer}/dashboard`);
-            }
-        }
-    }, [user]);
 
     if (user) {
         if (user.isBanned) return <Navigate to="/blocked" replace />;
         if (user.role === 'STUDENT' && !user.isOnboarded) return <Navigate to="/onboarding" replace />;
         if (user.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
         if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
-        
-        // Return null while redirecting to another server
-        if (user.role === 'STUDENT' && user.allocatedServer && user.allocatedServer !== window.location.origin) {
-            return null;
-        }
         
         return <Navigate to="/dashboard" replace />;
     }
@@ -51,21 +37,8 @@ const PublicRoute = ({ children }) => {
 const RoleFallback = () => {
     const { user } = useAuthStore();
 
-    React.useEffect(() => {
-        if (user?.role === 'STUDENT' && user?.allocatedServer) {
-            const currentOrigin = window.location.origin;
-            if (user.allocatedServer !== currentOrigin) {
-                window.location.replace(`${user.allocatedServer}/dashboard`);
-            }
-        }
-    }, [user]);
-
     if (user?.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
     if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
-    
-    if (user?.role === 'STUDENT' && user?.allocatedServer && user.allocatedServer !== window.location.origin) {
-        return null;
-    }
     
     return <Navigate to="/dashboard" replace />;
 };
