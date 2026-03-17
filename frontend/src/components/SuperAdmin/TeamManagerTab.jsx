@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check,
-    Users, Trash2, Search, UserPlus, UserMinus
+    Users, Trash2, Search, UserPlus, UserMinus, Upload
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { SkeletonList } from '../Skeleton';
@@ -17,6 +17,7 @@ const TeamManagerTab = () => {
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [uploading, setUploading] = useState(false);
     const { showConfirm } = useConfirm();
 
     const fetchTeams = useCallback(async () => {
@@ -65,6 +66,32 @@ const TeamManagerTab = () => {
         }
     };
 
+    const handleBulkUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await api.post(`${API}/teams/bulk-upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success(res.data.message || "Teams uploaded successfully!");
+            if (res.data.errors && res.data.errors.length > 0) {
+                toast.error(`Some rows had errors: ${res.data.errors.slice(0, 2).join('; ')}...`);
+            }
+            await fetchTeams();
+            await fetchStudents();
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Failed to upload teams");
+        } finally {
+            setUploading(false);
+            e.target.value = null; // reset input
+        }
+    };
+
     const filteredTeams = teams.filter(t =>
         t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.members.some(m => m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.studentId?.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -89,11 +116,28 @@ const TeamManagerTab = () => {
                             className="bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none w-64 transition-all font-bold"
                         />
                     </div>
+                    <div className="relative">
+                        <input 
+                            type="file" 
+                            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                            onChange={handleBulkUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                            disabled={uploading}
+                            title="Upload Team CSV/Excel"
+                        />
+                        <button
+                            disabled={uploading}
+                            className={`relative flex items-center gap-2 ${uploading ? 'bg-slate-400 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'} px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm overflow-hidden`}
+                        >
+                            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Bulk Upload'}</span>
+                        </button>
+                    </div>
                     <button
                         onClick={() => setShowAddModal(true)}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
                     >
-                        <Plus size={18} /> Create Team
+                        <Plus size={18} /> <span className="hidden sm:inline">Create Team</span>
                     </button>
                 </div>
             </div>

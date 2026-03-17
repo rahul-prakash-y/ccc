@@ -2364,7 +2364,96 @@ module.exports = async function (fastify, opts) {
         }
     });
 
-    // 5. GET /api/superadmin/team-scores
+    // 5. POST /api/superadmin/teams/bulk-upload
+    fastify.post('/teams/bulk-upload', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data) return reply.code(400).send({ error: 'No spreadsheet file uploaded' });
+
+            const buffer = await data.toBuffer();
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet);
+
+            if (rows.length === 0) return reply.code(400).send({ error: 'Excel file is empty' });
+
+            let errorCount = 0;
+            const errors = [];
+            let successCount = 0;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const lineNum = i + 2;
+
+                const teamName = row['Team Name'] || row.teamName || row.name || row.Name;
+                const membersStr = row['Members'] || row.members || row.Members || '';
+
+                if (!teamName) {
+                    errorCount++;
+                    errors.push(`Row ${lineNum}: Team Name is required.`);
+                    continue;
+                }
+
+                const memberStudentIds = String(membersStr).split(',').map(id => id.trim()).filter(id => id);
+                
+                // Find users by studentId
+                const users = await User.find({ studentId: { $in: memberStudentIds } });
+                const foundStudentIds = users.map(u => u.studentId);
+                const missingIds = memberStudentIds.filter(id => !foundStudentIds.includes(id));
+                
+                if (missingIds.length > 0) {
+                    errors.push(`Row ${lineNum} (${teamName}): Students not found: ${missingIds.join(', ')}`);
+                }
+
+                const userIds = users.map(u => u._id);
+
+                // Upsert team
+                let team = await Team.findOne({ name: teamName });
+                if (team) {
+                    // Update existing team
+                    // Convert ObjectIds to strings for Set deduplication, then back
+                    const currentMemberIds = (team.members || []).map(id => id.toString());
+                    const newUserIds = userIds.map(id => id.toString());
+                    const combinedIds = [...new Set([...currentMemberIds, ...newUserIds])];
+                    
+                    team.members = combinedIds;
+                    await team.save();
+                } else {
+                    // Create new
+                    team = new Team({ name: teamName, members: userIds });
+                    await team.save();
+                }
+
+                // Update users to refer to this team
+                if (userIds.length > 0) {
+                    await User.updateMany({ _id: { $in: userIds } }, { $set: { team: team._id } });
+                }
+
+                successCount++;
+            }
+
+            await logActivity({
+                action: 'BULK_UPLOAD',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Team', label: `Bulk Upload: ${successCount} Teams` },
+                metadata: { successCount, errorCount },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({
+                success: true,
+                message: `Successfully processed ${successCount} teams.`,
+                errorCount,
+                errors: errors.length > 0 ? errors : undefined
+            });
+
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to process bulk upload', details: error.message });
+        }
+    });
+
+    // 6. GET /api/superadmin/team-scores
     fastify.get('/team-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const teams = await Team.find({}).populate('members', '_id name studentId');
