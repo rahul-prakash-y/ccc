@@ -16,8 +16,8 @@ const TeamManagerTab = () => {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showBulkModal, setShowBulkModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [uploading, setUploading] = useState(false);
     const { showConfirm } = useConfirm();
 
     const fetchTeams = useCallback(async () => {
@@ -47,49 +47,22 @@ const TeamManagerTab = () => {
         init();
     }, [fetchTeams, fetchStudents]);
 
-    const handleDeleteTeam = async (team) => {
-        const confirmed = await showConfirm({
+    const handleDeleteTeam = (team) => {
+        showConfirm({
             title: `Delete Team: ${team.name}?`,
             message: "All members will be unassigned from this team. This cannot be undone.",
-            actionLabel: "Delete Team",
-            isDestructive: true
+            confirmLabel: "Delete Team",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.delete(`${API}/teams/${team._id}`);
+                    setTeams(prev => prev.filter(t => t._id !== team._id));
+                    toast.success("Team deleted");
+                } catch {
+                    toast.error("Failed to delete team");
+                }
+            }
         });
-
-        if (confirmed) {
-            try {
-                await api.delete(`${API}/teams/${team._id}`);
-                setTeams(prev => prev.filter(t => t._id !== team._id));
-                toast.success("Team deleted");
-            } catch {
-                toast.error("Failed to delete team");
-            }
-        }
-    };
-
-    const handleBulkUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await api.post(`${API}/teams/bulk-upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            toast.success(res.data.message || "Teams uploaded successfully!");
-            if (res.data.errors && res.data.errors.length > 0) {
-                toast.error(`Some rows had errors: ${res.data.errors.slice(0, 2).join('; ')}...`);
-            }
-            await fetchTeams();
-            await fetchStudents();
-        } catch (err) {
-            toast.error(err.response?.data?.error || "Failed to upload teams");
-        } finally {
-            setUploading(false);
-            e.target.value = null; // reset input
-        }
     };
 
     const filteredTeams = teams.filter(t =>
@@ -116,23 +89,13 @@ const TeamManagerTab = () => {
                             className="bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none w-64 transition-all font-bold"
                         />
                     </div>
-                    <div className="relative">
-                        <input 
-                            type="file" 
-                            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-                            onChange={handleBulkUpload}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-                            disabled={uploading}
-                            title="Upload Team CSV/Excel"
-                        />
-                        <button
-                            disabled={uploading}
-                            className={`relative flex items-center gap-2 ${uploading ? 'bg-slate-400 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'} px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm overflow-hidden`}
-                        >
-                            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                            <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Bulk Upload'}</span>
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => setShowBulkModal(true)}
+                        className="relative flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+                    >
+                        <Upload size={16} />
+                        <span className="hidden sm:inline">Bulk Upload</span>
+                    </button>
                     <button
                         onClick={() => setShowAddModal(true)}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
@@ -172,6 +135,12 @@ const TeamManagerTab = () => {
                         onClose={() => setShowAddModal(false)}
                         onCreated={() => { fetchTeams(); setShowAddModal(false); }}
                         allStudents={students}
+                    />
+                )}
+                {showBulkModal && (
+                    <BulkUploadModal
+                        onClose={() => setShowBulkModal(false)}
+                        onUploaded={() => { fetchTeams(); fetchStudents(); setShowBulkModal(false); }}
                     />
                 )}
             </AnimatePresence>
@@ -366,6 +335,124 @@ const TeamDialog = ({ team, onClose, onCreated, allStudents }) => {
                         </button>
                     </div>
                 </form>
+            </motion.div>
+        </div>
+    );
+};
+
+const BulkUploadModal = ({ onClose, onUploaded }) => {
+    const [file, setFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+
+    const handleDownloadTemplate = () => {
+        const csvContent = "Team Name,Members\nTeam Alpha,\"21BCE001, 21BCE002\"\nTeam Beta,\"21BCE003\"";
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'team_upload_template.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const handleUpload = async (e) => {
+        e.preventDefault();
+        if (!file) {
+            toast.error("Please select a file first");
+            return;
+        }
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await api.post(`${API}/teams/bulk-upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success(res.data.message || "Teams uploaded successfully!");
+            if (res.data.errors && res.data.errors.length > 0) {
+                toast.error(`Some rows had errors: ${res.data.errors.slice(0, 2).join('; ')}...`);
+            }
+            onUploaded();
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Failed to upload teams");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white border border-slate-200 rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                    <div>
+                        <h2 className="text-xl font-black text-slate-800 tracking-tight">Bulk Upload Teams</h2>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Batch Processing</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-white border border-slate-100 text-slate-400 hover:text-slate-600 rounded-full shadow-sm transition-all"><X size={20} /></button>
+                </div>
+
+                <div className="p-8 space-y-6">
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mb-4 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl transform translate-x-12 -translate-y-12 pointer-events-none"></div>
+                        <div className="flex justify-between items-start gap-3 relative z-10">
+                            <div>
+                                <h3 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-2">
+                                    <AlertTriangle size={16} className="text-indigo-600" />
+                                    Format Requirements
+                                </h3>
+                                <ul className="text-xs text-indigo-700/80 space-y-1 list-disc pl-5 font-medium">
+                                    <li>Accepted formats: <strong className="text-indigo-800 font-bold">.csv, .xlsx</strong></li>
+                                    <li>Required columns: <strong className="text-indigo-800 font-bold">Team Name</strong>, <strong className="text-indigo-800 font-bold">Members</strong></li>
+                                    <li>Format <strong className="text-indigo-800 font-bold">Members</strong> as comma-separated Student IDs (e.g. <code className="bg-white/50 px-1 py-0.5 rounded text-indigo-900 tracking-tight">21BCE001, 21BCE002</code>)</li>
+                                </ul>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleDownloadTemplate}
+                                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm active:scale-95"
+                            >
+                                <Upload size={12} className="rotate-180" />
+                                Template
+                            </button>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleUpload} className="space-y-6">
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block pl-1">Select File</label>
+                            <input
+                                required
+                                type="file"
+                                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                                onChange={(e) => setFile(e.target.files?.[0])}
+                                className="block w-full text-sm text-slate-500
+                                    file:mr-4 file:py-3 file:px-6
+                                    file:rounded-xl file:border-0
+                                    file:text-xs file:font-black file:uppercase file:tracking-wider
+                                    file:bg-indigo-50 file:text-indigo-700
+                                    hover:file:bg-indigo-100 transition-all cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="flex gap-4 pt-2">
+                            <button type="button" onClick={onClose} className="flex-1 py-4 font-black text-slate-500 uppercase tracking-widest hover:text-slate-800 transition-colors">Abort</button>
+                            <button
+                                type="submit"
+                                disabled={uploading || !file}
+                                className="flex-2 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 transition-all active:scale-95"
+                            >
+                                {uploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
+                                {uploading ? 'Processing...' : 'Upload Teams'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </motion.div>
         </div>
     );
