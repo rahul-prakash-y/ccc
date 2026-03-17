@@ -8,6 +8,11 @@ export const useAdminStore = create((set, get) => ({
     pagination: { totalPages: 1, totalRecords: 0 },
     lastFetched: null,
 
+    // Admin Contributions State
+    contributions: [],
+    contributionsLoading: false,
+    lastFetchedContributions: null,
+
     fetchAdmins: async (params = {}, force = false) => {
         const { lastFetched } = get();
         const now = Date.now();
@@ -28,6 +33,27 @@ export const useAdminStore = create((set, get) => ({
         } catch (error) {
             console.error('Failed to fetch admins:', error);
             set({ loading: false });
+        }
+    },
+
+    fetchContributions: async (force = false) => {
+        const { lastFetchedContributions } = get();
+        const now = Date.now();
+        if (!force && lastFetchedContributions && now - lastFetchedContributions < 10000) {
+            return;
+        }
+
+        set({ contributionsLoading: true });
+        try {
+            const res = await api.get(`${API}/admin-contributions`);
+            set({
+                contributions: res.data.data || [],
+                contributionsLoading: false,
+                lastFetchedContributions: now
+            });
+        } catch (error) {
+            console.error('Failed to fetch admin contributions:', error);
+            set({ contributionsLoading: false });
         }
     },
 

@@ -1,36 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PieChart, TrendingUp, Users, RefreshCcw, Search, BarChart3, CheckCircle2, FileText, UploadCloud } from 'lucide-react';
-import { api } from '../../store/authStore';
-import { API } from './constants';
+import { useAdminStore } from '../../store/adminStore';
 
 const AdminContributionsTab = () => {
-  const [stats, setStats] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { contributions: stats, contributionsLoading: isLoading, fetchContributions } = useAdminStore();
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
 
-  const fetchStats = async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchStats = async (force = false) => {
+    if (error) setError(null);
     try {
-      const res = await api.get(`${API}/superadmin/admin-contributions`);
-      if (res.data.success) {
-        setStats(res.data.data);
-      } else {
-        setError(res.data.error || 'Failed to fetch admin contributions');
-      }
+      await fetchContributions(force);
     } catch (err) {
-      setError(err.response?.data?.error || 'An error occurred while fetching data');
+      setError('An error occurred while fetching data');
       console.error(err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    fetchContributions();
+  }, [fetchContributions]);
 
   const filteredStats = stats.filter(s => 
     s.name?.toLowerCase().includes(search.toLowerCase()) || 
@@ -61,7 +51,7 @@ const AdminContributionsTab = () => {
             />
           </div>
           <button
-            onClick={fetchStats}
+            onClick={() => fetchStats(true)}
             disabled={isLoading}
             className="p-2 sm:px-4 sm:py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
             title="Refresh Data"
