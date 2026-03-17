@@ -17,7 +17,7 @@ module.exports = async function (fastify, opts) {
      * POST /api/superadmin/rounds
      * Super Admin can create new Rounds/Tests dynamically
      */
-    fastify.post('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+    fastify.post('/rounds', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
             const {
                 name, description, durationMinutes, type,
@@ -265,7 +265,7 @@ module.exports = async function (fastify, opts) {
      * Update questionCount and shuffleQuestions for a round.
      * Clears previously assigned question sets so the new config takes effect.
      */
-    fastify.patch('/rounds/:roundId/question-settings', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+    fastify.patch('/rounds/:roundId/question-settings', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
             const { questionCount, shuffleQuestions } = request.body;
@@ -2196,7 +2196,7 @@ module.exports = async function (fastify, opts) {
      * DELETE /api/superadmin/rounds/:roundId
      * Deletes a round and its associated questions/submissions.
      */
-    fastify.delete('/rounds/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+    fastify.delete('/rounds/:roundId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
         try {
             const round = await Round.findById(roundId);

@@ -208,7 +208,9 @@ const ProjectorOtp = ({ section }) => {
 };
 
 // ── Question pool settings per section ─────────────────────────────────────────
-const QuestionSettings = ({ section, onSave, busy }) => {
+const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
+  if (!isSuperAdmin) return null;
+
   const [qCount, setQCount] = useState(section.questionCount ?? '');
   const [shuffle, setShuffle] = useState(section.shuffleQuestions !== false);
   const [saved, setSaved] = useState(false);
@@ -267,7 +269,7 @@ const QuestionSettings = ({ section, onSave, busy }) => {
 };
 
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection, onProjector }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -326,6 +328,7 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
           section={section}
           onSave={onSaveSettings}
           busy={busy[`${section._id}-qsettings`]}
+          isSuperAdmin={isSuperAdmin}
         />
 
         {/* Action Toolbar */}
@@ -377,13 +380,15 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
             </button>
           )}
 
-          <button
-            onClick={() => isMulti ? onDeleteSection(section) : onDeleteGroup(group)}
-            disabled={busy[`${section._id}-delete`] || busy[`${group.id}-delete`]}
-            className="h-10 w-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-          >
-            {(busy[`${section._id}-delete`] || busy[`${group.id}-delete`]) ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-          </button>
+          {isSuperAdmin && (
+            <button
+              onClick={() => isMulti ? onDeleteSection(section) : onDeleteGroup(group)}
+              disabled={busy[`${section._id}-delete`] || busy[`${group.id}-delete`]}
+              className="h-10 w-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+            >
+              {(busy[`${section._id}-delete`] || busy[`${group.id}-delete`]) ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            </button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -391,6 +396,8 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
 };
 
 const LiveOpsTab = () => {
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { rounds: sections, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
   const [loading, setLoading] = useState(!sections.length);
   const [projectorSection, setProjectorSection] = useState(null);
@@ -596,12 +603,14 @@ const LiveOpsTab = () => {
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Overlord</h2>
           <p className="text-xl font-bold text-slate-800">Live Operations</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
-        >
-          <Plus size={18} /> Create Test
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+          >
+            <Plus size={18} /> Create Test
+          </button>
+        )}
       </div>
 
       {/* Tests Grid */}
@@ -617,6 +626,7 @@ const LiveOpsTab = () => {
             onAddTime={handleAddTime}
             onDeleteSection={handleDeleteSection}
             onProjector={() => setProjectorSection(group.sections[0])}
+            isSuperAdmin={isSuperAdmin}
           />
         ))}
       </div>
