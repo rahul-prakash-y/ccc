@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck,
-  Power, PieChart, Server
+  Power, PieChart, Server, Award
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -24,6 +24,8 @@ import TeamScoreTab from './TeamScoreTab';
 import AttendanceTab from './AttendanceTab';
 import AdminContributionsTab from './AdminContributionsTab';
 import ServerAllocationTab from './ServerAllocationTab';
+import CertificateManager from './CertificateManager';
+
 
 const TABS = [
   { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -40,6 +42,7 @@ const TABS = [
   { id: 'attendance', label: 'Attendance', icon: UserCheck },
   { id: 'admin-contributions', label: 'Admin Contributions', icon: PieChart },
   { id: 'server-allocation', label: 'Server Allocation', icon: Server },
+  { id: 'certificates', label: 'Certificates', icon: Award },
 ];
 
 const SuperAdminDashboard = () => {
@@ -228,6 +231,7 @@ const SuperAdminDashboard = () => {
                   {activeTab === 'attendance' && <AttendanceTab />}
                   {activeTab === 'admin-contributions' && <AdminContributionsTab />}
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
+                  {activeTab === 'certificates' && <CertificateManager />}
                 </div>
               </div>
 
