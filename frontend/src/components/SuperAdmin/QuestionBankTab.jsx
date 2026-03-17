@@ -144,6 +144,7 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                         <option value="DEBUG">Bug Fix / Debug</option>
                                         <option value="FILL_BLANKS">Fill in Blanks</option>
                                         <option value="EXPLAIN">Short Answer / Explain</option>
+                                        <option value="UI_UX">UI/UX Submission</option>
                                     </select>
                                 </div>
                                 <div>
