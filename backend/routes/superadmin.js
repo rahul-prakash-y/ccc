@@ -1925,6 +1925,66 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * DELETE /api/superadmin/students/bulk-delete
+     * Deletes students in bulk based on year prefix (from studentId).
+     */
+    fastify.delete('/students/bulk-delete', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { yearPrefix, confirmCode } = request.body;
+
+            if (!yearPrefix || yearPrefix.length < 2) {
+                return reply.code(400).send({ error: 'A valid year prefix (at least 2 characters) is required' });
+            }
+
+            if (confirmCode !== 'DELETE-' + yearPrefix) {
+                return reply.code(400).send({ error: `Confirmation failed. Please type "DELETE-${yearPrefix}" to confirm.` });
+            }
+
+            // Find students to be deleted
+            const studentsToDelete = await User.find({
+                role: 'STUDENT',
+                studentId: { $regex: `^${yearPrefix}`, $options: 'i' }
+            }).select('_id name studentId');
+
+            if (studentsToDelete.length === 0) {
+                return reply.code(404).send({ error: `No students found matching prefix "${yearPrefix}"` });
+            }
+
+            const studentIds = studentsToDelete.map(s => s._id);
+
+            // 1. Delete associated Submissions
+            const submissionResult = await Submission.deleteMany({ student: { $in: studentIds } });
+
+            // 2. Delete the Students
+            const userResult = await User.deleteMany({ _id: { $in: studentIds } });
+
+            // 3. Clear team memberships if needed (optional as users are deleted, but good practice)
+            const Team = require('../models/Team');
+            await Team.updateMany(
+                { members: { $in: studentIds } },
+                { $pull: { members: { $in: studentIds } } }
+            );
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Student', label: `Bulk Delete Year ${yearPrefix}: ${userResult.deletedCount} students and ${submissionResult.deletedCount} submissions removed.` },
+                metadata: { yearPrefix, studentCount: userResult.deletedCount, submissionCount: submissionResult.deletedCount },
+                ip: request.ip
+            });
+
+            return reply.send({
+                success: true,
+                message: `Bulk deletion complete. Removed ${userResult.deletedCount} students and ${submissionResult.deletedCount} submissions.`,
+                data: { deletedCount: userResult.deletedCount, submissionCount: submissionResult.deletedCount }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to execute bulk deletion' });
+        }
+    });
+
+    /**
      * PATCH /api/superadmin/submissions/:submissionId/extra-time
      * Grants additional time (in minutes) to a specific student's active submission.
      */

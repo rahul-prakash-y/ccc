@@ -181,6 +181,156 @@ const AddStudentModal = ({ onClose, onCreated }) => {
     );
 };
 
+// ─── Bulk Delete Modal ─────────────────────────────────────────────────────────
+const BulkDeleteModal = ({ onClose, onDeleted }) => {
+    const [yearPrefix, setYearPrefix] = useState('');
+    const [confirmCode, setConfirmCode] = useState('');
+    const [deleting, setDeleting] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+
+    const handleDelete = async () => {
+        if (!yearPrefix) return;
+        if (confirmCode !== `DELETE-${yearPrefix}`) {
+            setError(`Please type "DELETE-${yearPrefix}" to confirm.`);
+            return;
+        }
+
+        setDeleting(true);
+        setError('');
+
+        try {
+            const res = await api.delete(`${API}/students/bulk-delete`, {
+                data: { yearPrefix, confirmCode }
+            });
+            setResult(res.data.data);
+            if (onDeleted) onDeleted();
+        } catch (err) {
+            setError(err.response?.data?.error || "Bulk deletion failed. Check prefix or permissions.");
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-100 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={e => e.target === e.currentTarget && !deleting && onClose()}
+            >
+                <motion.div
+                    initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+                >
+                    <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-red-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+                                <Trash2 size={18} />
+                            </div>
+                            <h2 className="font-bold text-slate-900 text-lg">Bulk Delete Students</h2>
+                        </div>
+                        <button onClick={onClose} disabled={deleting} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {!result ? (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+                                    <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                                    <div className="text-xs text-amber-800 font-medium leading-relaxed">
+                                        <p className="font-black uppercase tracking-wider mb-1">Critical Warning</p>
+                                        This will permanently delete all students starting with the specified prefix and their submissions. This action cannot be reversed.
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                            Year Prefix (e.g. 2024)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={yearPrefix}
+                                            onChange={e => setYearPrefix(e.target.value)}
+                                            placeholder="Enter year prefix..."
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
+                                        />
+                                    </div>
+
+                                    {yearPrefix && (
+                                        <div>
+                                            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                                Confirm Deletion
+                                            </label>
+                                            <p className="text-[10px] text-slate-400 font-bold mb-2 italic">Type "DELETE-{yearPrefix}" to continue</p>
+                                            <input
+                                                type="text"
+                                                value={confirmCode}
+                                                onChange={e => setConfirmCode(e.target.value)}
+                                                placeholder={`DELETE-${yearPrefix}`}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-red-600 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {error && (
+                                    <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 border border-red-200 rounded-xl p-3">
+                                        <AlertTriangle size={16} className="shrink-0" />
+                                        <p>{error}</p>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-3 pt-2">
+                                    <button onClick={onClose} disabled={deleting} className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors font-bold text-sm">
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleDelete}
+                                        disabled={deleting || !yearPrefix || confirmCode !== `DELETE-${yearPrefix}`}
+                                        className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:hover:bg-red-600 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-100 active:scale-95 text-sm"
+                                    >
+                                        {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                        Execute Bulk Delete
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl text-center space-y-4">
+                                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                                        <Check size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">Bulk Delete Successful</h3>
+                                        <p className="text-xs text-slate-500 font-bold mt-1">Students matching "{yearPrefix}" have been removed.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <div className="p-3 bg-white border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Students Removed</p>
+                                            <p className="text-xl font-black text-red-600">{result.deletedCount}</p>
+                                        </div>
+                                        <div className="p-3 bg-white border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Submissions Cleared</p>
+                                            <p className="text-xl font-black text-slate-900">{result.submissionCount}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={onClose} className="w-full py-3 bg-slate-900 hover:bg-slate-800 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-slate-200">
+                                    Acknowledge
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
 // ─── Bulk Upload Modal ─────────────────────────────────────────────────────────
 const BulkUploadModal = ({ onClose, onUploaded }) => {
     const [file, setFile] = useState(null);
@@ -663,6 +813,7 @@ const StudentManagerTab = () => {
     const [limit] = useState(20);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
     const [viewingStudent, setViewingStudent] = useState(null);
     const [resetTarget, setResetTarget] = useState(null);
     const [busy, setBusy] = useState({});
@@ -784,6 +935,12 @@ const StudentManagerTab = () => {
                         <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Records</p>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowBulkDeleteModal(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-red-600 font-bold text-sm transition-all shadow-sm active:scale-95"
+                        >
+                            <Trash2 size={16} /> <span className="hidden sm:inline">Bulk Delete</span>
+                        </button>
                         <button
                             onClick={() => setShowBulkModal(true)}
                             className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
@@ -986,6 +1143,15 @@ const StudentManagerTab = () => {
                 <BulkUploadModal
                     onClose={() => setShowBulkModal(false)}
                     onUploaded={() => {
+                        fetchStudents({ search, page, limit }, true);
+                    }}
+                />
+            )}
+
+            {showBulkDeleteModal && (
+                <BulkDeleteModal
+                    onClose={() => setShowBulkDeleteModal(false)}
+                    onDeleted={() => {
                         fetchStudents({ search, page, limit }, true);
                     }}
                 />
