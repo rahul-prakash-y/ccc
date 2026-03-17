@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power, Award } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -12,6 +12,7 @@ import EvaluationTab from '../SuperAdmin/EvaluationTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
 import AttendanceTab from "../SuperAdmin/AttendanceTab";
 import QuestionBankTab from '../SuperAdmin/QuestionBankTab';
+import CertificateManager from '../SuperAdmin/CertificateManager';
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -21,6 +22,7 @@ const TABS = [
     { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
     { id: 'teams', label: 'Teams', icon: Users },
     { id: 'attendance', label: 'Attendance', icon: UserCheck },
+    { id: 'certificates', label: 'Certificates', icon: Award },
 ];
 
 const AdminDashboard = () => {
@@ -199,8 +201,9 @@ const AdminDashboard = () => {
                                 {activeTab === 'question-bank' && <QuestionBankTab />}
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
-                                {activeTab === 'teams' && <TeamManagerTab />}
-                                {activeTab === 'attendance' && <AttendanceTab />}
+                                { activeTab === 'teams' && <TeamManagerTab /> }
+                                { activeTab === 'attendance' && <AttendanceTab /> }
+                                { activeTab === 'certificates' && <CertificateManager /> }
                             </div>
 
                             {/* Bottom Gradient Overlay (Depth Indicator) */}
