@@ -1183,9 +1183,7 @@ module.exports = async function (fastify, opts) {
             const [admins, total] = await Promise.all([
                 User.find(filter)
                     .select('studentId name isBanned tokenIssuedAfter createdAt')
-                    .sort({ createdAt: -1 })
-                    .skip(skip)
-                    .limit(limitNum),
+                    .sort({ createdAt: -1 }),
                 User.countDocuments(filter)
             ]);
 

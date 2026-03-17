@@ -36,6 +36,13 @@ const AttendanceTab = () => {
         fetchRounds();
     }, [fetchRounds]);
 
+    // Auto-select first round when rounds are loaded
+    useEffect(() => {
+        if (rounds.length > 0 && !selectedRoundId) {
+            setSelectedRoundId(rounds[0]._id);
+        }
+    }, [rounds, selectedRoundId]);
+
     // 1. Fetch Logic — re-fetch when round filter changes
     useEffect(() => {
         fetchAttendance({ search, page, limit, roundId: selectedRoundId || undefined }, true);
@@ -67,7 +74,11 @@ const AttendanceTab = () => {
     };
 
     const handleGenerateOtp = () => {
-        generateOtp(selectedRoundId || undefined);
+        if (!selectedRoundId) {
+            alert('Please select a specific round to generate an attendance key.');
+            return;
+        }
+        generateOtp(selectedRoundId);
     };
 
     // Export attendance as Excel
@@ -145,7 +156,7 @@ const AttendanceTab = () => {
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                 {selectedRoundId
                                     ? `Broadcast attendance key for: ${rounds.find(r => r._id === selectedRoundId)?.name || 'selected round'}`
-                                    : 'Broadcast a standalone attendance key (no round)'}
+                                    : 'Select a round to broadcast an attendance key'}
                             </p>
                         </div>
 
@@ -173,8 +184,9 @@ const AttendanceTab = () => {
                             ) : (
                                 <button
                                     onClick={handleGenerateOtp}
-                                    disabled={otpLoading}
-                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                                    disabled={otpLoading || !selectedRoundId}
+                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={!selectedRoundId ? "Select a round first" : "Generate attendance key"}
                                 >
                                     {otpLoading ? <Loader2 size={18} className="animate-spin" /> : <UserCheck size={18} />}
                                     GENERATE ROLL CALL KEY

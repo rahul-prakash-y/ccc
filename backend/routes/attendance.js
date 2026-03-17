@@ -12,11 +12,15 @@ module.exports = async function (fastify, opts) {
             const adminId = request.user.userId;
             const { roundId } = request.body || {};
 
+            if (!roundId) {
+                return reply.code(400).send({ error: 'Round ID is required to generate attendance OTP for a specific round' });
+            }
+
             // Random 6-digit OTP
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-            // OTP valid for 10 minutes
-            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+            // OTP valid for 1 minute
+            const expiresAt = new Date(Date.now() + 1 * 60 * 1000);
 
             // Deactivate any existing OTPs for this admin (for this round if specified, else all)
             const deactivateFilter = { adminId, isActive: true };
@@ -37,7 +41,7 @@ module.exports = async function (fastify, opts) {
                 data: {
                     otp,
                     expiresAt,
-                    secondsLeft: 600,
+                    secondsLeft: 60,
                     roundId: roundId || null
                 }
             });
