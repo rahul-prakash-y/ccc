@@ -27,7 +27,7 @@ module.exports = async function (fastify, opts) {
                 name, description, durationMinutes, type,
                 questionCount, shuffleQuestions,
                 testGroupId, testDurationMinutes, roundOrder,
-                maxParticipants
+                maxParticipants, startTime, endTime
             } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
@@ -44,7 +44,9 @@ module.exports = async function (fastify, opts) {
                 testGroupId: testGroupId || null,
                 testDurationMinutes: testDurationMinutes || null,
                 roundOrder: roundOrder || 1,
-                maxParticipants: maxParticipants || null
+                maxParticipants: maxParticipants || null,
+                startTime: startTime || null,
+                endTime: endTime || null
             });
 
             const savedRound = await round.save();
@@ -944,13 +946,13 @@ module.exports = async function (fastify, opts) {
 
                 // Find new top N
                 // Include BOTH SUBMITTED and COMPLETED statuses
-                const winners = await Submission.find({ 
-                    round: submission.round, 
-                    status: { $in: ['SUBMITTED', 'COMPLETED'] } 
+                const winners = await Submission.find({
+                    round: submission.round,
+                    status: { $in: ['SUBMITTED', 'COMPLETED'] }
                 })
-                .sort({ score: -1 })
-                .limit(round.winnerLimit || 10)
-                .select('_id');
+                    .sort({ score: -1 })
+                    .limit(round.winnerLimit || 10)
+                    .select('_id');
 
                 const winnerIds = winners.map(w => w._id);
                 if (winnerIds.length > 0) {
@@ -2157,7 +2159,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { status, isOtpActive, durationMinutes, maxParticipants } = request.body;
+        const { status, isOtpActive, durationMinutes, maxParticipants, startTime, endTime } = request.body;
 
         try {
             const updates = {};
@@ -2165,6 +2167,8 @@ module.exports = async function (fastify, opts) {
             if (isOtpActive !== undefined) updates.isOtpActive = isOtpActive;
             if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
             if (maxParticipants !== undefined) updates.maxParticipants = maxParticipants;
+            if (startTime !== undefined) updates.startTime = startTime;
+            if (endTime !== undefined) updates.endTime = endTime;
 
             const round = await Round.findByIdAndUpdate(roundId, updates, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
@@ -2393,12 +2397,12 @@ module.exports = async function (fastify, opts) {
                 }
 
                 const memberStudentIds = String(membersStr).split(',').map(id => id.trim()).filter(id => id);
-                
+
                 // Find users by studentId
                 const users = await User.find({ studentId: { $in: memberStudentIds } });
                 const foundStudentIds = users.map(u => u.studentId);
                 const missingIds = memberStudentIds.filter(id => !foundStudentIds.includes(id));
-                
+
                 if (missingIds.length > 0) {
                     errors.push(`Row ${lineNum} (${teamName}): Students not found: ${missingIds.join(', ')}`);
                 }
@@ -2413,7 +2417,7 @@ module.exports = async function (fastify, opts) {
                     const currentMemberIds = (team.members || []).map(id => id.toString());
                     const newUserIds = userIds.map(id => id.toString());
                     const combinedIds = [...new Set([...currentMemberIds, ...newUserIds])];
-                    
+
                     team.members = combinedIds;
                     await team.save();
                 } else {
@@ -2611,16 +2615,16 @@ module.exports = async function (fastify, opts) {
         try {
             // Fetch all admins
             const admins = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id name email role studentId');
-            
+
             const stats = await Promise.all(admins.map(async (admin) => {
                 const adminId = admin._id;
-                
+
                 // 1. Uploaded Questions
                 const uploadedCount = await Question.countDocuments({ createdBy: adminId });
-                
+
                 // 2. Assigned Questions (for manual evaluation)
                 const assignedCount = await Question.countDocuments({ isManualEvaluation: true, assignedAdmin: adminId });
-                
+
                 // 3. Evaluated Questions (from Submissions where manualScores contains adminId)
                 const evaluatedResult = await Submission.aggregate([
                     { $unwind: "$manualScores" },
@@ -2628,7 +2632,7 @@ module.exports = async function (fastify, opts) {
                     { $count: "evaluatedCount" }
                 ]);
                 const evaluatedCount = evaluatedResult.length > 0 ? evaluatedResult[0].evaluatedCount : 0;
-                
+
                 return {
                     _id: adminId,
                     name: admin.name,
@@ -2639,12 +2643,12 @@ module.exports = async function (fastify, opts) {
                     evaluatedQuestions: evaluatedCount
                 };
             }));
-            
+
             // Sort by evaluations, then uploaded
             stats.sort((a, b) => b.evaluatedQuestions - a.evaluatedQuestions || b.uploadedQuestions - a.uploadedQuestions);
-            
+
             return reply.code(200).send({ success: true, data: stats });
-            
+
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to fetch admin contributions' });
@@ -2705,7 +2709,7 @@ module.exports = async function (fastify, opts) {
             if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
             const filePath = path.join(uploadsDir, 'certificate_template' + path.extname(data.filename));
-            
+
             // Remove existing templates to avoid confusion
             const files = fs.readdirSync(uploadsDir);
             for (const file of files) {
@@ -2779,7 +2783,7 @@ module.exports = async function (fastify, opts) {
 
             for (const sub of submissions) {
                 const studentName = sub.student?.name || 'Student';
-                
+
                 // Create PDF using PDFKit
                 const doc = new PDFDocument({
                     layout: 'landscape',
@@ -2796,7 +2800,7 @@ module.exports = async function (fastify, opts) {
 
                 // Add Student Name - Centered vertically and horizontally (Customizable in future)
                 doc.font('Helvetica-Bold').fontSize(40).fillColor('#1e293b');
-                
+
                 // Draw text in middle
                 const textWidth = doc.widthOfString(studentName);
                 const x = (doc.page.width - textWidth) / 2;
@@ -2846,13 +2850,13 @@ module.exports = async function (fastify, opts) {
 
             if (round.certificatesReleased) {
                 // Find Top N winners
-                const winners = await Submission.find({ 
-                    round: roundId, 
-                    status: { $in: ['SUBMITTED', 'COMPLETED'] } 
+                const winners = await Submission.find({
+                    round: roundId,
+                    status: { $in: ['SUBMITTED', 'COMPLETED'] }
                 })
-                .sort({ score: -1 })
-                .limit(round.winnerLimit || 10)
-                .select('_id');
+                    .sort({ score: -1 })
+                    .limit(round.winnerLimit || 10)
+                    .select('_id');
 
                 const winnerIds = winners.map(w => w._id);
                 if (winnerIds.length > 0) {
@@ -2870,8 +2874,8 @@ module.exports = async function (fastify, opts) {
                 ip: request.ip
             });
 
-            return reply.code(200).send({ 
-                success: true, 
+            return reply.code(200).send({
+                success: true,
                 message: `Certificates ${round.certificatesReleased ? 'released' : 'revoked'} successfully`,
                 data: { certificatesReleased: round.certificatesReleased, winnerLimit: round.winnerLimit }
             });

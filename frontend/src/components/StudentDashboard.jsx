@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check, ShieldAlert, Power, Award } from 'lucide-react';
+import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer } from 'lucide-react';
 import OtpGate from './OtpGate';
 import ProfileModal from './ProfileModal';
 import { useAuthStore, api } from '../store/authStore';
@@ -94,7 +94,46 @@ const StudentDashboard = () => {
         return result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }, [rounds]);
 
+    const getTimeWindowStatus = (round) => {
+        const now = new Date();
+        const start = round.startTime ? new Date(round.startTime) : null;
+        const end = round.endTime ? new Date(round.endTime) : null;
+
+        if (start && now < start) {
+            const diff = start - now;
+            const mins = Math.floor(diff / 60000);
+            const hours = Math.floor(mins / 60);
+            if (hours > 24) return { label: `Starts In ${Math.floor(hours / 24)}d`, type: 'WAITING', color: 'text-amber-500' };
+            if (hours > 0) return { label: `Starts In ${hours}h ${mins % 60}m`, type: 'WAITING', color: 'text-amber-500' };
+            return { label: `Starts In ${mins}m`, type: 'WAITING', color: 'text-amber-500' };
+        }
+
+        if (end && now > end) {
+            return { label: 'Test Window Closed', type: 'CLOSED', color: 'text-slate-400' };
+        }
+
+        if (end) {
+            const diff = end - now;
+            const mins = Math.floor(diff / 60000);
+            if (mins < 60) return { label: 'Ending soon', value: `${mins}m left`, type: 'ENDING', color: 'text-red-500' };
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return { label: 'Ends today', value: `${hours}h left`, type: 'ENDING', color: 'text-indigo-500' };
+        }
+
+        return null;
+    };
+
     const handleRoundClick = (round) => {
+        const windowStatus = getTimeWindowStatus(round);
+        if (windowStatus?.type === 'WAITING') {
+            alert(`This assessment is scheduled to start at ${new Date(round.startTime).toLocaleString()}.`);
+            return;
+        }
+        if (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS') {
+            alert('The testing window for this assessment has closed.');
+            return;
+        }
+
         if (round.status === 'WAITING_FOR_OTP' || (round.status === 'RUNNING' && !round.mySubmissionStatus)) {
             setSelectedRound(round);
             setIsOtpOpen(true);
@@ -231,8 +270,10 @@ const StudentDashboard = () => {
                                 }
 
                                 const Icon = config.icon;
-                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && isEligible;
-                                const isLive = round.status === 'RUNNING' && isEligible;
+                                const windowStatus = getTimeWindowStatus(round);
+                                const isWindowRestricted = windowStatus?.type === 'WAITING' || (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS');
+                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && isEligible && !isWindowRestricted;
+                                const isLive = round.status === 'RUNNING' && isEligible && !isWindowRestricted;
 
                                 return (
                                     <motion.div
@@ -273,17 +314,30 @@ const StudentDashboard = () => {
                                                         </p>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                                                        <Clock size={14} className="text-slate-400" />
-                                                        {round.testDurationMinutes || round.durationMinutes} Minutes Limit
-                                                        {round.totalSections > 1 && (
-                                                            <>
-                                                                <span className="text-slate-300">|</span>
-                                                                <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
-                                                                    {round.totalSections} Sections
-                                                                </span>
-                                                            </>
-                                                        )}
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                                                            <Clock size={14} className="text-slate-400" />
+                                                            {round.testDurationMinutes || round.durationMinutes} Minutes Limit
+                                                            {round.totalSections > 1 && (
+                                                                <>
+                                                                    <span className="text-slate-300">|</span>
+                                                                    <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
+                                                                        {round.totalSections} Sections
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        {(() => {
+                                                            const windowStatus = getTimeWindowStatus(round);
+                                                            if (!windowStatus) return null;
+                                                            return (
+                                                                <div className={`flex items-center gap-1.5 text-[11px] font-bold ${windowStatus.color}`}>
+                                                                    <Timer size={12} />
+                                                                    {windowStatus.label}
+                                                                    {windowStatus.value && <span className="opacity-60 ml-1">({windowStatus.value})</span>}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 )}
                                             </div>

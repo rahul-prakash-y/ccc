@@ -209,11 +209,11 @@ const ProjectorOtp = ({ section }) => {
 
 // ── Question pool settings per section ─────────────────────────────────────────
 const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
-  if (!isSuperAdmin) return null;
-
   const [qCount, setQCount] = useState(section.questionCount ?? '');
   const [shuffle, setShuffle] = useState(section.shuffleQuestions !== false);
   const [saved, setSaved] = useState(false);
+
+  if (!isSuperAdmin) return null;
 
   const handleSave = async () => {
     await onSave(section._id, qCount === '' ? null : Number(qCount), shuffle);
@@ -268,8 +268,68 @@ const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   );
 };
 
+// ── Time window settings per section ──────────────────────────────────────────
+const TimeWindowSettings = ({ section, onSave, busy, isSuperAdmin }) => {
+  const formatDateForInput = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const z = d.getTimezoneOffset() * 60 * 1000;
+    const local = new Date(d - z);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const [start, setStart] = useState(formatDateForInput(section.startTime));
+  const [end, setEnd] = useState(formatDateForInput(section.endTime));
+  const [saved, setSaved] = useState(false);
+
+  if (!isSuperAdmin) return null;
+
+  const handleSave = async () => {
+    await onSave(section._id, start || null, end || null);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="mb-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Clock size={10} className="text-indigo-500" />
+        <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Test Window Limits</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Start Time</label>
+          <input
+            type="datetime-local"
+            value={start}
+            onChange={e => setStart(e.target.value)}
+            className="w-full text-[10px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+          />
+        </div>
+        <div>
+          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">End Time</label>
+          <input
+            type="datetime-local"
+            value={end}
+            onChange={e => setEnd(e.target.value)}
+            className="w-full text-[10px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+          />
+        </div>
+      </div>
+      <button
+        onClick={handleSave}
+        disabled={busy}
+        className={`w-full py-1.5 rounded-lg text-[10px] font-black border transition-all disabled:opacity-50 ${saved ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+          }`}
+      >
+        {busy ? <Loader2 size={10} className="animate-spin" /> : saved ? '✓ Window Updated' : 'Update Timing Window'}
+      </button>
+    </div>
+  );
+};
+
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -328,6 +388,14 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onDeleteGroup, onAddTime
           section={section}
           onSave={onSaveSettings}
           busy={busy[`${section._id}-qsettings`]}
+          isSuperAdmin={isSuperAdmin}
+        />
+
+        {/* Time Window Settings */}
+        <TimeWindowSettings
+          section={section}
+          onSave={onSaveTimeWindow}
+          busy={busy[`${section._id}-timesettings`]}
           isSuperAdmin={isSuperAdmin}
         />
 
@@ -409,6 +477,8 @@ const LiveOpsTab = () => {
   const [roundsConfig, setRoundsConfig] = useState([{ type: 'GENERAL', questionCount: '' }]);
   const [isTeamTest, setIsTeamTest] = useState(false);
   const [maxParticipants, setMaxParticipants] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null
@@ -456,6 +526,19 @@ const LiveOpsTab = () => {
       console.error('Failed to save question settings:', err);
     } finally {
       setBusy(b => ({ ...b, [`${sectionId}-qsettings`]: false }));
+    }
+  };
+
+  const handleSaveTimeWindow = async (sectionId, startTime, endTime) => {
+    setBusy(b => ({ ...b, [`${sectionId}-timesettings`]: true }));
+    try {
+      const res = await api.patch(`${API}/rounds/${sectionId}/status`, { startTime, endTime });
+      const updatedSection = res.data.data;
+      updateRound(sectionId, updatedSection);
+    } catch (err) {
+      console.error('Failed to save time window settings:', err);
+    } finally {
+      setBusy(b => ({ ...b, [`${sectionId}-timesettings`]: false }));
     }
   };
 
@@ -546,13 +629,17 @@ const LiveOpsTab = () => {
         roundOrder: 1,
         questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount),
         isTeamTest,
-        maxParticipants: maxParticipants === '' ? null : Number(maxParticipants)
+        maxParticipants: maxParticipants === '' ? null : Number(maxParticipants),
+        startTime: startTime || null,
+        endTime: endTime || null
       });
       setShowAddModal(false);
       setTestName('');
       setTestDurationMinutes(60);
       setIsTeamTest(false);
       setMaxParticipants('');
+      setStartTime('');
+      setEndTime('');
       setRoundsConfig([{ type: 'GENERAL', questionCount: '' }]);
       fetchSections();
     } catch (err) { console.error(err); }
@@ -622,6 +709,7 @@ const LiveOpsTab = () => {
             busy={busy}
             onAct={handleTestCardAction}
             onSaveSettings={handleSaveQuestionSettings}
+            onSaveTimeWindow={handleSaveTimeWindow}
             onDeleteGroup={handleDeleteGroup}
             onAddTime={handleAddTime}
             onDeleteSection={handleDeleteSection}
@@ -652,6 +740,19 @@ const LiveOpsTab = () => {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Duration (Min)</label>
                   <input type="number" min="1" required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800"
                     value={testDurationMinutes} onChange={e => setTestDurationMinutes(Number(e.target.value))} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Start Window</label>
+                    <input type="datetime-local" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800 text-xs"
+                      value={startTime} onChange={e => setStartTime(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">End Window</label>
+                    <input type="datetime-local" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800 text-xs"
+                      value={endTime} onChange={e => setEndTime(e.target.value)} />
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 cursor-pointer transition-all hover:bg-indigo-100/50" onClick={() => setIsTeamTest(!isTeamTest)}>
