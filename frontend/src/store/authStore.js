@@ -18,6 +18,10 @@ api.interceptors.request.use((config) => {
 
     // Dynamic Server Allocation Logic
     // If the student has an assigned backend server, redirect all API calls there
+    if(import.meta.env.VITE_FRONTEND_MODE === "development"){
+        config.baseURL = 'http://localhost:5000/api';
+        return config;
+    }
     if (user?.role === 'STUDENT' && user?.allocatedServer) {
         // Ensure the allocated URL has /api appended if missing, to maintain convention
         let base = user.allocatedServer;

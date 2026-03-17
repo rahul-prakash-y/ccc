@@ -99,6 +99,26 @@ const CertificateManager = () => {
         }
     };
 
+    const handleReleaseToggle = async () => {
+        if (!selectedRound) return;
+        const currentRound = rounds.find(r => r._id === selectedRound);
+        const newReleasedState = !currentRound?.certificatesReleased;
+
+        try {
+            await api.patch(`${API}/rounds/${selectedRound}/release-certificates`, {
+                released: newReleasedState,
+                limit: winnerLimit
+            });
+            toast.success(`Certificates ${newReleasedState ? 'released' : 'revoked'} for students!`);
+            fetchRounds(true);
+        } catch (err) {
+            console.error('Toggle failed:', err);
+            toast.error('Failed to update release status');
+        }
+    };
+
+    const activeRoundData = rounds.find(r => r._id === selectedRound);
+
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
             {/* Header Area */}
@@ -209,6 +229,28 @@ const CertificateManager = () => {
                             />
                             <p className="text-[10px] text-slate-400 font-medium">Generate certificates for the top {winnerLimit} scorers in this round.</p>
                         </div>
+
+                        {/* Student Access Toggle */}
+                        {selectedRound && (
+                            <div className={`p-4 rounded-2xl border transition-all ${activeRoundData?.certificatesReleased ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className={`text-xs font-black uppercase tracking-wider ${activeRoundData?.certificatesReleased ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                        Student Access
+                                    </h4>
+                                    <div 
+                                        onClick={handleReleaseToggle}
+                                        className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${activeRoundData?.certificatesReleased ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                    >
+                                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${activeRoundData?.certificatesReleased ? 'left-6' : 'left-1'}`} />
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-slate-500 font-medium">
+                                    {activeRoundData?.certificatesReleased 
+                                        ? 'Students can now download their certificates if they qualify.' 
+                                        : 'Certificates are hidden from students.'}
+                                </p>
+                            </div>
+                        )}
 
                         {/* Summary / Warning */}
                         {!previewUrl && (

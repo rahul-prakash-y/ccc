@@ -926,7 +926,40 @@ module.exports = async function (fastify, opts) {
             }
             submission.score = finalScore;
 
+            // NEW: Check if all manual questions for this round have been graded
+            const manualQuestions = await Question.find({ round: submission.round, isManualEvaluation: true });
+            const gradedQuestionIds = submission.manualScores.map(ms => ms.questionId?.toString());
+            const allGraded = manualQuestions.every(q => gradedQuestionIds.includes(q._id.toString()));
+
+            if (allGraded && submission.status === 'SUBMITTED') {
+                submission.status = 'COMPLETED';
+            }
+
             await submission.save();
+
+            // RECALCULATE WINNERS for this round if certificates are released
+            if (round && round.certificatesReleased) {
+                // Clear existing winners first
+                await Submission.updateMany({ round: submission.round }, { hasCertificate: false });
+
+                // Find new top N
+                // Include BOTH SUBMITTED and COMPLETED statuses
+                const winners = await Submission.find({ 
+                    round: submission.round, 
+                    status: { $in: ['SUBMITTED', 'COMPLETED'] } 
+                })
+                .sort({ score: -1 })
+                .limit(round.winnerLimit || 10)
+                .select('_id');
+
+                const winnerIds = winners.map(w => w._id);
+                if (winnerIds.length > 0) {
+                    await Submission.updateMany(
+                        { _id: { $in: winnerIds } },
+                        { hasCertificate: true }
+                    );
+                }
+            }
 
             // Invalidate ranking cache since scores have changed
             const { invalidateRankingCache } = require('../utils/eligibility');
@@ -2680,7 +2713,7 @@ module.exports = async function (fastify, opts) {
                 // Draw text in middle
                 const textWidth = doc.widthOfString(studentName);
                 const x = (doc.page.width - textWidth) / 2;
-                const y = doc.page.height / 2;
+                const y = doc.page.height / 2.2;
 
                 doc.text(studentName, x, y);
 
@@ -2703,6 +2736,61 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to generate certificates' });
+        }
+    });
+
+    // 4. PATCH /api/superadmin/rounds/:roundId/release-certificates - TOGGLE RELEASE
+    fastify.patch('/rounds/:roundId/release-certificates', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const { released, limit } = request.body;
+
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            round.certificatesReleased = released !== undefined ? released : !round.certificatesReleased;
+            if (limit !== undefined) round.winnerLimit = limit;
+
+            await round.save();
+
+            // Update hasCertificate flags for all submissions in this round
+            // Clear all flags first
+            await Submission.updateMany({ round: roundId }, { hasCertificate: false });
+
+            if (round.certificatesReleased) {
+                // Find Top N winners
+                const winners = await Submission.find({ 
+                    round: roundId, 
+                    status: { $in: ['SUBMITTED', 'COMPLETED'] } 
+                })
+                .sort({ score: -1 })
+                .limit(round.winnerLimit || 10)
+                .select('_id');
+
+                const winnerIds = winners.map(w => w._id);
+                if (winnerIds.length > 0) {
+                    await Submission.updateMany(
+                        { _id: { $in: winnerIds } },
+                        { hasCertificate: true }
+                    );
+                }
+            }
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: `Certificates ${round.certificatesReleased ? 'RELEASED' : 'REVOKED'}` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ 
+                success: true, 
+                message: `Certificates ${round.certificatesReleased ? 'released' : 'revoked'} successfully`,
+                data: { certificatesReleased: round.certificatesReleased, winnerLimit: round.winnerLimit }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update certificate release status' });
         }
     });
 
