@@ -2479,4 +2479,52 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * GET /api/superadmin/admin-contributions
+     * Returns statistics for admin contributions: uploaded, assigned, and evaluated questions.
+     */
+    fastify.get('/admin-contributions', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            // Fetch all admins
+            const admins = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id name email role studentId');
+            
+            const stats = await Promise.all(admins.map(async (admin) => {
+                const adminId = admin._id;
+                
+                // 1. Uploaded Questions
+                const uploadedCount = await Question.countDocuments({ createdBy: adminId });
+                
+                // 2. Assigned Questions (for manual evaluation)
+                const assignedCount = await Question.countDocuments({ isManualEvaluation: true, assignedAdmin: adminId });
+                
+                // 3. Evaluated Questions (from Submissions where manualScores contains adminId)
+                const evaluatedResult = await Submission.aggregate([
+                    { $unwind: "$manualScores" },
+                    { $match: { "manualScores.adminId": adminId } },
+                    { $count: "evaluatedCount" }
+                ]);
+                const evaluatedCount = evaluatedResult.length > 0 ? evaluatedResult[0].evaluatedCount : 0;
+                
+                return {
+                    _id: adminId,
+                    name: admin.name,
+                    studentId: admin.studentId,
+                    role: admin.role,
+                    uploadedQuestions: uploadedCount,
+                    assignedEvaluations: assignedCount,
+                    evaluatedQuestions: evaluatedCount
+                };
+            }));
+            
+            // Sort by evaluations, then uploaded
+            stats.sort((a, b) => b.evaluatedQuestions - a.evaluatedQuestions || b.uploadedQuestions - a.uploadedQuestions);
+            
+            return reply.code(200).send({ success: true, data: stats });
+            
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch admin contributions' });
+        }
+    });
+
 };
