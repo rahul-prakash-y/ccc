@@ -93,6 +93,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['Hostel', 'Day Scholar'],
     default: null
+  },
+  allocatedServer: {
+    type: String,
+    trim: true,
+    default: null
   }
 }, {
   timestamps: true

@@ -6,12 +6,27 @@ export const api = axios.create({
     baseURL: import.meta.env.VITE_FRONTEND_MODE === "development" ? 'http://localhost:5000/api' : 'https://ccc-8z0k.onrender.com/api', // General API base
 });
 
-// Interceptor to auto-inject the Auth token if it exists in Zustand state
+// Interceptor to auto-inject the Auth token and dynamically route to allocated server
 api.interceptors.request.use((config) => {
-    const token = useAuthStore.getState().token;
+    const state = useAuthStore.getState();
+    const token = state.token;
+    const user = state.user;
+
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Dynamic Server Allocation Logic
+    // If the student has an assigned backend server, redirect all API calls there
+    if (user?.role === 'STUDENT' && user?.allocatedServer) {
+        // Ensure the allocated URL has /api appended if missing, to maintain convention
+        let base = user.allocatedServer;
+        if (!base.endsWith('/api')) {
+            base = base.replace(/\/$/, '') + '/api';
+        }
+        config.baseURL = base;
+    }
+
     return config;
 }, (error) => Promise.reject(error));
 

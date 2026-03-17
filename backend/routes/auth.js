@@ -46,7 +46,8 @@ module.exports = async function (fastify, opts) {
                 name: user.name,
                 isBanned: user.isBanned,
                 banReason: user.banReason,
-                isOnboarded: user.isOnboarded
+                isOnboarded: user.isOnboarded,
+                allocatedServer: user.allocatedServer
             };
 
             // Sign token (valid for a typical hackathon duration plus warmup delay)
@@ -204,6 +205,7 @@ module.exports = async function (fastify, opts) {
                 bio: user.bio,
                 dob: user.dob,
                 email: user.email,
+                allocatedServer: user.allocatedServer,
             };
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 
@@ -277,7 +279,8 @@ module.exports = async function (fastify, opts) {
                 githubProfile: user.githubProfile,
                 phone: user.phone,
                 bio: user.bio,
-                dob: user.dob
+                dob: user.dob,
+                allocatedServer: user.allocatedServer
             };
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 

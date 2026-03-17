@@ -2527,4 +2527,44 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * POST /api/superadmin/allocate-server
+     * Bulk assigns a routing server to a list of students.
+     */
+    fastify.post('/allocate-server', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { serverUrl, studentIds } = request.body;
+
+            if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+                return reply.code(400).send({ error: 'A valid array of student IDs is required' });
+            }
+
+            // If serverUrl is empty, it clears their allocation (null).
+            const targetUrl = serverUrl ? serverUrl.trim() : null;
+
+            const result = await User.updateMany(
+                { studentId: { $in: studentIds }, role: 'STUDENT' },
+                { $set: { allocatedServer: targetUrl } }
+            );
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'User', id: 'BULK', label: `Allocated server ${targetUrl || 'NONE'} to ${result.modifiedCount} students` },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({
+                success: true,
+                message: `Successfully allocated server to ${result.modifiedCount} students.`,
+                matchedCount: result.matchedCount,
+                modifiedCount: result.modifiedCount
+            });
+
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to allocate server' });
+        }
+    });
+
 };
