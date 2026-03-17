@@ -13,14 +13,12 @@ import StudentScoreDashboard from '../SuperAdmin/StudentScoreDashboard';
 import AuditLogsTab from '../SuperAdmin/AuditLogsTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
 import TeamScoreTab from '../SuperAdmin/TeamScoreTab';
-import AdminManagerTab from '../SuperAdmin/AdminManagerTab';
 import AttendanceTab from "../SuperAdmin/AttendanceTab";
 import QuestionBankTab from '../SuperAdmin/QuestionBankTab';
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
     { id: 'students', label: 'Students', icon: Users },
-    { id: 'admins', label: 'Admins', icon: UserCog },
     { id: 'question-bank', label: 'Question Bank', icon: BookOpen },
     { id: 'questions', label: 'Questions', icon: BookOpen },
     { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
@@ -204,7 +202,6 @@ const AdminDashboard = () => {
                             <div className="relative text-slate-600 h-full">
                                 {activeTab === 'liveops' && <LiveOpsTab />}
                                 {activeTab === 'students' && <StudentManagerTab />}
-                                {activeTab === 'admins' && <AdminManagerTab />}
                                 {activeTab === 'question-bank' && <QuestionBankTab />}
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
