@@ -1498,14 +1498,19 @@ module.exports = async function (fastify, opts) {
 
             const defaultPassword = '123456';
             const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-            const student = new User({
-                studentId,
-                name: `Student ${studentId}`,
-                email: email || undefined,
+            const studentData = {
+                ...request.body,
                 password: hashedPassword,
                 role: 'STUDENT',
                 isOnboarded: false
-            });
+            };
+
+            // Ensure name is set if not provided
+            if (!studentData.name) {
+                studentData.name = `Student ${studentId}`;
+            }
+
+            const student = new User(studentData);
             await student.save();
 
             await logActivity({
@@ -1753,7 +1758,19 @@ module.exports = async function (fastify, opts) {
     fastify.get('/students/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const data = [
-                { 'Roll No': '2024CS001' },
+                {
+                    'Students Name': 'John Doe',
+                    'Roll No': '2024CS001',
+                    'Mail Id': 'john@example.com',
+                    'Phone Number': '9876543210',
+                    'Dept': 'CSE',
+                    'Accommodation': 'Hostel',
+                    'Team': 'Team Alpha',
+                    'LinkedIn': 'https://linkedin.com/in/johndoe',
+                    'GitHub': 'https://github.com/johndoe',
+                    'DOB': '2005-01-01',
+                    'Gender': 'Male'
+                },
             ];
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
@@ -1789,17 +1806,38 @@ module.exports = async function (fastify, opts) {
                 const idKey = Object.keys(row).find(k =>
                     ['rollno', 'studentid', 'roll_no', 'roll number'].includes(k.toLowerCase().replace(/[\s_]/g, ''))
                 );
-                const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
-                const emailKey = Object.keys(row).find(k => k.toLowerCase() === 'email');
-                const phoneKey = Object.keys(row).find(k => k.toLowerCase() === 'phone');
-                const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob' || k.toLowerCase() === 'dateofbirth');
-                const bioKey = Object.keys(row).find(k => k.toLowerCase() === 'bio');
-                const linkedinKey = Object.keys(row).find(k => k.toLowerCase() === 'linkedin');
-                const githubKey = Object.keys(row).find(k => k.toLowerCase() === 'github');
+                const nameKey = Object.keys(row).find(k => ['name', 'studentsname', 'students name'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const emailKey = Object.keys(row).find(k => ['email', 'mailid', 'mail id'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const phoneKey = Object.keys(row).find(k => ['phone', 'phonenumber', 'phone number'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const dobKey = Object.keys(row).find(k => ['dob', 'dateofbirth', 'date of birth'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const linkedinKey = Object.keys(row).find(k => ['linkedin', 'linkedin profile', 'linkedinprofile'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const githubKey = Object.keys(row).find(k => ['github', 'github profile', 'githubprofile'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const deptKey = Object.keys(row).find(k => ['dept', 'department'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const accommodationKey = Object.keys(row).find(k => ['accommodation', 'accomodation'].includes(k.toLowerCase().replace(/[\s_]/g, '')));
+                const teamKey = Object.keys(row).find(k => k.toLowerCase() === 'team');
+                const genderKey = Object.keys(row).find(k => k.toLowerCase() === 'gender');
 
                 if (!idKey) return null;
 
                 const dobVal = row[dobKey] ? new Date(row[dobKey]) : null;
+
+                // Basic enum mapping for Accommodation
+                let accommodation = null;
+                if (row[accommodationKey]) {
+                    const accValue = String(row[accommodationKey]).trim().toLowerCase();
+                    if (accValue.includes('hostel')) accommodation = 'Hostel';
+                    else if (accValue.includes('day') || accValue.includes('scholar')) accommodation = 'Day Scholar';
+                }
+
+                // Basic enum mapping for Gender
+                let gender = null;
+                if (row[genderKey]) {
+                    const genValue = String(row[genderKey]).trim().toLowerCase();
+                    if (genValue === 'male') gender = 'Male';
+                    else if (genValue === 'female') gender = 'Female';
+                    else if (genValue === 'other') gender = 'Other';
+                    else if (genValue.includes('prefer')) gender = 'Prefer not to say';
+                }
 
                 return {
                     studentId: String(row[idKey]).trim(),
@@ -1807,9 +1845,12 @@ module.exports = async function (fastify, opts) {
                     email: row[emailKey] ? String(row[emailKey]).trim() : null,
                     phone: row[phoneKey] ? String(row[phoneKey]).trim() : null,
                     dob: isNaN(dobVal) ? null : dobVal,
-                    bio: row[bioKey] ? String(row[bioKey]).trim() : null,
                     linkedinProfile: row[linkedinKey] ? String(row[linkedinKey]).trim() : null,
                     githubProfile: row[githubKey] ? String(row[githubKey]).trim() : null,
+                    department: row[deptKey] ? String(row[deptKey]).trim() : null,
+                    accommodation,
+                    gender,
+                    teamName: row[teamKey] ? String(row[teamKey]).trim() : null, // Store team name for lookup
                     role: 'STUDENT'
                 };
             }).filter(Boolean);
@@ -1821,16 +1862,40 @@ module.exports = async function (fastify, opts) {
             let createdCount = 0;
             let skippedCount = 0;
 
+            const Team = require('../models/Team');
+
             for (const item of bulkData) {
                 const existing = await User.findOne({ studentId: item.studentId });
                 if (existing) {
                     skippedCount++;
                 } else {
-                    await User.create({
+                    // Try to find team if teamName is provided
+                    let teamId = null;
+                    if (item.teamName) {
+                        const team = await Team.findOne({ name: new RegExp('^' + item.teamName + '$', 'i') });
+                        if (team) {
+                            teamId = team._id;
+                        } else {
+                            // Optionally create team if it doesn't exist? (Not requested, but good trait)
+                            // For now, let's just skip team assignment if not found
+                        }
+                    }
+
+                    const studentObj = {
                         ...item,
                         password: 'password_will_be_onboarded', // Students set during onboarding
-                        isOnboarded: false
-                    });
+                        isOnboarded: false,
+                        team: teamId
+                    };
+                    delete studentObj.teamName; // Remove helper key
+
+                    const student = await User.create(studentObj);
+
+                    // Update Team if assigned
+                    if (teamId) {
+                        await Team.findByIdAndUpdate(teamId, { $addToSet: { members: student._id } });
+                    }
+
                     createdCount++;
                 }
             }

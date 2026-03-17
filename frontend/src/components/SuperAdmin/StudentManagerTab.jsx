@@ -22,6 +22,11 @@ const AddStudentModal = ({ onClose, onCreated }) => {
     const [phone, setPhone] = useState('');
     const [dob, setDob] = useState('');
     const [department, setDepartment] = useState('');
+    const [linkedinProfile, setLinkedinProfile] = useState('');
+    const [githubProfile, setGithubProfile] = useState('');
+    const [bio, setBio] = useState('');
+    const [gender, setGender] = useState('');
+    const [accommodation, setAccommodation] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
@@ -40,7 +45,12 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                 email: email.trim() || undefined,
                 phone: phone.trim() || undefined,
                 dob: dob || undefined,
-                department: department.trim() || undefined
+                department: department.trim() || undefined,
+                linkedinProfile: linkedinProfile.trim() || undefined,
+                githubProfile: githubProfile.trim() || undefined,
+                bio: bio.trim() || undefined,
+                gender: gender || undefined,
+                accommodation: accommodation || undefined
             });
             onCreated(res.data.data);
         } catch (e) {
@@ -145,17 +155,91 @@ const AddStudentModal = ({ onClose, onCreated }) => {
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                Department
-                            </label>
-                            <input
-                                type="text"
-                                value={department}
-                                onChange={e => setDepartment(e.target.value)}
-                                placeholder="e.g. CSE"
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Department
+                                </label>
+                                <input
+                                    type="text"
+                                    value={department}
+                                    onChange={e => setDepartment(e.target.value)}
+                                    placeholder="e.g. CSE"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Accommodation
+                                </label>
+                                <select
+                                    value={accommodation}
+                                    onChange={e => setAccommodation(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                >
+                                    <option value="">Select...</option>
+                                    <option value="Hostel">Hostel</option>
+                                    <option value="Day Scholar">Day Scholar</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Gender
+                                </label>
+                                <select
+                                    value={gender}
+                                    onChange={e => setGender(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                >
+                                    <option value="">Select...</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Other">Other</option>
+                                    <option value="Prefer not to say">Prefer not to say</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    Bio / Summary
+                                </label>
+                                <input
+                                    type="text"
+                                    value={bio}
+                                    onChange={e => setBio(e.target.value)}
+                                    placeholder="Short bio..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    LinkedIn Profile
+                                </label>
+                                <input
+                                    type="url"
+                                    value={linkedinProfile}
+                                    onChange={e => setLinkedinProfile(e.target.value)}
+                                    placeholder="https://linkedin.com/in/..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                    GitHub Profile
+                                </label>
+                                <input
+                                    type="url"
+                                    value={githubProfile}
+                                    onChange={e => setGithubProfile(e.target.value)}
+                                    placeholder="https://github.com/..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                />
+                            </div>
                         </div>
 
                         {error && (
@@ -748,9 +832,45 @@ const StudentDetailsModal = ({ student, onClose }) => {
                                         </div>
                                         <span className="text-xs font-bold">{student.email || 'N/A'}</span>
                                     </div>
+
+                                    {/* New Fields: Gender & Accommodation */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700">
+                                            <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                                <Users size={14} className="text-indigo-400" />
+                                            </div>
+                                            <span className="text-xs font-bold">{student.gender || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700">
+                                            <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                                                <div className="w-3.5 h-3.5 border-2 border-indigo-400 rounded-sm" />
+                                            </div>
+                                            <span className="text-xs font-bold">{student.accommodation || 'N/A'}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+
+                        {/* Team Info */}
+                        {student.team && (
+                            <div className="space-y-3">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Users size={12} className="text-indigo-400" /> Team Assignment
+                                </h3>
+                                <div className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-2xl flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-white rounded-xl border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                                            <Users size={18} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-900">{student.team.name}</p>
+                                            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Active Member</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Additional Meta */}
                         <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-4">
