@@ -4,10 +4,10 @@ import { useStudentStore } from '../../store/studentStore';
 import toast from 'react-hot-toast';
 
 const SERVERS = [
-    { id: 'server-1', name: 'Server Alpha', url: 'https://alpha.codecircle.com' },
-    { id: 'server-2', name: 'Server Beta', url: 'https://beta.codecircle.com' },
-    { id: 'server-3', name: 'Server Gamma', url: 'https://gamma.codecircle.com' },
-    { id: 'server-4', name: 'Server Delta', url: 'https://delta.codecircle.com' },
+    { id: 'server-1', name: 'Server 1', url: 'https://frontend-frenzy-backend.onrender.com' },
+    { id: 'server-2', name: 'Server 2', url: 'https://frontend-frenzy-backend-1.onrender.com' },
+    { id: 'server-3', name: 'Server 3', url: 'https://frontend-frenzy-backend-2.onrender.com' },
+    { id: 'server-4', name: 'Server 4', url: 'https://frontend-frenzy-backend-ajsn.onrender.com' },
 ];
 
 const ServerAllocationTab = () => {
