@@ -9,10 +9,7 @@ import LiveOpsTab from '../SuperAdmin/LiveOpsTab';
 import StudentManagerTab from '../SuperAdmin/StudentManagerTab';
 import QuestionManagerTab from '../SuperAdmin/QuestionManagerTab';
 import EvaluationTab from '../SuperAdmin/EvaluationTab';
-import StudentScoreDashboard from '../SuperAdmin/StudentScoreDashboard';
-import AuditLogsTab from '../SuperAdmin/AuditLogsTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
-import TeamScoreTab from '../SuperAdmin/TeamScoreTab';
 import AttendanceTab from "../SuperAdmin/AttendanceTab";
 import QuestionBankTab from '../SuperAdmin/QuestionBankTab';
 
@@ -22,10 +19,7 @@ const TABS = [
     { id: 'question-bank', label: 'Question Bank', icon: BookOpen },
     { id: 'questions', label: 'Questions', icon: BookOpen },
     { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
-    { id: 'scores', label: 'Student Scores', icon: Trophy },
-    { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
     { id: 'teams', label: 'Teams', icon: Users },
-    { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
     { id: 'attendance', label: 'Attendance', icon: UserCheck },
 ];
 
@@ -205,10 +199,7 @@ const AdminDashboard = () => {
                                 {activeTab === 'question-bank' && <QuestionBankTab />}
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
-                                {activeTab === 'scores' && <StudentScoreDashboard />}
-                                {activeTab === 'audit' && <AuditLogsTab rounds={rounds} />}
                                 {activeTab === 'teams' && <TeamManagerTab />}
-                                {activeTab === 'team-scores' && <TeamScoreTab />}
                                 {activeTab === 'attendance' && <AttendanceTab />}
                             </div>
 
