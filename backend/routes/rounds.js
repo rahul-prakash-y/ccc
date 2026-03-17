@@ -609,7 +609,6 @@ module.exports = async function (fastify, opts) {
             let shouldBan = false;
             let reason = '';
 
-            // Using >= 1 for immediate disqualification as requested
             if (submission.tabSwitches >= 1) {
                 shouldBan = true;
                 if (type === 'TAB_SWITCH' && request.body.detail) {
@@ -617,6 +616,7 @@ module.exports = async function (fastify, opts) {
                 } else {
                     reason = 'Anti-cheat threshold (Split Screen / Tab Switch) exceeded.';
                 }
+                submission.flags.push(reason);
             } else if (submission.cheatFlags >= 1) {
                 shouldBan = true;
                 if (type === 'CHEAT_FLAG' && request.body.detail) {
@@ -624,6 +624,7 @@ module.exports = async function (fastify, opts) {
                 } else {
                     reason = 'Anti-cheat threshold (Copy-Paste / Dev Tools) exceeded.';
                 }
+                submission.flags.push(reason);
             }
 
             if (shouldBan) {

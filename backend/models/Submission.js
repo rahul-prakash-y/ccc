@@ -53,6 +53,10 @@ const submissionSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    flags: {
+        type: [String],
+        default: []
+    },
     tabSwitches: {
         type: Number,
         default: 0
