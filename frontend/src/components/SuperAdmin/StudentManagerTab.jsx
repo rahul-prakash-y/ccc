@@ -821,7 +821,10 @@ const StudentManagerTab = () => {
 
     // 1. Fetch Logic
     useEffect(() => {
-        fetchStudents({ search, page, limit });
+        const timer = setTimeout(() => {
+            fetchStudents({ search, page, limit });
+        }, 500);
+        return () => clearTimeout(timer);
     }, [search, page, limit, fetchStudents]);
 
     useEffect(() => {
