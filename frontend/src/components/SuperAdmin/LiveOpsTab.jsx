@@ -6,7 +6,7 @@ import {
   KeyRound,
   Play, LayoutGrid
 } from 'lucide-react';
-import { api } from '../../store/authStore';
+import { api, useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
 import { API, STATUS_COLORS } from './constants';
 import { SkeletonGrid } from '../Skeleton';
