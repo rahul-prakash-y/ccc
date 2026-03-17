@@ -154,8 +154,7 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                     >
                                         <option value="GENERAL">General</option>
                                         <option value="SQL">SQL</option>
-                                        <option value="HTML">HTML</option>
-                                        <option value="CSS">CSS</option>
+                                        <option value="HTML">HTML/CSS</option>
                                         <option value="UI_UX">UI/UX</option>
                                     </select>
                                 </div>
