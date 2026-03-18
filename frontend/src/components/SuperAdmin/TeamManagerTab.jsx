@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Loader2, AlertTriangle, X, Check,
-    Users, Trash2, Search, UserPlus, UserMinus, Upload
+    Users, Trash2, Search, UserPlus, UserMinus, Upload, Bell, CheckCircle, XCircle, Send
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { SkeletonList } from '../Skeleton';
@@ -14,12 +14,22 @@ const API = '/superadmin';
 const TeamManagerTab = () => {
     const [teams, setTeams] = useState([]);
     const [students, setStudents] = useState([]);
+    const [teamRequests, setTeamRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTeamIds, setSelectedTeamIds] = useState([]);
     const { showConfirm } = useConfirm();
+
+    const fetchTeamRequests = useCallback(async () => {
+        try {
+            const res = await api.get(`${API}/team-requests`);
+            setTeamRequests(res.data.data || []);
+        } catch {
+            // silently fail
+        }
+    }, []);
 
     const fetchTeams = useCallback(async () => {
         try {
@@ -42,11 +52,11 @@ const TeamManagerTab = () => {
     useEffect(() => {
         const init = async () => {
             setLoading(true);
-            await Promise.all([fetchTeams(), fetchStudents()]);
+            await Promise.all([fetchTeamRequests(), fetchTeams(), fetchStudents()]);
             setLoading(false);
         };
         init();
-    }, [fetchTeams, fetchStudents]);
+    }, [fetchTeamRequests, fetchTeams, fetchStudents]);
 
     const handleDeleteTeam = (team) => {
         showConfirm({
@@ -150,6 +160,15 @@ const TeamManagerTab = () => {
                     </button>
                 </div>
             </div>
+
+             {/* Pending Team Requests */}
+            {teamRequests.length > 0 && (
+                <PendingRequestsSection
+                    requests={teamRequests}
+                    teams={teams}
+                    onRefresh={() => { fetchTeamRequests(); fetchTeams(); }}
+                />
+            )}
 
             {/* Selection Controls */}
             {!loading && filteredTeams.length > 0 && (
@@ -534,3 +553,101 @@ const BulkUploadModal = ({ onClose, onUploaded }) => {
 };
 
 export default TeamManagerTab;
+
+
+const PendingRequestsSection = ({ requests, teams, onRefresh }) => {
+    const [actionState, setActionState] = useState({}); // { userId: 'assigning' | 'rejecting' | null }
+    const [selectedTeams, setSelectedTeams] = useState({}); // { userId: teamId }
+
+    const handleAssign = async (userId) => {
+        const teamId = selectedTeams[userId];
+        if (!teamId) { toast.error('Please select a team first.'); return; }
+        setActionState(prev => ({ ...prev, [userId]: 'assigning' }));
+        try {
+            await api.post(`/superadmin/team-requests/${userId}/assign`, { teamId });
+            toast.success('Student assigned to team!');
+            onRefresh();
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Failed to assign team');
+        } finally {
+            setActionState(prev => ({ ...prev, [userId]: null }));
+        }
+    };
+
+    const handleReject = async (userId) => {
+        setActionState(prev => ({ ...prev, [userId]: 'rejecting' }));
+        try {
+            await api.post(`/superadmin/team-requests/${userId}/reject`, {});
+            toast.success('Request rejected.');
+            onRefresh();
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Failed to reject request');
+        } finally {
+            setActionState(prev => ({ ...prev, [userId]: null }));
+        }
+    };
+
+    return (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-amber-200 flex items-center gap-3">
+                <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
+                    <Bell size={18} />
+                </div>
+                <div>
+                    <p className="font-black text-amber-800 text-sm">Pending Team Enrollment Requests</p>
+                    <p className="text-xs text-amber-600 font-medium">{requests.length} student{requests.length !== 1 ? 's' : ''} awaiting assignment</p>
+                </div>
+            </div>
+            <div className="divide-y divide-amber-100">
+                {requests.map(student => (
+                    <div key={student._id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                            <p className="font-black text-slate-800 text-sm uppercase tracking-tight truncate">{student.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 font-mono">{student.studentId}
+                                {student.department && <span className="ml-2 text-indigo-400">{student.department}</span>}
+                            </p>
+                            {student.teamRequest?.requestedAt && (
+                                <p className="text-[9px] text-amber-500 font-bold mt-0.5">
+                                    Requested: {new Date(student.teamRequest.requestedAt).toLocaleString()}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <select
+                                value={selectedTeams[student._id] || ''}
+                                onChange={e => setSelectedTeams(prev => ({ ...prev, [student._id]: e.target.value }))}
+                                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 min-w-[140px]"
+                            >
+                                <option value="">Select Team...</option>
+                                {teams.map(t => (
+                                    <option key={t._id} value={t._id}>{t.name}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => handleAssign(student._id)}
+                                disabled={!selectedTeams[student._id] || actionState[student._id]}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {actionState[student._id] === 'assigning'
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : <CheckCircle size={12} />}
+                                Assign
+                            </button>
+                            <button
+                                onClick={() => handleReject(student._id)}
+                                disabled={!!actionState[student._id]}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-black hover:bg-red-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {actionState[student._id] === 'rejecting'
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : <XCircle size={12} />}
+                                Reject
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+

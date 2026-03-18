@@ -98,6 +98,21 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     default: null
+  },
+  teamRequest: {
+    status: {
+      type: String,
+      enum: ['NONE', 'PENDING', 'APPROVED', 'REJECTED'],
+      default: 'NONE'
+    },
+    message: {
+      type: String,
+      default: null
+    },
+    requestedAt: {
+      type: Date,
+      default: null
+    }
   }
 }, {
   timestamps: true
