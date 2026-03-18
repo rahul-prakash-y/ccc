@@ -19,19 +19,26 @@ const CertificateManager = () => {
 
     useEffect(() => {
         fetchRounds();
-        fetchTemplatePreview();
     }, [fetchRounds]);
 
-    const fetchTemplatePreview = async () => {
+    useEffect(() => {
+        if (selectedRound) {
+            fetchTemplatePreview(selectedRound);
+        } else {
+            setPreviewUrl(null);
+        }
+    }, [selectedRound]);
+
+    const fetchTemplatePreview = async (roundId) => {
         setLoadingTemplate(true);
         try {
-            const res = await api.get(`${API}/certificates/template`, { responseType: 'blob' });
+            const res = await api.get(`${API}/rounds/${roundId}/certificate-template`, { responseType: 'blob' });
             if (res.data) {
                 const url = URL.createObjectURL(res.data);
                 setPreviewUrl(url);
             }
         } catch (err) {
-            console.error('Failed to fetch template preview:', err);
+            console.warn('No template for this round yet');
             setPreviewUrl(null);
         } finally {
             setLoadingTemplate(false);
@@ -39,11 +46,17 @@ const CertificateManager = () => {
     };
 
     const handleFileUpload = async (e) => {
+        if (!selectedRound) {
+            toast.error('Please select a round first');
+            return;
+        }
+
         const file = e.target.files[0];
         if (!file) return;
 
-        if (!file.type.startsWith('image/')) {
-            toast.error('Please upload an image file (JPG/PNG)');
+        // Allowing both images and PDFs based on backend support (though PDFkit prefers images for background)
+        if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+            toast.error('Please upload an image or PDF file');
             return;
         }
 
@@ -52,11 +65,11 @@ const CertificateManager = () => {
         formData.append('file', file);
 
         try {
-            await api.post(`${API}/certificates/template`, formData, {
+            await api.post(`${API}/rounds/${selectedRound}/certificate-template`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            toast.success('Certificate template updated!');
-            fetchTemplatePreview();
+            toast.success('Certificate template updated for this round!');
+            fetchTemplatePreview(selectedRound);
         } catch (err) {
             console.error('Upload failed:', err);
             toast.error('Failed to upload template');
@@ -140,50 +153,67 @@ const CertificateManager = () => {
                     <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                         <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
                             <ImageIcon size={16} className="text-indigo-500" />
-                            1. Certificate Template
+                            1. Certificate Template {selectedRound ? `(Round Specific)` : `(Select Round First)`}
                         </h3>
                         {previewUrl && <CheckCircle2 size={16} className="text-emerald-500" />}
                     </div>
                     
                     <div className="p-6">
-                        <div className="relative group aspect-[1.414/1] bg-slate-100 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden">
-                            {loadingTemplate ? (
-                                <Loader2 className="animate-spin text-slate-300" size={32} />
-                            ) : previewUrl ? (
-                                <>
-                                    <img src={previewUrl} alt="Template" className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <label className="cursor-pointer bg-white text-slate-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 active:scale-95 transition-all">
-                                            <Upload size={16} /> 
-                                            Change Template
-                                            <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={uploading} />
+                        {!selectedRound ? (
+                            <div className="aspect-[1.414/1] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 text-center">
+                                <Award size={32} className="text-slate-300 mb-2" />
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select a Round First</p>
+                                <p className="text-[10px] text-slate-400 mt-1">Templates are now specific to each round.</p>
+                            </div>
+                        ) : (
+                            <div className="relative group aspect-[1.414/1] bg-slate-100 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden">
+                                {loadingTemplate ? (
+                                    <Loader2 className="animate-spin text-slate-300" size={32} />
+                                ) : previewUrl ? (
+                                    <>
+                                        {/* If it's a PDF, we might need an iframe or just an icon, but assuming image for now based on previous code */}
+                                        <img src={previewUrl} alt="Template" className="w-full h-full object-cover" onError={(e) => {
+                                            // Fallback for PDF preview if needed
+                                            e.target.style.display = 'none';
+                                            e.target.nextSibling.style.display = 'flex';
+                                        }} />
+                                        <div className="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+                                            <FileText size={48} />
+                                            <p className="text-xs font-bold mt-2">PDF Template Uploaded</p>
+                                        </div>
+                                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <label className="cursor-pointer bg-white text-slate-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 active:scale-95 transition-all">
+                                                <Upload size={16} /> 
+                                                Change Template
+                                                <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} disabled={uploading} />
+                                            </label>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-center p-8">
+                                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 mx-auto mb-3 shadow-sm">
+                                            <Upload size={20} />
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Upload JPG, PNG or PDF</p>
+                                        <label className="cursor-pointer bg-indigo-600 text-white px-6 py-2 rounded-xl text-sm font-bold inline-block hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-100">
+                                            Select Template
+                                            <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} disabled={uploading} />
                                         </label>
                                     </div>
-                                </>
-                            ) : (
-                                <div className="text-center p-8">
-                                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 mx-auto mb-3 shadow-sm">
-                                        <Upload size={20} />
+                                )}
+                                
+                                {uploading && (
+                                    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center">
+                                        <div className="text-center">
+                                            <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
+                                            <p className="text-xs font-bold text-slate-600 animate-pulse">Uploading...</p>
+                                        </div>
                                     </div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Upload JPG or PNG</p>
-                                    <label className="cursor-pointer bg-indigo-600 text-white px-6 py-2 rounded-xl text-sm font-bold inline-block hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-100">
-                                        Select Template
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={uploading} />
-                                    </label>
-                                </div>
-                            )}
-                            
-                            {uploading && (
-                                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center">
-                                    <div className="text-center">
-                                        <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
-                                        <p className="text-xs font-bold text-slate-600 animate-pulse">Uploading...</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
                         <p className="mt-4 text-[11px] text-slate-400 italic">
-                            Tip: Use a landscape image (like 1414x1000px) with plenty of space in the middle for the student's name.
+                            Tip: Templates are now saved individually for each round.
                         </p>
                     </div>
                 </div>
