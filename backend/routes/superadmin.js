@@ -1880,10 +1880,13 @@ module.exports = async function (fastify, opts) {
                             // For now, let's just skip team assignment if not found
                         }
                     }
+                    // Default password "123456"
+                    const defaultPassword = '123456';
+                    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
                     const studentObj = {
                         ...item,
-                        password: 'password_will_be_onboarded', // Students set during onboarding
+                        password: hashedPassword, // Students set during onboarding
                         isOnboarded: false,
                         team: teamId
                     };
