@@ -27,10 +27,10 @@ module.exports = async function (fastify, opts) {
         try {
             const studentId = request.user.userId;
 
-            // Find all rounds that have certificates released and a template assigned
+            // Find all rounds that have certificates released and a template assigned in DB
             const rounds = await Round.find({ 
                 certificatesReleased: true,
-                certificateTemplate: { $ne: null }
+                'certificateTemplate.data': { $exists: true, $ne: null }
             }).lean();
             
             if (!rounds.length) return reply.send({ success: true, data: [] });
@@ -134,7 +134,8 @@ module.exports = async function (fastify, opts) {
                     eligibility,
                     isWinner,
                     isWinner,
-                    hasCertificate: isWinner && round.certificatesReleased && round.certificateTemplate
+                    isWinner,
+                    hasCertificate: !!(isWinner && round.certificatesReleased && round.certificateTemplate?.data)
                 };
             }));
 
@@ -175,16 +176,13 @@ module.exports = async function (fastify, opts) {
                 return reply.code(403).send({ error: 'Certificate only available for top winners.' });
             }
 
-            // Generate the certificate
-            const uploadsDir = path.join(__dirname, '../uploads');
+            // Generate the certificate using template from DB
             const templateFile = round.certificateTemplate;
 
-            if (!templateFile) return reply.code(400).send({ error: 'Certificate template not assigned for this round.' });
+            if (!templateFile || !templateFile.data) return reply.code(400).send({ error: 'Certificate template not assigned or missing in DB for this round.' });
             
-            const templatePath = path.join(uploadsDir, templateFile);
-            if (!fs.existsSync(templatePath)) {
-                return reply.code(500).send({ error: 'Certificate template file missing on server.' });
-            }
+            const templateBuffer = templateFile.data;
+            const contentType = templateFile.contentType || 'image/png';
 
             const user = await User.findById(studentId);
             const studentName = user?.name || 'Student';
@@ -198,7 +196,7 @@ module.exports = async function (fastify, opts) {
             const chunks = [];
             doc.on('data', chunk => chunks.push(chunk));
 
-            doc.image(templatePath, 0, 0, { width: doc.page.width, height: doc.page.height });
+            doc.image(templateBuffer, 0, 0, { width: doc.page.width, height: doc.page.height });
             doc.font('Helvetica-Bold').fontSize(40).fillColor('#1e293b');
 
             const textWidth = doc.widthOfString(studentName);
