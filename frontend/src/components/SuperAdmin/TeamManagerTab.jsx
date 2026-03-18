@@ -18,6 +18,7 @@ const TeamManagerTab = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedTeamIds, setSelectedTeamIds] = useState([]);
     const { showConfirm } = useConfirm();
 
     const fetchTeams = useCallback(async () => {
@@ -57,12 +58,48 @@ const TeamManagerTab = () => {
                 try {
                     await api.delete(`${API}/teams/${team._id}`);
                     setTeams(prev => prev.filter(t => t._id !== team._id));
+                    setSelectedTeamIds(prev => prev.filter(id => id !== team._id));
                     toast.success("Team deleted");
                 } catch {
                     toast.error("Failed to delete team");
                 }
             }
         });
+    };
+
+    const handleBulkDelete = () => {
+        if (selectedTeamIds.length === 0) return;
+
+        showConfirm({
+            title: `Delete ${selectedTeamIds.length} Teams?`,
+            message: `Are you sure you want to delete ${selectedTeamIds.length} selected teams? All members will be unassigned. This cannot be undone.`,
+            confirmLabel: "Delete Selected Teams",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.post(`${API}/teams/bulk-delete`, { teamIds: selectedTeamIds });
+                    setTeams(prev => prev.filter(t => !selectedTeamIds.includes(t._id)));
+                    setSelectedTeamIds([]);
+                    toast.success(`${selectedTeamIds.length} teams deleted`);
+                } catch (err) {
+                    toast.error(err.response?.data?.error || "Failed to bulk delete teams");
+                }
+            }
+        });
+    };
+
+    const toggleTeamSelection = (teamId) => {
+        setSelectedTeamIds(prev =>
+            prev.includes(teamId) ? prev.filter(id => id !== teamId) : [...prev, teamId]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedTeamIds.length === filteredTeams.length) {
+            setSelectedTeamIds([]);
+        } else {
+            setSelectedTeamIds(filteredTeams.map(t => t._id));
+        }
     };
 
     const filteredTeams = teams.filter(t =>
@@ -89,6 +126,15 @@ const TeamManagerTab = () => {
                             className="bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none w-64 transition-all font-bold"
                         />
                     </div>
+                    {selectedTeamIds.length > 0 && (
+                        <button
+                            onClick={handleBulkDelete}
+                            className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95"
+                        >
+                            <Trash2 size={16} />
+                            <span>Delete ({selectedTeamIds.length})</span>
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowBulkModal(true)}
                         className="relative flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
@@ -104,6 +150,25 @@ const TeamManagerTab = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Selection Controls */}
+            {!loading && filteredTeams.length > 0 && (
+                <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm px-6 py-4 rounded-2xl border border-slate-200/60">
+                    <button
+                        onClick={toggleSelectAll}
+                        className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors"
+                    >
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${selectedTeamIds.length === filteredTeams.length ? 'bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-200' : 'border-slate-300'}`}>
+                            {selectedTeamIds.length === filteredTeams.length && <Check size={12} className="text-white" strokeWidth={4} />}
+                        </div>
+                        {selectedTeamIds.length === filteredTeams.length ? 'Deselect All' : 'Select All Teams'}
+                    </button>
+                    <div className="h-4 w-px bg-slate-200 mx-2" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        {selectedTeamIds.length} of {filteredTeams.length} Selected
+                    </span>
+                </div>
+            )}
 
             {loading ? (
                 <SkeletonList count={5} />
@@ -124,6 +189,8 @@ const TeamManagerTab = () => {
                             allStudents={students}
                             onUpdate={fetchTeams}
                             onDelete={() => handleDeleteTeam(team)}
+                            isSelected={selectedTeamIds.includes(team._id)}
+                            onToggleSelection={() => toggleTeamSelection(team._id)}
                         />
                     ))}
                 </div>
@@ -148,7 +215,7 @@ const TeamManagerTab = () => {
     );
 };
 
-const TeamCard = ({ team, allStudents, onUpdate, onDelete }) => {
+const TeamCard = ({ team, allStudents, onUpdate, onDelete, isSelected, onToggleSelection }) => {
     const [isEditing, setIsEditing] = useState(false);
 
     return (
@@ -158,10 +225,18 @@ const TeamCard = ({ team, allStudents, onUpdate, onDelete }) => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white border border-slate-200 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group overflow-hidden"
         >
-            <div className="p-6 border-b border-slate-50 flex justify-between items-start bg-indigo-50/30">
-                <div>
-                    <h3 className="font-black text-slate-800 text-lg tracking-tight group-hover:text-indigo-600 transition-colors uppercase">{team.name}</h3>
-                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{team.members?.length || 0} Members</p>
+            <div className={`p-6 border-b border-slate-50 flex justify-between items-start transition-colors ${isSelected ? 'bg-indigo-100/50' : 'bg-indigo-50/30'}`}>
+                <div className="flex items-start gap-4">
+                    <button
+                        onClick={onToggleSelection}
+                        className={`mt-1 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-200' : 'border-slate-300 hover:border-indigo-400 bg-white'}`}
+                    >
+                        {isSelected && <Check size={12} className="text-white" strokeWidth={4} />}
+                    </button>
+                    <div>
+                        <h3 className="font-black text-slate-800 text-lg tracking-tight group-hover:text-indigo-600 transition-colors uppercase">{team.name}</h3>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{team.members?.length || 0} Members</p>
+                    </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => setIsEditing(true)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all shadow-sm">

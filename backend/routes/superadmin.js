@@ -2491,6 +2491,47 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * POST /api/superadmin/teams/bulk-delete
+     * Deletes multiple teams and clears their references in the User collection.
+     */
+    fastify.post('/teams/bulk-delete', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { teamIds } = request.body;
+
+            if (!teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
+                return reply.code(400).send({ error: 'Valid array of teamIds is required' });
+            }
+
+            // Find teams to be deleted for logging purposes
+            const teamsToDelete = await Team.find({ _id: { $in: teamIds } });
+            const teamNames = teamsToDelete.map(t => t.name).join(', ');
+
+            // Delete teams
+            const deleteResult = await Team.deleteMany({ _id: { $in: teamIds } });
+
+            // Clear team ref for all members of these teams
+            await User.updateMany({ team: { $in: teamIds } }, { $set: { team: null } });
+
+            await logActivity({
+                action: 'BULK_DELETED',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Team', label: `Bulk Deleted ${deleteResult.deletedCount} teams: ${teamNames}` },
+                metadata: { teamIds, count: deleteResult.deletedCount },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({
+                success: true,
+                message: `Successfully deleted ${deleteResult.deletedCount} teams`,
+                count: deleteResult.deletedCount
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to bulk delete teams' });
+        }
+    });
+
     // 5. POST /api/superadmin/teams/bulk-upload
     fastify.post('/teams/bulk-upload', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
