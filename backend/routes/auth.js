@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
+const Team = require('../models/Team');
 
 module.exports = async function (fastify, opts) {
 
