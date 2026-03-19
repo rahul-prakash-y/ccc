@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon } from 'lucide-react';
+import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon, Image as ImageIcon } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
@@ -141,164 +141,185 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                 </div>
             </div>
 
-            <div className="p-4 space-y-4">
-                {/* Answer Content */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Student's Answer</p>
-                        {!isAnswerEmpty ? (
+            <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {/* Left Side: Question Context & Rules */}
+                <div className="space-y-4">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
+                        <div className="flex items-center gap-2 mb-3 border-b border-slate-200 pb-2">
+                            <BookOpen size={16} className="text-indigo-600" />
+                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest leading-tight">Question Details</h3>
+                        </div>
+                        <div className="space-y-3">
                             <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Problem Statement</p>
+                                <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                                    {question.description}
+                                </p>
+                            </div>
+                            
+                            {question.rubricInstructions && (
+                                <div className="pt-2 border-t border-slate-100">
+                                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Grading Instructions</p>
+                                    <p className="text-[11px] text-indigo-800 leading-relaxed whitespace-pre-wrap font-bold bg-indigo-50/50 p-2 rounded-lg">
+                                        {question.rubricInstructions}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {question.rubrics?.length > 0 && (
+                        <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3 border-b border-amber-200/50 pb-2">
+                                <ClipboardCheck size={16} className="text-amber-600" />
+                                <h3 className="text-xs font-black text-amber-700 uppercase tracking-widest">Evaluation Rubrics</h3>
+                            </div>
+                            <div className="space-y-2">
+                                {question.rubrics.map((r, i) => (
+                                    <div key={i} className="flex items-center justify-between bg-white/80 p-2.5 rounded-xl border border-amber-200/50 shadow-xs">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-amber-400" />
+                                            <span className="text-xs font-bold text-amber-900">{r.criterion}</span>
+                                        </div>
+                                        <span className="text-[10px] font-black text-amber-600 bg-amber-100/50 px-2 py-1 rounded-lg">
+                                            MAX: {r.maxScore} PTS
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Side: Student Answer & Evaluation Inputs */}
+                <div className="space-y-4">
+                    {/* Student's Answer */}
+                    <div className="bg-slate-900 text-slate-300 rounded-2xl p-4 shadow-xl border border-slate-800">
+                        <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Student's Submission</p>
+                            {!isAnswerEmpty && (question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') && (
+                                <span className="text-[9px] font-bold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">External Link</span>
+                            )}
+                        </div>
+                        {!isAnswerEmpty ? (
+                            <div className="overflow-hidden">
                                 {(question?.type === 'UI_UX' || question?.type === 'MINI_HACKATHON') ? (
                                     <a
                                         href={formatFigmaUrl(String(answer))}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-xs font-bold text-indigo-600 hover:underline break-all"
+                                        className="text-sm font-bold text-white hover:text-indigo-400 underline break-all flex items-center gap-2"
                                     >
+                                        <div className="shrink-0 p-1.5 bg-white/10 rounded-lg"><ImageIcon size={14} /></div>
                                         {String(answer)}
                                     </a>
                                 ) : (
-                                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                                    <pre className="text-xs text-indigo-100 whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto bg-slate-800/50 p-3 rounded-xl custom-scrollbar">
                                         {typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer)}
                                     </pre>
                                 )}
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
-                                <p className="text-xs text-orange-600 font-bold">No answer submitted</p>
+                            <div className="flex items-center gap-2 py-4 justify-center">
+                                <AlertTriangle size={16} className="text-orange-400" />
+                                <p className="text-xs text-orange-400 font-black uppercase tracking-widest">No answer submitted</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
-                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1.5">Correct / Expected Answer</p>
-                        {question.correctAnswer ? (
-                            <pre className="text-xs text-emerald-800 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
-                                {question.correctAnswer}
-                            </pre>
-                        ) : (
-                            <p className="text-xs text-slate-400 italic">No reference answer provided for this question.</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Question Description for Admin context */}
-                <div className="px-3 py-2 bg-amber-50/50 border border-amber-100 rounded-lg">
-                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Grading Context / Instructions</p>
-                    <p className="text-[11px] text-amber-800 leading-relaxed whitespace-pre-wrap">
-                        {question.description}
-                    </p>
-                </div>
-
-                {/* Rubrics & Specific Instructions */}
-                {(question.rubrics?.length > 0 || question.rubricInstructions) && (
-                    <div className="px-3 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3">
-                        {question.rubricInstructions && (
-                            <div>
-                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1">Evaluator Instructions</p>
-                                <p className="text-[11px] text-indigo-800 leading-relaxed whitespace-pre-wrap font-medium">
-                                    {question.rubricInstructions}
-                                </p>
-                            </div>
-                        )}
-                        {question.rubrics?.length > 0 && (
-                            <div>
-                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-2 border-b border-indigo-100/50 pb-1">Evaluation Rubrics</p>
-                                <div className="grid gap-2">
-                                    {question.rubrics.map((r, i) => (
-                                        <div key={i} className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-indigo-100/50">
-                                            <span className="text-xs font-bold text-indigo-900 flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                                                {r.criterion}
-                                            </span>
-                                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-md uppercase tracking-tight">
-                                                Max: {r.maxScore} Pts
-                                            </span>
-                                        </div>
-                                    ))}
+                    {/* Marking System */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+                        {question.rubrics?.length > 0 ? (
+                            <div className="space-y-3">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Input Rubric Scores</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {question.rubrics.map((r, i) => {
+                                        const rScore = rubricScores.find(rs => rs.criterion === r.criterion)?.score ?? '';
+                                        return (
+                                            <div key={i} className="flex flex-col gap-1.5 p-2 bg-slate-50 border border-slate-100 rounded-xl">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <span className="text-[10px] font-bold text-slate-600 truncate">{r.criterion}</span>
+                                                    <span className="text-[9px] font-black text-slate-400">/ {r.maxScore}</span>
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={r.maxScore}
+                                                    value={rScore}
+                                                    onChange={e => handleRubricScoreChange(rubricScores.findIndex(rs => rs.criterion === r.criterion), e.target.value)}
+                                                    placeholder="0"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 text-sm font-black focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
+                        ) : (
+                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                                    Enter Manual Score <span className="text-slate-300">/ {question.points} Max</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max={question.points}
+                                    value={score}
+                                    onChange={e => { setScore(e.target.value); setSaved(false); setAutoGraded(false); }}
+                                    placeholder="0"
+                                    className="w-full h-11 bg-white border-2 border-slate-200 rounded-xl px-4 text-slate-900 text-sm font-black focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                                />
+                            </div>
                         )}
-                    </div>
-                )}
 
-                {/* Score + feedback inputs */}
-                <div className={`${question.rubrics?.length > 0 ? 'space-y-4' : 'grid grid-cols-[100px_1fr]'} gap-3 items-start`}>
-                    {question.rubrics?.length > 0 ? (
-                        <div className="bg-white/50 border border-slate-200 rounded-xl p-3 space-y-3">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-2">Rubric Scoring</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {question.rubrics.map((r, i) => {
-                                    const rScore = rubricScores.find(rs => rs.criterion === r.criterion)?.score ?? '';
-                                    return (
-                                        <div key={i} className="flex flex-col gap-1">
-                                            <div className="flex justify-between items-center px-1">
-                                                <span className="text-[10px] font-bold text-slate-600 truncate">{r.criterion}</span>
-                                                <span className="text-[9px] font-black text-slate-400">Max: {r.maxScore}</span>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max={r.maxScore}
-                                                value={rScore}
-                                                onChange={e => handleRubricScoreChange(rubricScores.findIndex(rs => rs.criterion === r.criterion), e.target.value)}
-                                                placeholder="0"
-                                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
-                                <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Total Calculated Score</span>
-                                <span className="text-lg font-black text-indigo-600 font-mono">{score} <span className="text-slate-300 text-xs">/ {question.points}</span></span>
-                            </div>
+                        <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
+                            <span className="text-xs font-black text-indigo-800 uppercase tracking-widest">Total Outcome</span>
+                            <span className="text-xl font-black text-indigo-600 font-mono tracking-tighter">
+                                {score} <span className="text-indigo-300 text-xs">/ {question.points}</span>
+                            </span>
                         </div>
-                    ) : (
-                        <div>
-                            <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                                Score <span className="text-slate-300">/ {question.points}</span>
+
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                Feedback / Remarks
                             </label>
-                            <input
-                                type="number"
-                                min="0"
-                                max={question.points}
-                                value={score}
-                                onChange={e => { setScore(e.target.value); setSaved(false); setAutoGraded(false); }}
-                                placeholder="0"
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                            <textarea
+                                rows={3}
+                                value={feedback}
+                                onChange={e => { setFeedback(e.target.value); setSaved(false); setAutoGraded(false); }}
+                                placeholder="Tell the student what they did well or where to improve..."
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 resize-none shadow-sm transition-all"
                             />
                         </div>
+
+                        {error && (
+                            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold animate-pulse">
+                                <AlertTriangle size={14} /> {error}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className={`w-full h-12 rounded-xl text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg active:scale-[0.97] disabled:opacity-50 ${saved ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
+                        >
+                            {saving ? <Loader2 size={18} className="animate-spin" /> : saved ? <CheckCircle2 size={18} /> : <Check size={18} />}
+                            {saving ? 'Processing...' : saved ? 'Update Grade' : 'Save Grade'}
+                        </button>
+                    </div>
+
+                    {question.correctAnswer && (
+                        <div className="bg-emerald-50/30 border border-emerald-100 rounded-2xl p-4">
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                                Reference / Correct Answer
+                            </p>
+                            <pre className="text-[11px] text-emerald-800 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto bg-white/50 p-3 rounded-lg border border-emerald-100/50 custom-scrollbar">
+                                {question.correctAnswer}
+                            </pre>
+                        </div>
                     )}
-                    <div className={question.rubrics?.length > 0 ? '' : ''}>
-                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                            Feedback (optional)
-                        </label>
-                        <textarea
-                            rows={question.rubrics?.length > 0 ? 3 : 2}
-                            value={feedback}
-                            onChange={e => { setFeedback(e.target.value); setSaved(false); setAutoGraded(false); }}
-                            placeholder="Add remarks for the student..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none shadow-sm"
-                        />
-                    </div>
                 </div>
-
-                {error && (
-                    <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
-                        <AlertTriangle size={12} /> {error}
-                    </div>
-                )}
-
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className={`w-full py-2.5 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] ${saved ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-100' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-100'}`}
-                >
-                    {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <CheckCircle2 size={13} /> : <Check size={13} />}
-                    {saving ? 'Saving...' : saved ? 'Update Score' : 'Save Score'}
-                </button>
             </div>
         </div>
     );
