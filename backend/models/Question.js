@@ -89,6 +89,14 @@ const questionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
+    },
+    rubrics: [{
+        criterion: { type: String, required: true },
+        maxScore: { type: Number, required: true }
+    }],
+    rubricInstructions: {
+        type: String,
+        default: ''
     }
 }, {
     timestamps: true

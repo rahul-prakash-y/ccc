@@ -29,6 +29,8 @@ const QuestionModal = ({ question, onClose, onSave }) => {
         correctAnswer: question?.correctAnswer || '',
         isManualEvaluation: question?.isManualEvaluation || false,
         assignedAdmin: question?.assignedAdmin?._id || question?.assignedAdmin || '',
+        rubrics: question?.rubrics || [],
+        rubricInstructions: question?.rubricInstructions || '',
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -80,6 +82,15 @@ const QuestionModal = ({ question, onClose, onSave }) => {
 
     const addOption = () => setForm({ ...form, options: [...form.options, ''] });
     const removeOption = (index) => setForm({ ...form, options: form.options.filter((_, i) => i !== index) });
+
+    const handleRubricChange = (index, field, value) => {
+        const newRubrics = [...form.rubrics];
+        newRubrics[index] = { ...newRubrics[index], [field]: field === 'maxScore' ? Number(value) : value };
+        setForm({ ...form, rubrics: newRubrics });
+    };
+
+    const addRubric = () => setForm({ ...form, rubrics: [...form.rubrics, { criterion: '', maxScore: 5 }] });
+    const removeRubric = (index) => setForm({ ...form, rubrics: form.rubrics.filter((_, i) => i !== index) });
 
     const field = (label, key, type = 'text', rows = null) => (
         <div>
@@ -269,6 +280,48 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                     {(form.type !== 'CODE' || form.isManualEvaluation) && form.type !== 'UI_UX' && (
                                         <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
                                             {field(form.type === 'CODE' ? 'Reference Solution (Correct Answer)' : 'Expected Correct Answer', 'correctAnswer', 'text', 2)}
+                                        </div>
+                                    )}
+
+                                    {/* Evaluation Rubrics & Instructions */}
+                                    {form.isManualEvaluation && (
+                                        <div className="space-y-4 p-5 bg-amber-50/30 rounded-2xl border border-amber-200/50">
+                                            <div className="flex justify-between items-center border-b border-amber-200/30 pb-2">
+                                                <label className="text-[11px] font-black text-amber-700 uppercase tracking-widest">Evaluation Rubrics</label>
+                                                <button type="button" onClick={addRubric} className="text-[10px] bg-amber-600 hover:bg-amber-700 transition-colors text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm">
+                                                    <Plus size={12} /> Add Criteria
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {form.rubrics.map((r, i) => (
+                                                    <div key={i} className="flex gap-2 items-center">
+                                                        <input
+                                                            type="text"
+                                                            value={r.criterion}
+                                                            onChange={e => handleRubricChange(i, 'criterion', e.target.value)}
+                                                            placeholder="Criterion (e.g. Visual Appeal)"
+                                                            className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 shadow-sm"
+                                                        />
+                                                        <div className="w-24">
+                                                            <input
+                                                                type="number"
+                                                                value={r.maxScore}
+                                                                onChange={e => handleRubricChange(i, 'maxScore', e.target.value)}
+                                                                placeholder="Max Pts"
+                                                                className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 shadow-sm text-center font-bold"
+                                                            />
+                                                        </div>
+                                                        <button type="button" onClick={() => removeRubric(i)} className="text-red-400 p-2 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                                    </div>
+                                                ))}
+                                                {form.rubrics.length === 0 && (
+                                                    <p className="text-center py-2 text-xs text-amber-600/60 italic font-medium">No rubrics defined. Click "Add Criteria" to start.</p>
+                                                )}
+                                            </div>
+                                            <div className="pt-2">
+                                                {field('Grading Instructions (Internal)', 'rubricInstructions', 'text', 3)}
+                                                <p className="text-[10px] text-amber-600/70 mt-1.5 font-medium italic">These instructions and rubrics are only visible to evaluators.</p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

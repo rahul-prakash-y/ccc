@@ -157,6 +157,38 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                     </p>
                 </div>
 
+                {/* Rubrics & Specific Instructions */}
+                {(question.rubrics?.length > 0 || question.rubricInstructions) && (
+                    <div className="px-3 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3">
+                        {question.rubricInstructions && (
+                            <div>
+                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1">Evaluator Instructions</p>
+                                <p className="text-[11px] text-indigo-800 leading-relaxed whitespace-pre-wrap font-medium">
+                                    {question.rubricInstructions}
+                                </p>
+                            </div>
+                        )}
+                        {question.rubrics?.length > 0 && (
+                            <div>
+                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-2 border-b border-indigo-100/50 pb-1">Evaluation Rubrics</p>
+                                <div className="grid gap-2">
+                                    {question.rubrics.map((r, i) => (
+                                        <div key={i} className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-indigo-100/50">
+                                            <span className="text-xs font-bold text-indigo-900 flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                                                {r.criterion}
+                                            </span>
+                                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-md uppercase tracking-tight">
+                                                Max: {r.maxScore} Pts
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Score + feedback inputs */}
                 <div className="grid grid-cols-[100px_1fr] gap-3 items-start">
                     <div>

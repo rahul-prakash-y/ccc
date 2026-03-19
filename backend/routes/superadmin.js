@@ -419,7 +419,7 @@ module.exports = async function (fastify, opts) {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
                 order, type, category, options, correctAnswer,
-                isManualEvaluation, assignedAdmin
+                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions
             } = request.body;
 
             if (!title || !description) {
@@ -449,7 +449,9 @@ module.exports = async function (fastify, opts) {
                 correctAnswer: correctAnswer || '',
                 isManualEvaluation: isManualEvaluation || false,
                 assignedAdmin: isManualEvaluation ? assignedAdmin : null,
-                createdBy: request.user?.userId || null
+                createdBy: request.user?.userId || null,
+                rubrics: rubrics || [],
+                rubricInstructions: rubricInstructions || ''
             });
 
             await question.save();
@@ -566,7 +568,7 @@ module.exports = async function (fastify, opts) {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
                 type, category, options, correctAnswer,
-                isManualEvaluation, assignedAdmin
+                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions
             } = request.body;
 
             if (!title || !description) {
@@ -591,7 +593,9 @@ module.exports = async function (fastify, opts) {
                 correctAnswer: correctAnswer || '',
                 isManualEvaluation: isManualEvaluation || false,
                 assignedAdmin: isManualEvaluation ? assignedAdmin : null,
-                createdBy: request.user?.userId || null
+                createdBy: request.user?.userId || null,
+                rubrics: rubrics || [],
+                rubricInstructions: rubricInstructions || ''
             });
 
             await question.save();
@@ -790,7 +794,7 @@ module.exports = async function (fastify, opts) {
             const adminQuestions = await Question.find({
                 isManualEvaluation: true,
                 assignedAdmin: adminId
-            }).select('_id title description points type round category correctAnswer').lean();
+            }).select('_id title description points type round category correctAnswer rubrics rubricInstructions').lean();
 
             if (adminQuestions.length === 0) {
                 return reply.code(200).send({
