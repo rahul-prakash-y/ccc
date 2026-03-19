@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
     ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon
@@ -147,6 +147,7 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                                         <option value="HTML">HTML</option>
                                         <option value="CSS">CSS</option>
                                         <option value="UI_UX">UI/UX</option>
+                                        <option value="MINI_HACKATHON">Hackathon</option>
                                     </select>
                                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>
@@ -381,6 +382,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                         <option value="FILL_BLANKS">Fill in Blanks</option>
                                         <option value="EXPLAIN">Short Answer / Explain</option>
                                         <option value="UI_UX">UI/UX Submission</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
                                     </select>
                                 </div>
                                 <div>
@@ -392,6 +394,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                         <option value="SQL">SQL</option>
                                         <option value="HTML">HTML/CSS</option>
                                         <option value="UI_UX">UI/UX</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
                                     </select>
                                 </div>
                             </div>

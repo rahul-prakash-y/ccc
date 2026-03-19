@@ -113,6 +113,10 @@ const userSchema = new mongoose.Schema({
       type: Date,
       default: null
     }
+  },
+  isReportPublished: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

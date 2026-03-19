@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { 
+    Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, 
+    Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer,
+    LayoutDashboard, CheckCircle2, AlertCircle, BarChart3
+} from 'lucide-react';
 import OtpGate from './OtpGate';
 import ProfileModal from './ProfileModal';
 import { useAuthStore, api } from '../store/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { SkeletonGrid } from './Skeleton';
 
 const statusConfig = {
@@ -209,6 +213,16 @@ const StudentDashboard = () => {
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                             <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
                         </div>
+
+                        {/* Performance Report Link */}
+                        <Link
+                            to="/performance"
+                            className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
+                        >
+                            <BarChart3 size={14} />
+                            <span className="hidden sm:inline">Report</span>
+                        </Link>
+
                         <button
                             onClick={logout}
                             className="group flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-red-600 bg-white border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-xl px-3 sm:px-4 py-2 transition-all shadow-sm active:scale-95"

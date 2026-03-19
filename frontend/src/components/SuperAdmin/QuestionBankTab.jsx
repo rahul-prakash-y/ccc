@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Loader2,
     Eye, EyeOff, BookOpen, ClipboardCheck, AlertTriangle, Search,
@@ -145,6 +145,7 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                         <option value="FILL_BLANKS">Fill in Blanks</option>
                                         <option value="EXPLAIN">Short Answer / Explain</option>
                                         <option value="UI_UX">UI/UX Submission</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
                                     </select>
                                 </div>
                                 <div>
@@ -156,6 +157,7 @@ const QuestionModal = ({ question, onClose, onSave }) => {
                                         <option value="SQL">SQL</option>
                                         <option value="HTML">HTML/CSS</option>
                                         <option value="UI_UX">UI/UX</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
                                     </select>
                                 </div>
                             </div>

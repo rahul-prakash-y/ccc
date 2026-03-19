@@ -236,6 +236,22 @@ const TeamManagerTab = () => {
 
 const TeamCard = ({ team, allStudents, onUpdate, onDelete, isSelected, onToggleSelection }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [publishing, setPublishing] = useState(false);
+
+    const handlePublishToggle = async () => {
+        setPublishing(true);
+        try {
+            await api.patch(`${API}/teams/${team._id}/publish-report`, {
+                isReportPublished: !team.isReportPublished
+            });
+            toast.success(`Team report ${!team.isReportPublished ? 'published' : 'revoked'} successfully`);
+            onUpdate();
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Failed to update publication status");
+        } finally {
+            setPublishing(false);
+        }
+    };
 
     return (
         <motion.div
@@ -260,6 +276,14 @@ const TeamCard = ({ team, allStudents, onUpdate, onDelete, isSelected, onToggleS
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => setIsEditing(true)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all shadow-sm">
                         <UserPlus size={16} />
+                    </button>
+                    <button 
+                        onClick={handlePublishToggle} 
+                        disabled={publishing}
+                        title={team.isReportPublished ? "Revoke Report" : "Publish Report"}
+                        className={`p-2 rounded-lg transition-all shadow-sm ${team.isReportPublished ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'text-slate-400 hover:text-amber-600 hover:bg-white'}`}
+                    >
+                        {publishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                     </button>
                     <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg transition-all shadow-sm">
                         <Trash2 size={16} />

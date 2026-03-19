@@ -11,7 +11,9 @@ import Login from './components/Login';
 import StudentDashboard from './components/StudentDashboard';
 import CodeArena from './components/CodeArena';
 import AdminDashboard from './components/AdminDashboard';
-import SuperAdminDashboard from './components/SuperAdminDashboard';
+const ProfilePage = React.lazy(() => import('./components/ProfilePage'));
+const PerformanceReport = React.lazy(() => import('./components/PerformanceReport'));
+const SuperAdminDashboard = React.lazy(() => import('./components/SuperAdminDashboard'));
 import BlockedAccount from './pages/BlockedAccount';
 import OnboardingPage from './components/OnboardingPage';
 
@@ -61,7 +63,9 @@ const AppRoutes = () => {
 
             {/* Protected App Core (STUDENTS) */}
             <Route element={<ProtectedRoute />}>
-                <Route path="/dashboard" element={<StudentDashboard />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/performance" element={<PerformanceReport />} />
+                <Route path="/dashboard" element={<Navigate to="/" replace />} />
 
                 {/* Dynamic route targeting the active Hackathon/Challenge ID */}
                 <Route path="/arena/:roundId" element={<CodeArena />} />
