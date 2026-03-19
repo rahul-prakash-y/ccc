@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Loader2,
     Eye, EyeOff, BookOpen, ClipboardCheck, AlertTriangle, Search,

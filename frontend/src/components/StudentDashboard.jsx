@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { 
     Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, 
     Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer,
