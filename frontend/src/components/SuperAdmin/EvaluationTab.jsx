@@ -450,6 +450,7 @@ const TransferEvalModal = ({ question, isOpen, onClose, onTransferred }) => {
 // ─── Student Submission Card ──────────────────────────────────────────────────
 const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
     const [expanded, setExpanded] = useState(true);
+    const [viewMode, setViewMode] = useState('questions'); // 'questions' or 'pdf'
     const gradedCount = submission.questions.filter(q => q.existingScore).length;
 
     const downloadPdf = (pdfBase64, filename) => {
@@ -527,12 +528,31 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
                         className="border-t border-slate-100 overflow-hidden"
                     >
                         <div className="p-4 space-y-4 bg-slate-50/50">
-                            {/* PDF Preview if available for this submission */}
+                            {/* View Toggle (Only if PDF exists) */}
                             {submission.pdfUrl && (
-                                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <div className="flex items-center justify-center mb-2">
+                                    <div className="bg-slate-200/50 p-1 rounded-xl flex items-center gap-1 shadow-inner">
+                                        <button
+                                            onClick={() => setViewMode('questions')}
+                                            className={`px-6 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'questions' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            Evaluation Form
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('pdf')}
+                                            className={`px-6 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'pdf' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            PDF Viewer
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {viewMode === 'pdf' && submission.pdfUrl ? (
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <div className="flex items-center justify-between mb-3">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                            <ClipboardCheck size={12} /> Global Design Snapshot
+                                            <ClipboardCheck size={12} /> Design Document Snapshot
                                         </p>
                                         <button
                                             onClick={() => downloadPdf(submission.pdfUrl, `UI_UX_${submission.student?.studentId || 'submission'}.pdf`)}
@@ -542,7 +562,10 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
                                             Download PDF
                                         </button>
                                     </div>
-                                    <div className="w-full aspect-video bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group">
+                                    <div 
+                                        className="w-full bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative group"
+                                        style={{ aspectRatio: '4/3' }}
+                                    >
                                         <iframe
                                             src={submission.pdfUrl}
                                             className="w-full h-full border-none"
@@ -550,21 +573,20 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
                                         />
                                     </div>
                                 </div>
+                            ) : (
+                                <div className="grid gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    {submission.questions.map((qEntry, i) => (
+                                        <QuestionEvalRow
+                                            key={`${submission.submissionId}-${qEntry.question._id}-${i}`}
+                                            submissionId={submission.submissionId}
+                                            questionEntry={qEntry}
+                                            student={submission.student}
+                                            onScoreSaved={onScoreSaved}
+                                            onTransfer={onTransfer}
+                                        />
+                                    ))}
+                                </div>
                             )}
-
-                            {/* Question List */}
-                            <div className="grid gap-4">
-                                {submission.questions.map((qEntry, i) => (
-                                    <QuestionEvalRow
-                                        key={`${submission.submissionId}-${qEntry.question._id}-${i}`}
-                                        submissionId={submission.submissionId}
-                                        questionEntry={qEntry}
-                                        student={submission.student}
-                                        onScoreSaved={onScoreSaved}
-                                        onTransfer={onTransfer}
-                                    />
-                                ))}
-                            </div>
                         </div>
                     </motion.div>
                 )}
