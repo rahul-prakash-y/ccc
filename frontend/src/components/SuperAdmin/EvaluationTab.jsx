@@ -12,15 +12,23 @@ import { SkeletonList } from '../Skeleton';
 const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer }) => {
     const { question, answer, existingScore } = questionEntry;
     const [score, setScore] = useState(existingScore?.score ?? '');
+    const [rubricScores, setRubricScores] = useState(existingScore?.rubricScores || []);
     const [feedback, setFeedback] = useState(existingScore?.feedback ?? '');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(!!existingScore);
     const [error, setError] = useState('');
     const [autoGraded, setAutoGraded] = useState(false);
 
+    // Initialize rubricScores if not present but question has rubrics
+    useEffect(() => {
+        if (!existingScore && question.rubrics?.length > 0) {
+            setRubricScores(question.rubrics.map(r => ({ criterion: r.criterion, score: '' })));
+        }
+    }, [existingScore, question.rubrics]);
+
     const isAnswerEmpty = answer === null || answer === undefined || String(answer).trim() === '';
 
-    // Auto-grade: if the student's answer is empty and hasn't been graded yet, save 0 automatically
+    // Auto-grade logic remains same but can be extended if needed
     useEffect(() => {
         if (isAnswerEmpty && !existingScore) {
             const autoSave = async () => {
@@ -29,7 +37,8 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                     await api.post(`${API}/manual-evaluations/${submissionId}/score`, {
                         questionId: question._id,
                         score: 0,
-                        feedback: 'No answer submitted'
+                        feedback: 'No answer submitted',
+                        rubricScores: question.rubrics?.map(r => ({ criterion: r.criterion, score: 0 })) || []
                     });
                     setScore(0);
                     setFeedback('No answer submitted');
@@ -44,17 +53,18 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
             };
             autoSave();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const formatFigmaUrl = (url) => {
-        if (!url || typeof url !== 'string') return url;
-        const trimmed = url.trim();
-        if (!trimmed) return trimmed;
-        if (!trimmed.startsWith('http')) {
-            return `https://${trimmed}`;
-        }
-        return trimmed;
+    const handleRubricScoreChange = (index, value) => {
+        const newRubricScores = [...rubricScores];
+        newRubricScores[index] = { ...newRubricScores[index], score: value === '' ? '' : Number(value) };
+        setRubricScores(newRubricScores);
+        setSaved(false);
+        setAutoGraded(false);
+
+        // Calculate total score
+        const total = newRubricScores.reduce((sum, rs) => sum + (Number(rs.score) || 0), 0);
+        setScore(total);
     };
 
     const handleSave = async () => {
@@ -63,17 +73,31 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
             setError(`Score must be between 0 and ${question.points}`);
             return;
         }
+
+        // Validate each rubric if present
+        if (question.rubrics?.length > 0) {
+            for (const rs of rubricScores) {
+                const rubricDef = question.rubrics.find(r => r.criterion === rs.criterion);
+                if (rs.score === '' || rs.score < 0 || (rubricDef && rs.score > rubricDef.maxScore)) {
+                    setError(`Check rubric scores. "${rs.criterion}" must be 0-${rubricDef?.maxScore}`);
+                    return;
+                }
+            }
+        }
+
         setSaving(true);
         setError('');
         try {
             await api.post(`${API}/manual-evaluations/${submissionId}/score`, {
                 questionId: question._id,
                 score: numScore,
-                feedback
+                feedback,
+                rubricScores
             });
             setSaved(true);
             setAutoGraded(false);
             onScoreSaved();
+            toast.success('Score saved successfully');
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to save score');
         } finally {
@@ -190,27 +214,59 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                 )}
 
                 {/* Score + feedback inputs */}
-                <div className="grid grid-cols-[100px_1fr] gap-3 items-start">
-                    <div>
-                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                            Score <span className="text-slate-300">/ {question.points}</span>
-                        </label>
-                        <input
-                            type="number"
-                            min="0"
-                            max={question.points}
-                            value={score}
-                            onChange={e => { setScore(e.target.value); setSaved(false); setAutoGraded(false); }}
-                            placeholder="0"
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
-                        />
-                    </div>
-                    <div>
+                <div className={`${question.rubrics?.length > 0 ? 'space-y-4' : 'grid grid-cols-[100px_1fr]'} gap-3 items-start`}>
+                    {question.rubrics?.length > 0 ? (
+                        <div className="bg-white/50 border border-slate-200 rounded-xl p-3 space-y-3">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-2">Rubric Scoring</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {question.rubrics.map((r, i) => {
+                                    const rScore = rubricScores.find(rs => rs.criterion === r.criterion)?.score ?? '';
+                                    return (
+                                        <div key={i} className="flex flex-col gap-1">
+                                            <div className="flex justify-between items-center px-1">
+                                                <span className="text-[10px] font-bold text-slate-600 truncate">{r.criterion}</span>
+                                                <span className="text-[9px] font-black text-slate-400">Max: {r.maxScore}</span>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max={r.maxScore}
+                                                value={rScore}
+                                                onChange={e => handleRubricScoreChange(rubricScores.findIndex(rs => rs.criterion === r.criterion), e.target.value)}
+                                                placeholder="0"
+                                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                                <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Total Calculated Score</span>
+                                <span className="text-lg font-black text-indigo-600 font-mono">{score} <span className="text-slate-300 text-xs">/ {question.points}</span></span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                                Score <span className="text-slate-300">/ {question.points}</span>
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                max={question.points}
+                                value={score}
+                                onChange={e => { setScore(e.target.value); setSaved(false); setAutoGraded(false); }}
+                                placeholder="0"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 shadow-sm text-center"
+                            />
+                        </div>
+                    )}
+                    <div className={question.rubrics?.length > 0 ? '' : ''}>
                         <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                             Feedback (optional)
                         </label>
                         <textarea
-                            rows={2}
+                            rows={question.rubrics?.length > 0 ? 3 : 2}
                             value={feedback}
                             onChange={e => { setFeedback(e.target.value); setSaved(false); setAutoGraded(false); }}
                             placeholder="Add remarks for the student..."

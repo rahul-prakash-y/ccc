@@ -271,6 +271,26 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
     const [error, setError] = useState('');
     const [admins, setAdmins] = useState([]);
     const [loadingAdmins, setLoadingAdmins] = useState(false);
+    const [rubricSuggestions, setRubricSuggestions] = useState([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+    // Fetch rubric suggestions when category changes
+    useEffect(() => {
+        if (form.category) {
+            const fetchSuggestions = async () => {
+                setLoadingSuggestions(true);
+                try {
+                    const res = await api.get(`${API}/questions/rubric-suggestions?category=${form.category}`);
+                    setRubricSuggestions(res.data.data || []);
+                } catch (e) {
+                    console.error('Failed to load rubric suggestions:', e);
+                } finally {
+                    setLoadingSuggestions(false);
+                }
+            };
+            fetchSuggestions();
+        }
+    }, [form.category]);
 
     // Fetch admin list when needed
     const fetchAdmins = useCallback(async () => {
@@ -562,7 +582,30 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                                     </div>
                                                 ))}
                                                 {form.rubrics.length === 0 && (
-                                                    <p className="text-center py-2 text-xs text-amber-600/60 italic font-medium">No rubrics defined. Click "Add Criteria" to start.</p>
+                                                    <p className="text-center py-2 text-xs text-amber-600/60 italic font-medium">No rubrics defined. Click "Add Criteria" or select from suggestions.</p>
+                                                )}
+                                                
+                                                {/* Suggestions section */}
+                                                {rubricSuggestions.length > 0 && (
+                                                    <div className="mt-4 pt-4 border-t border-amber-200/30">
+                                                        <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2">Suggestions for {form.category}</p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {rubricSuggestions.map((s, idx) => (
+                                                                <button
+                                                                    key={idx}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (!form.rubrics.some(r => r.criterion === s.criterion)) {
+                                                                            setForm(f => ({ ...f, rubrics: [...f.rubrics, { criterion: s.criterion, maxScore: s.maxScore }] }));
+                                                                        }
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-white border border-amber-200 rounded-lg text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-all flex items-center gap-1.5 active:scale-95"
+                                                                >
+                                                                    <Plus size={10} /> {s.criterion} ({s.maxScore} pts)
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                             <div className="pt-2">
