@@ -631,11 +631,13 @@ module.exports = async function (fastify, opts) {
 
             const rubricMap = new Map();
             recentQuestions.forEach(q => {
-                if (q.rubrics && q.rubrics.length > 0) {
+                if (q.rubrics && Array.isArray(q.rubrics)) {
                     q.rubrics.forEach(r => {
-                        const key = `${r.criterion.trim().toLowerCase()}_${r.maxScore}`;
-                        if (!rubricMap.has(key)) {
-                            rubricMap.set(key, { criterion: r.criterion, maxScore: r.maxScore });
+                        if (r && r.criterion) {
+                            const key = `${r.criterion.trim().toLowerCase()}_${r.maxScore}`;
+                            if (!rubricMap.has(key)) {
+                                rubricMap.set(key, { criterion: r.criterion, maxScore: r.maxScore });
+                            }
                         }
                     });
                 }
@@ -986,7 +988,7 @@ module.exports = async function (fastify, opts) {
             if (rubricScores && Array.isArray(rubricScores) && rubricScores.length > 0) {
                 let totalFromRubrics = 0;
                 for (const rs of rubricScores) {
-                    const rubricDef = question.rubrics.find(r => r.criterion === rs.criterion);
+                    const rubricDef = (question.rubrics || []).find(r => r.criterion === rs.criterion);
                     const maxScore = rubricDef ? rubricDef.maxScore : Infinity;
                     
                     if (rs.score > maxScore) {
@@ -3130,10 +3132,19 @@ module.exports = async function (fastify, opts) {
 
                 // Buffer to collect PDF data
                 const chunks = [];
-                doc.on('data', chunk => chunks.push(chunk));
+                const pdfBufferPromise = new Promise((resolve, reject) => {
+                    doc.on('data', chunk => chunks.push(chunk));
+                    doc.on('end', () => resolve(Buffer.concat(chunks)));
+                    doc.on('error', err => reject(err));
+                });
 
-                // Add template background
-                doc.image(templateBuffer, 0, 0, { width: doc.page.width, height: doc.page.height });
+                try {
+                    // Add template background
+                    doc.image(templateBuffer, 0, 0, { width: doc.page.width, height: doc.page.height });
+                } catch (imgErr) {
+                    fastify.log.error(imgErr);
+                    return reply.code(400).send({ error: 'Template image format invalid. Please upload a valid PNG or JPG.' });
+                }
 
                 // Add Student Name - Centered vertically and horizontally (Customizable in future)
                 doc.font('Helvetica-Bold').fontSize(40).fillColor('#1e293b');
@@ -3148,9 +3159,7 @@ module.exports = async function (fastify, opts) {
                 doc.end();
 
                 // Wait for PDF to finish
-                const pdfBuffer = await new Promise((resolve) => {
-                    doc.on('end', () => resolve(Buffer.concat(chunks)));
-                });
+                const pdfBuffer = await pdfBufferPromise;
 
                 zip.file(`${sub.student?.studentId || 'unknown'}_certificate.pdf`, pdfBuffer);
             }
