@@ -7,6 +7,7 @@ const AdminOTP = require('../models/AdminOTP');
 const { logActivity } = require('../utils/logger');
 const { isStudentEligible } = require('../utils/eligibility');
 const PDFDocument = require('pdfkit-table');
+const { PDFDocument: PDFLibDoc } = require('pdf-lib');
 const fs = require('fs');
 const path = require('path');
 
@@ -187,28 +188,55 @@ module.exports = async function (fastify, opts) {
             const user = await User.findById(studentId);
             const studentName = user?.name || 'Student';
 
-            const doc = new PDFDocument({
-                layout: 'landscape',
-                size: 'A4',
-                margin: 0
-            });
+            let pdfBuffer;
 
-            const chunks = [];
-            doc.on('data', chunk => chunks.push(chunk));
+            if (contentType === 'application/pdf') {
+                // Use pdf-lib for PDF templates
+                const pdfDoc = await PDFLibDoc.load(templateBuffer);
+                const { StandardFonts, rgb } = require('pdf-lib');
+                const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                
+                const pages = pdfDoc.getPages();
+                const firstPage = pages[0];
+                const { width, height } = firstPage.getSize();
+                
+                const fontSize = 40;
+                const textWidth = helveticaFont.widthOfTextAtSize(studentName, fontSize);
+                
+                firstPage.drawText(studentName, {
+                    x: (width - textWidth) / 2,
+                    y: height / 2.2,
+                    size: fontSize,
+                    font: helveticaFont,
+                    color: rgb(30/255, 41/255, 59/255) // #1e293b
+                });
 
-            doc.image(templateBuffer, 0, 0, { width: doc.page.width, height: doc.page.height });
-            doc.font('Helvetica-Bold').fontSize(40).fillColor('#1e293b');
+                pdfBuffer = Buffer.from(await pdfDoc.save());
+            } else {
+                // Use pdfkit for image templates (existing logic)
+                const doc = new PDFDocument({
+                    layout: 'landscape',
+                    size: 'A4',
+                    margin: 0
+                });
 
-            const textWidth = doc.widthOfString(studentName);
-            const x = (doc.page.width - textWidth) / 2;
-            const y = doc.page.height / 2.2;
+                const chunks = [];
+                doc.on('data', chunk => chunks.push(chunk));
 
-            doc.text(studentName, x, y);
-            doc.end();
+                doc.image(templateBuffer, 0, 0, { width: doc.page.width, height: doc.page.height });
+                doc.font('Helvetica-Bold').fontSize(40).fillColor('#1e293b');
 
-            const pdfBuffer = await new Promise((resolve) => {
-                doc.on('end', () => resolve(Buffer.concat(chunks)));
-            });
+                const textWidth = doc.widthOfString(studentName);
+                const x = (doc.page.width - textWidth) / 2;
+                const y = doc.page.height / 2.2;
+
+                doc.text(studentName, x, y);
+                doc.end();
+
+                pdfBuffer = await new Promise((resolve) => {
+                    doc.on('end', () => resolve(Buffer.concat(chunks)));
+                });
+            }
 
             reply.header('Content-Type', 'application/pdf');
             reply.header('Content-Disposition', `attachment; filename=${studentName.replace(/\s+/g, '_')}_certificate.pdf`);

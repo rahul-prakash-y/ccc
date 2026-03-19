@@ -74,10 +74,11 @@ module.exports = async function (fastify, opts) {
         try {
             const { roundId } = request.params;
             const data = await request.file();
-            if (!data) return reply.code(400).send({ error: 'No PDF file uploaded' });
+            if (!data) return reply.code(400).send({ error: 'No file uploaded' });
 
-            if (data.mimetype !== 'application/pdf') {
-                return reply.code(400).send({ error: 'Only PDF files are allowed as certificate templates' });
+            const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+            if (!allowedMimeTypes.includes(data.mimetype)) {
+                return reply.code(400).send({ error: 'Only PDF and image files (PNG, JPEG) are allowed as certificate templates' });
             }
 
             const uploadsDir = path.join(__dirname, '../uploads');
