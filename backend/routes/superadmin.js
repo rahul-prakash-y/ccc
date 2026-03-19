@@ -70,7 +70,7 @@ module.exports = async function (fastify, opts) {
      * POST /api/superadmin/rounds/:roundId/certificate-template
      * Upload a PDF template for a specific round.
      */
-    fastify.post('/rounds/:roundId/certificate-template', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.post('/rounds/:roundId/certificate-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
             const data = await request.file();
