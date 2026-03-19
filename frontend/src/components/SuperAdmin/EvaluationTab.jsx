@@ -67,6 +67,16 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
         setScore(total);
     };
 
+    const formatFigmaUrl = (url) => {
+        if (!url || typeof url !== 'string') return url;
+        const trimmed = url.trim();
+        if (!trimmed) return trimmed;
+        if (!trimmed.startsWith('http')) {
+            return `https://${trimmed}`;
+        }
+        return trimmed;
+    };
+
     const handleSave = async () => {
         const numScore = Number(score);
         if (score === '' || isNaN(numScore) || numScore < 0 || numScore > question.points) {
