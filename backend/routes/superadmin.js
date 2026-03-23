@@ -7,6 +7,7 @@ const User = require('../models/User');
 const AdminOTP = require('../models/AdminOTP');
 const Team = require('../models/Team');
 const { logActivity } = require('../utils/logger');
+const { checkRoundPermission } = require('../utils/permissions');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
 const PDFDocument = require('pdfkit-table');
@@ -27,7 +28,7 @@ module.exports = async function (fastify, opts) {
                 name, description, durationMinutes, type,
                 questionCount, shuffleQuestions,
                 testGroupId, testDurationMinutes, roundOrder,
-                maxParticipants, startTime, endTime
+                maxParticipants, startTime, endTime, authorizedAdmins
             } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
@@ -46,7 +47,8 @@ module.exports = async function (fastify, opts) {
                 roundOrder: roundOrder || 1,
                 maxParticipants: maxParticipants || null,
                 startTime: startTime || null,
-                endTime: endTime || null
+                endTime: endTime || null,
+                authorizedAdmins: authorizedAdmins || []
             });
 
             const savedRound = await round.save();
@@ -65,7 +67,43 @@ module.exports = async function (fastify, opts) {
             return reply.code(500).send({ error: 'Failed to create round' });
         }
     });
-    
+ 
+    /**
+     * PATCH /api/superadmin/rounds/:roundId/admins
+     * Super Admin can assign/update authorized admins for a round
+     */
+    fastify.patch('/rounds/:roundId/admins', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const { authorizedAdmins } = request.body; // Array of User IDs
+
+            if (!Array.isArray(authorizedAdmins)) {
+                return reply.code(400).send({ error: 'authorizedAdmins must be an array of User IDs' });
+            }
+
+            const round = await Round.findByIdAndUpdate(
+                roundId,
+                { $set: { authorizedAdmins } },
+                { new: true }
+            );
+
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: `${round.name} admin assignment` },
+                metadata: { authorizedAdmins },
+                ip: request.ip
+            });
+
+            return reply.code(200).send({ success: true, data: round });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update round admins' });
+        }
+    });
+
     /**
      * POST /api/superadmin/rounds/:roundId/certificate-template
      * Upload a PDF template for a specific round.
@@ -303,7 +341,15 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/rounds', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const rounds = await Round.find({}).select('-startOtp -endOtp -otpIssuedAt').sort({ createdAt: 1 });
+            const { userId, role } = request.user;
+            let filter = {};
+
+            // If not superadmin, only show rounds where the admin is authorized
+            if (role !== 'SUPER_ADMIN') {
+                filter = { authorizedAdmins: userId };
+            }
+
+            const rounds = await Round.find(filter).select('-startOtp -endOtp -otpIssuedAt').sort({ createdAt: 1 });
             return reply.code(200).send({ success: true, data: rounds });
         } catch (error) {
             fastify.log.error(error);
@@ -355,6 +401,10 @@ module.exports = async function (fastify, opts) {
         try {
             const { roundId } = request.params;
             const { search, page = 1, limit = 50 } = request.query;
+
+            // Check Permission
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to access questions for this round' });
 
             const filter = {
                 $or: [
@@ -416,6 +466,11 @@ module.exports = async function (fastify, opts) {
     fastify.post('/questions/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
+
+            // Check Permission
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to create questions for this round' });
+
             const {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
@@ -436,6 +491,7 @@ module.exports = async function (fastify, opts) {
 
             const question = new Question({
                 round: roundId,
+                isBank: true, // Always save to question bank as well
                 title, description,
                 inputFormat: inputFormat || '',
                 outputFormat: outputFormat || '',
@@ -480,6 +536,18 @@ module.exports = async function (fastify, opts) {
         try {
             const { questionId } = request.params;
             const updates = request.body;
+
+            const existingQuestion = await Question.findById(questionId);
+            if (!existingQuestion) return reply.code(404).send({ error: 'Question not found' });
+
+            // Check Permission (if it's not a bank question, it has a round)
+            if (existingQuestion.round) {
+                const hasPermission = await checkRoundPermission(request.user, existingQuestion.round);
+                if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to update questions for this round' });
+            } else if (!existingQuestion.isBank && request.user.role !== 'SUPER_ADMIN') {
+                // If it's a standalone question (not bank), only SuperAdmin for now or we need another check
+                return reply.code(403).send({ error: 'Forbidden: Only Super Admins can update standalone questions' });
+            }
 
             // If it's a bank question, we don't care about the round constraint.
             // But if it's not a bank question, it usually has a round. 
@@ -659,6 +727,13 @@ module.exports = async function (fastify, opts) {
             const data = await request.file();
             if (!data) return reply.code(400).send({ error: 'No spreadsheet file uploaded' });
 
+            const roundId = request.query.roundId || data.fields?.roundId?.value;
+            if (!roundId) return reply.code(400).send({ error: 'roundId is required for bulk upload' });
+
+            // Check Permission
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to upload questions for this round' });
+
             const buffer = await data.toBuffer();
             const workbook = XLSX.read(buffer, { type: 'buffer' });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -673,6 +748,10 @@ module.exports = async function (fastify, opts) {
             const questionsToSave = [];
             let errorCount = 0;
             const errors = [];
+
+            // Pre-fetch all admins to map studentId to _id for assignedAdmin
+            const allAdmins = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id studentId name').lean();
+            const adminMap = new Map(allAdmins.map(a => [String(a.studentId).trim(), a._id]));
 
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
@@ -692,6 +771,25 @@ module.exports = async function (fastify, opts) {
                 const category = (row.category || row.Category || 'GENERAL').toUpperCase();
                 const points = Number(row.points || row.Points) || 10;
                 const isManualEvaluation = String(row.isManualEvaluation || row.Manual_Evaluation).toLowerCase() === 'true';
+
+                // Handle assignedAdmin (mapping Student ID from Excel to User ID)
+                let assignedAdminId = null;
+                const assignedAdminStudentId = String(row.assignedAdmin || row.Assigned_Admin || row.Manual_Evaluation_Assigned_To || '').trim();
+                
+                if (isManualEvaluation) {
+                    if (assignedAdminStudentId) {
+                        assignedAdminId = adminMap.get(assignedAdminStudentId);
+                        if (!assignedAdminId) {
+                            errorCount++;
+                            errors.push(`Row ${lineNum}: Admin with Student ID "${assignedAdminStudentId}" not found.`);
+                            continue;
+                        }
+                    } else {
+                        errorCount++;
+                        errors.push(`Row ${lineNum}: Manual evaluation requires an assigned Admin Student ID.`);
+                        continue;
+                    }
+                }
 
                 if (!validDifficulties.includes(difficulty)) {
                     errorCount++;
@@ -728,7 +826,8 @@ module.exports = async function (fastify, opts) {
                 }
 
                 questionsToSave.push({
-                    isBank: true,
+                    round: roundId, // Bulk upload is now Round-specific
+                    isBank: true, // Also keep in bank
                     title,
                     description,
                     inputFormat: row.inputFormat || row.Input_Format || '',
@@ -741,12 +840,13 @@ module.exports = async function (fastify, opts) {
                     category,
                     options,
                     correctAnswer: String(row.correctAnswer || row.Correct_Answer || ''),
-                    isManualEvaluation
+                    isManualEvaluation,
+                    assignedAdmin: assignedAdminId
                 });
             }
 
             if (questionsToSave.length === 0) {
-                return reply.code(400).send({ error: 'No valid questions found in file.', details: errors });
+                return reply.code(400).send({ success: false, error: 'No valid questions found in file.', details: errors });
             }
 
             const savedQuestions = await Question.insertMany(questionsToSave);
@@ -754,8 +854,8 @@ module.exports = async function (fastify, opts) {
             await logActivity({
                 action: 'BULK_UPLOAD',
                 performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Question', label: `Bulk Upload: ${savedQuestions.length} Library items` },
-                metadata: { successCount: savedQuestions.length, errorCount },
+                target: { type: 'Question', label: `Bulk Upload: ${savedQuestions.length} items for Round ${roundId}` },
+                metadata: { roundId, successCount: savedQuestions.length, errorCount },
                 ip: request.ip
             });
 
@@ -1446,6 +1546,76 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to reset password' });
+        }
+    });
+
+    // GET /api/superadmin/rounds/:roundId/upload-template - DOWNLOAD SAMPLE EXCEL FOR QUESTIONS
+    fastify.get('/rounds/:roundId/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Check Permission
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to access templates for this round' });
+
+            // Base columns for all templates
+            const data = [{
+                Title: 'Sample Question Title',
+                Description: 'Detailed problem statement here...',
+                Difficulty: 'MEDIUM', // EASY, MEDIUM, HARD
+                Points: 10,
+                isManualEvaluation: 'FALSE', // TRUE or FALSE
+                Assigned_Admin: 'AdminStudentId', // Student ID of the admin for manual evaluation
+                Category: round.type || 'GENERAL',
+            }];
+
+            // Type-specific columns
+            if (round.type === 'HTML_CSS_QUIZ' || round.type === 'GENERAL') {
+                data[0].Type = 'MCQ';
+                data[0].Option1 = 'Option A';
+                data[0].Option2 = 'Option B';
+                data[0].Option3 = 'Option C';
+                data[0].Option4 = 'Option D';
+                data[0].Correct_Answer = 'Option A';
+            } else if (round.type === 'SQL_CONTEST' || round.type === 'HTML_CSS_DEBUG' || round.type === 'MINI_HACKATHON') {
+                data[0].Type = 'CODE';
+                data[0].Input_Format = 'Standard input description';
+                data[0].Output_Format = 'Expected output description';
+                data[0].Sample_Input = '1 2';
+                data[0].Sample_Output = '3';
+            } else if (round.type === 'UI_UX_CHALLENGE') {
+                data[0].Type = 'UI_UX';
+                data[0].Problem_Statement = 'Design a glassmorphic dashboard for...';
+                data[0].isManualEvaluation = 'TRUE';
+            }
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Questions');
+
+            // Set column widths for better readability
+            ws['!cols'] = [
+                { wch: 30 }, // Title
+                { wch: 50 }, // Description
+                { wch: 10 }, // Difficulty
+                { wch: 10 }, // Points
+                { wch: 15 }, // isManualEvaluation
+                { wch: 20 }, // Assigned_Admin
+                { wch: 15 }, // Category
+                { wch: 10 }, // Type
+            ];
+
+            const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+            reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            reply.header('Content-Disposition', `attachment; filename=bulk_upload_template_${round.name.replace(/\s+/g, '_')}.xlsx`);
+            return reply.send(buffer);
+
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate template' });
         }
     });
 

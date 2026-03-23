@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
-    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon
+    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon, Download, Upload, FileSpreadsheet
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -272,20 +272,16 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
     const [admins, setAdmins] = useState([]);
     const [loadingAdmins, setLoadingAdmins] = useState(false);
     const [rubricSuggestions, setRubricSuggestions] = useState([]);
-    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
     // Fetch rubric suggestions when category changes
     useEffect(() => {
         if (form.category) {
             const fetchSuggestions = async () => {
-                setLoadingSuggestions(true);
                 try {
                     const res = await api.get(`${API}/questions/rubric-suggestions?category=${form.category}`);
                     setRubricSuggestions(res.data.data || []);
                 } catch (e) {
                     console.error('Failed to load rubric suggestions:', e);
-                } finally {
-                    setLoadingSuggestions(false);
                 }
             };
             fetchSuggestions();
@@ -655,6 +651,145 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
     );
 };
 
+// ─── Bulk Upload Modal (Round-specific) ────────────────────────────────────────
+const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
+    const [file, setFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+    const round = rounds.find(r => r._id === roundId);
+
+    const handleDownloadTemplate = async () => {
+        try {
+            const res = await api.get(`${API}/rounds/${roundId}/upload-template`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `template_${round?.type || 'questions'}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success('Template downloaded!');
+        } catch {
+            toast.error('Failed to download template.');
+        }
+    };
+
+    const handleUpload = async (e) => {
+        e.preventDefault();
+        if (!file) return setError('Please select a file first.');
+        setUploading(true);
+        setError('');
+        setResult(null);
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await api.post(`${API}/bulk-upload-questions?roundId=${roundId}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setResult(res.data);
+            toast.success(res.data.message);
+            if (onUploadSuccess) onUploadSuccess();
+        } catch (err) {
+            setError(err.response?.data?.error || err.response?.data?.details || 'Failed to upload file.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={e => e.target === e.currentTarget && onClose()}
+            >
+                <motion.div
+                    initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+                >
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-emerald-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                <Upload size={18} />
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-slate-900 text-lg">Bulk Upload Questions</h2>
+                                {round && <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Target: {round.name} ({round.type})</p>}
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-5" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Download Template</p>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Columns match your round type</p>
+                            </div>
+                            <button
+                                onClick={handleDownloadTemplate}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded-lg text-slate-600 text-xs font-bold transition-all shadow-sm"
+                            >
+                                <Download size={14} /> Template
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpload} className="space-y-4">
+                            <div
+                                className="relative border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group"
+                            >
+                                <input
+                                    type="file"
+                                    accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                                    onChange={e => { setFile(e.target.files[0]); setResult(null); setError(''); }}
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                                <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform mb-3">
+                                    <FileSpreadsheet size={24} className="text-emerald-500" />
+                                </div>
+                                <p className="text-sm font-bold text-slate-700">{file ? file.name : 'Click or Drag Excel File'}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Max 5MB · .xlsx only</p>
+                            </div>
+
+                            {error && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-600 text-xs font-bold">
+                                    <AlertTriangle size={14} /> {error}
+                                </div>
+                            )}
+
+                            {result && (
+                                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+                                    <p className="text-emerald-700 text-xs font-bold">{result.message}</p>
+                                    {result.errorCount > 0 && (
+                                        <p className="text-amber-600 text-[10px] font-bold uppercase tracking-wider">
+                                            {result.errorCount} rows had errors and were skipped.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-1">
+                                <button type="button" onClick={onClose} className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-bold text-sm transition-colors">Cancel</button>
+                                <button
+                                    type="submit"
+                                    disabled={uploading || !file}
+                                    className="flex-2 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
+                                >
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    Upload Questions
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
 // ─── Main Question Manager Tab ──────────────────────────────────────────────────────
 const QuestionManagerTab = () => {
     const { rounds } = useRoundStore();
@@ -662,7 +797,7 @@ const QuestionManagerTab = () => {
     const [selectedRound, setSelectedRound] = useState('');
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [modal, setModal] = useState(null); // 'add', 'import', or Question object
+    const [modal, setModal] = useState(null); // 'add', 'import', 'bulk-upload', or Question object
     const [expandedId, setExpandedId] = useState(null);
 
     // Pagination & Search States
@@ -733,6 +868,26 @@ const QuestionManagerTab = () => {
         setModal(null);
     };
 
+    const handleDownloadTemplate = async () => {
+        if (!selectedRound) return;
+        try {
+            const res = await api.get(`${API}/rounds/${selectedRound}/upload-template`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            const round = rounds.find(r => r._id === selectedRound);
+            const typeLabel = round?.type || 'questions';
+            link.setAttribute('download', `template_${typeLabel}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success("Template downloaded successfully.");
+        } catch (err) {
+            console.error("Failed to download template", err);
+            toast.error("Failed to download template.");
+        }
+    };
+
     return (
         <div className="space-y-4 h-full flex flex-col">
 
@@ -771,11 +926,25 @@ const QuestionManagerTab = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
+                            onClick={handleDownloadTemplate}
+                            disabled={!selectedRound}
+                            className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 disabled:opacity-50 disabled:hover:bg-indigo-50 rounded-xl text-indigo-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                        >
+                            <Download size={16} /> <span className="hidden sm:inline">Template</span>
+                        </button>
+                        <button
+                            onClick={() => setModal('bulk-upload')}
+                            disabled={!selectedRound}
+                            className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                        >
+                            <Upload size={16} /> <span className="hidden sm:inline">Bulk Upload</span>
+                        </button>
+                        <button
                             onClick={() => setModal('import')}
                             disabled={!selectedRound}
-                            className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 disabled:hover:bg-emerald-50 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-50 rounded-xl text-slate-700 font-bold text-sm transition-all shadow-sm active:scale-95"
                         >
-                            <Import size={16} /> <span className="hidden sm:inline">Import from Library</span>
+                            <Import size={16} /> <span className="hidden sm:inline">From Library</span>
                         </button>
                         <button
                             onClick={() => setModal('add')}
@@ -991,7 +1160,18 @@ const QuestionManagerTab = () => {
                         }}
                     />
                 )}
-                {modal && modal !== 'import' && (
+                {modal === 'bulk-upload' && (
+                    <BulkUploadModal
+                        roundId={selectedRound}
+                        rounds={rounds}
+                        onClose={() => setModal(null)}
+                        onUploadSuccess={() => {
+                            fetchQuestions(selectedRound);
+                            setModal(null);
+                        }}
+                    />
+                )}
+                {modal && modal !== 'import' && modal !== 'bulk-upload' && (
                     <QuestionModal
                         question={modal === 'add' ? null : modal}
                         roundId={selectedRound}

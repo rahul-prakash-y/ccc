@@ -3,13 +3,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   RefreshCw, PlayCircle, Eye, Loader2, StopCircle,
   Clock, CheckCircle2, Plus, AlertTriangle, Trash2, X, Timer, Shuffle, Settings2,
-  KeyRound,
+  KeyRound, User,
   Play, LayoutGrid
 } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
+import { useAdminStore } from '../../store/adminStore';
 import { API, STATUS_COLORS } from './constants';
 import { SkeletonGrid } from '../Skeleton';
+import toast from 'react-hot-toast';
 
 // ── Per-section OTP panel with live countdown ───────────────────────────────────
 const OtpPanel = ({ section, onOtpChange }) => {
@@ -328,8 +330,97 @@ const TimeWindowSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   );
 };
 
+// ── Admin access settings per section (SuperAdmin only) ─────────────────────────
+const AdminAccessSettings = ({ section, onSave, busy, isSuperAdmin }) => {
+  const { admins, fetchAdmins } = useAdminStore();
+  const [selectedAdmins, setSelectedAdmins] = useState(section.authorizedAdmins || []);
+  const [isOpen, setIsOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) fetchAdmins();
+  }, [isOpen, fetchAdmins]);
+
+  if (!isSuperAdmin) return null;
+
+  const handleToggleAdmin = (adminId) => {
+    setSelectedAdmins(prev => 
+      prev.includes(adminId) ? prev.filter(id => id !== adminId) : [...prev, adminId]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(section._id, selectedAdmins);
+      setIsOpen(false);
+      toast.success('Admin permissions updated');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mb-3 p-3 bg-amber-50/60 border border-amber-100 rounded-xl">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <User size={10} className="text-amber-600" />
+          <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">Authorized Admins</p>
+        </div>
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="text-[9px] font-bold text-amber-700 hover:underline"
+        >
+          {isOpen ? 'Close' : 'Manage Access'}
+        </button>
+      </div>
+
+      {!isOpen ? (
+        <div className="flex flex-wrap gap-1">
+          {section.authorizedAdmins?.length > 0 ? (
+            <p className="text-[10px] text-slate-500 font-medium italic">
+              {section.authorizedAdmins.length} admin(s) authorized
+            </p>
+          ) : (
+            <p className="text-[10px] text-slate-400 font-medium italic">No admins assigned (SuperAdmin only access)</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+            {admins.map(admin => (
+              <label key={admin._id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition-colors border border-transparent hover:border-amber-100">
+                <input 
+                  type="checkbox" 
+                  checked={selectedAdmins.includes(admin._id)}
+                  onChange={() => handleToggleAdmin(admin._id)}
+                  className="rounded border-amber-200 text-amber-600 focus:ring-amber-500"
+                />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black text-slate-700 truncate capitalize">{admin.name}</p>
+                  <p className="text-[8px] font-mono text-slate-400 uppercase">{admin.studentId}</p>
+                </div>
+              </label>
+            ))}
+            {admins.length === 0 && <p className="text-[10px] text-center text-slate-400 py-2 italic font-medium">No admins found</p>}
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || busy}
+            className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black transition-all disabled:opacity-50 shadow-sm shadow-amber-200"
+          >
+            {saving || busy ? <Loader2 size={10} className="animate-spin mx-auto" /> : 'Save Permissions'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -396,6 +487,14 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onDele
           section={section}
           onSave={onSaveTimeWindow}
           busy={busy[`${section._id}-timesettings`]}
+          isSuperAdmin={isSuperAdmin}
+        />
+
+        {/* Admin Access Settings */}
+        <AdminAccessSettings
+          section={section}
+          onSave={onSaveAdmins}
+          busy={busy[`${section._id}-adminsettings`]}
           isSuperAdmin={isSuperAdmin}
         />
 
@@ -539,6 +638,21 @@ const LiveOpsTab = () => {
       console.error('Failed to save time window settings:', err);
     } finally {
       setBusy(b => ({ ...b, [`${sectionId}-timesettings`]: false }));
+    }
+  };
+
+  const handleSaveAdminPermissions = async (sectionId, authorizedAdmins) => {
+    setBusy(b => ({ ...b, [`${sectionId}-adminsettings`]: true }));
+    try {
+      const res = await api.patch(`${API}/rounds/${sectionId}/admins`, { authorizedAdmins });
+      const updatedSection = res.data.data;
+      updateRound(sectionId, updatedSection);
+    } catch (err) {
+      console.error('Failed to save admin permissions:', err);
+      toast.error(err.response?.data?.error || 'Failed to update permissions');
+      throw err;
+    } finally {
+      setBusy(b => ({ ...b, [`${sectionId}-adminsettings`]: false }));
     }
   };
 
@@ -710,6 +824,7 @@ const LiveOpsTab = () => {
             onAct={handleTestCardAction}
             onSaveSettings={handleSaveQuestionSettings}
             onSaveTimeWindow={handleSaveTimeWindow}
+            onSaveAdmins={handleSaveAdminPermissions}
             onDeleteGroup={handleDeleteGroup}
             onAddTime={handleAddTime}
             onDeleteSection={handleDeleteSection}

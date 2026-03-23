@@ -97,7 +97,11 @@ const roundSchema = new mongoose.Schema({
     endTime: {
         type: Date,
         default: null
-    }
+    },
+    authorizedAdmins: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }]
 }, {
     timestamps: true
 });
