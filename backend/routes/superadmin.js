@@ -2590,13 +2590,14 @@ module.exports = async function (fastify, opts) {
      */
     fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { status, isOtpActive, durationMinutes, maxParticipants, startTime, endTime, name, isTeamTest } = request.body;
+        const { status, isOtpActive, durationMinutes, testDurationMinutes, maxParticipants, startTime, endTime, name, isTeamTest } = request.body;
 
         try {
             const updates = {};
             if (status) updates.status = status;
             if (isOtpActive !== undefined) updates.isOtpActive = isOtpActive;
-            if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
+            if (durationMinutes !== undefined) updates.durationMinutes = Number(durationMinutes) || 60;
+            if (testDurationMinutes !== undefined) updates.testDurationMinutes = testDurationMinutes === null ? null : (Number(testDurationMinutes) || null);
             if (maxParticipants !== undefined) updates.maxParticipants = maxParticipants;
             if (startTime !== undefined) updates.startTime = startTime;
             if (endTime !== undefined) updates.endTime = endTime;

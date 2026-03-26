@@ -424,13 +424,14 @@ const TestCardEditSettings = ({ group, onSave, busy }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [editName, setEditName] = useState(group.name);
   const [editTeam, setEditTeam] = useState(group.sections[0]?.isTeamTest || false);
+  const [editDuration, setEditDuration] = useState(group.sections[0]?.testDurationMinutes || group.sections[0]?.durationMinutes || 60);
   const [saved, setSaved] = useState(false);
 
   // Don't use a useEffect to sync — let the parent re-key the component if group changes
   // (Edit state is intentionally local; user can close/reopen to see fresh values)
 
   const handleSave = async () => {
-    await onSave(group, editName, editTeam);
+    await onSave(group, editName, editTeam, editDuration);
     setSaved(true);
     setTimeout(() => { setSaved(false); setIsOpen(false); }, 1500);
   };
@@ -451,26 +452,47 @@ const TestCardEditSettings = ({ group, onSave, busy }) => {
       </div>
 
       {!isOpen ? (
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-slate-600 truncate flex-1">{group.name}</span>
-          {group.sections[0]?.isTeamTest && (
-            <span className="flex items-center gap-0.5 text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full">
-              <Users size={8} /> TEAM
-            </span>
-          )}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-600 truncate flex-1">{group.name}</span>
+            {group.sections[0]?.isTeamTest && (
+              <span className="flex items-center gap-0.5 text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full">
+                <Users size={8} /> TEAM
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-[9px] font-bold text-slate-400">
+            <Clock size={10} className="text-slate-300" />
+            <span>{group.sections[0]?.testDurationMinutes || group.sections[0]?.durationMinutes || 60} minutes</span>
+          </div>
         </div>
       ) : (
         <div className="space-y-2.5">
-          {/* Name field */}
-          <div>
-            <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Test Name</label>
-            <input
-              type="text"
-              value={editName}
-              onChange={e => setEditName(e.target.value)}
-              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
-              placeholder="Test name…"
-            />
+          {/* Name and Duration Row */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Test Name</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+                placeholder="Test name…"
+              />
+            </div>
+            <div>
+              <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Duration</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={editDuration}
+                  onChange={e => setEditDuration(e.target.value)}
+                  className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg pl-2 pr-6 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-400/40 appearance-none"
+                  placeholder="Min"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-300 pointer-events-none">MIN</span>
+              </div>
+            </div>
           </div>
           {/* Team mode toggle */}
           <div
@@ -732,13 +754,18 @@ const LiveOpsTab = () => {
     }
   };
 
-  const handleSaveTestMeta = async (group, name, isTeamTest) => {
+  const handleSaveTestMeta = async (group, name, isTeamTest, duration) => {
     setBusy(b => ({ ...b, [`${group.id}-meta`]: true }));
     try {
-      // Update all sections of the group with the new name and team mode
+      // Update all sections of the group with the new name, team mode, and duration
       await Promise.all(
         group.sections.map(section =>
-          api.patch(`${API}/rounds/${section._id}/status`, { name, isTeamTest })
+          api.patch(`${API}/rounds/${section._id}/status`, { 
+            name, 
+            isTeamTest, 
+            durationMinutes: duration, 
+            testDurationMinutes: duration 
+          })
             .then(res => updateRound(section._id, res.data.data))
         )
       );
