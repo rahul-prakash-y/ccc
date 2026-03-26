@@ -52,7 +52,7 @@ module.exports = async function (fastify, opts) {
             });
 
             const savedRound = await round.save();
-            const data = await Round.findById(savedRound._id).select('-startOtp -endOtp -otpIssuedAt');
+            const data = await Round.findById(savedRound._id).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data');
 
             await logActivity({
                 action: 'CREATED',
@@ -349,7 +349,7 @@ module.exports = async function (fastify, opts) {
                 filter = { authorizedAdmins: userId };
             }
 
-            const rounds = await Round.find(filter).select('-startOtp -endOtp -otpIssuedAt').sort({ createdAt: 1 });
+            const rounds = await Round.find(filter).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data').sort({ createdAt: 1 });
             return reply.code(200).send({ success: true, data: rounds });
         } catch (error) {
             fastify.log.error(error);
@@ -371,7 +371,7 @@ module.exports = async function (fastify, opts) {
             if (questionCount !== undefined) updateFields.questionCount = questionCount === '' ? null : Number(questionCount) || null;
             if (shuffleQuestions !== undefined) updateFields.shuffleQuestions = Boolean(shuffleQuestions);
 
-            const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
+            const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true }).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             // Clear previously assigned question sets so students get re-assigned on next load
@@ -2590,7 +2590,7 @@ module.exports = async function (fastify, opts) {
      */
     fastify.patch('/rounds/:roundId/status', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         const { roundId } = request.params;
-        const { status, isOtpActive, durationMinutes, maxParticipants, startTime, endTime } = request.body;
+        const { status, isOtpActive, durationMinutes, maxParticipants, startTime, endTime, name, isTeamTest } = request.body;
 
         try {
             const updates = {};
@@ -2600,8 +2600,10 @@ module.exports = async function (fastify, opts) {
             if (maxParticipants !== undefined) updates.maxParticipants = maxParticipants;
             if (startTime !== undefined) updates.startTime = startTime;
             if (endTime !== undefined) updates.endTime = endTime;
+            if (name !== undefined && name.trim()) updates.name = name.trim();
+            if (isTeamTest !== undefined) updates.isTeamTest = Boolean(isTeamTest);
 
-            const round = await Round.findByIdAndUpdate(roundId, updates, { new: true }).select('-startOtp -endOtp -otpIssuedAt');
+            const round = await Round.findByIdAndUpdate(roundId, updates, { new: true }).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             await logActivity({

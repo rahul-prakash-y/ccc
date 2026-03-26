@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   RefreshCw, PlayCircle, Eye, Loader2, StopCircle,
   Clock, CheckCircle2, Plus, AlertTriangle, Trash2, X, Timer, Shuffle, Settings2,
-  KeyRound, User,
+  KeyRound, User, Pencil, Users,
   Play, LayoutGrid
 } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
@@ -419,8 +419,92 @@ const AdminAccessSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   );
 };
 
+// ── Inline name + team mode editor (Admin & SuperAdmin) ──────────────────────────
+const TestCardEditSettings = ({ group, onSave, busy }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editName, setEditName] = useState(group.name);
+  const [editTeam, setEditTeam] = useState(group.sections[0]?.isTeamTest || false);
+  const [saved, setSaved] = useState(false);
+
+  // Don't use a useEffect to sync — let the parent re-key the component if group changes
+  // (Edit state is intentionally local; user can close/reopen to see fresh values)
+
+  const handleSave = async () => {
+    await onSave(group, editName, editTeam);
+    setSaved(true);
+    setTimeout(() => { setSaved(false); setIsOpen(false); }, 1500);
+  };
+
+  return (
+    <div className="mb-3 p-3 bg-sky-50/60 border border-sky-100 rounded-xl">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Pencil size={10} className="text-sky-500" />
+          <p className="text-[9px] font-black text-sky-500 uppercase tracking-widest">Test Identity</p>
+        </div>
+        <button
+          onClick={() => setIsOpen(o => !o)}
+          className="text-[9px] font-bold text-sky-700 hover:underline"
+        >
+          {isOpen ? 'Close' : 'Edit'}
+        </button>
+      </div>
+
+      {!isOpen ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-slate-600 truncate flex-1">{group.name}</span>
+          {group.sections[0]?.isTeamTest && (
+            <span className="flex items-center gap-0.5 text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full">
+              <Users size={8} /> TEAM
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {/* Name field */}
+          <div>
+            <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Test Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+              placeholder="Test name…"
+            />
+          </div>
+          {/* Team mode toggle */}
+          <div
+            className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+              editTeam ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'
+            }`}
+            onClick={() => setEditTeam(t => !t)}
+          >
+            <div className={`w-8 h-4 rounded-full relative transition-all ${editTeam ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${editTeam ? 'left-4' : 'left-0.5'}`} />
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest leading-none mb-0.5 text-slate-700">Team Mode</p>
+              <p className="text-[8px] text-slate-400 font-medium">{editTeam ? 'Enabled — scores halved' : 'Disabled — full scores'}</p>
+            </div>
+          </div>
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            disabled={busy || !editName.trim()}
+            className={`w-full py-1.5 rounded-lg text-[10px] font-black border transition-all disabled:opacity-50 ${
+              saved ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-sky-600 text-white border-sky-600 hover:bg-sky-700'
+            }`}
+          >
+            {busy ? <Loader2 size={10} className="animate-spin mx-auto" /> : saved ? '✓ Saved' : 'Save Changes'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onSaveTestMeta, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
@@ -473,6 +557,13 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSave
 
         {/* Live OTP Panel */}
         <OtpPanel section={section} />
+
+        {/* Test Identity Edit (name + team mode) — visible to all admins */}
+        <TestCardEditSettings
+          group={group}
+          onSave={onSaveTestMeta}
+          busy={busy[`${group.id}-meta`]}
+        />
 
         {/* Question Settings */}
         <QuestionSettings
@@ -638,6 +729,25 @@ const LiveOpsTab = () => {
       console.error('Failed to save time window settings:', err);
     } finally {
       setBusy(b => ({ ...b, [`${sectionId}-timesettings`]: false }));
+    }
+  };
+
+  const handleSaveTestMeta = async (group, name, isTeamTest) => {
+    setBusy(b => ({ ...b, [`${group.id}-meta`]: true }));
+    try {
+      // Update all sections of the group with the new name and team mode
+      await Promise.all(
+        group.sections.map(section =>
+          api.patch(`${API}/rounds/${section._id}/status`, { name, isTeamTest })
+            .then(res => updateRound(section._id, res.data.data))
+        )
+      );
+      toast.success('Test updated successfully');
+    } catch (err) {
+      console.error('Failed to save test meta:', err);
+      toast.error(err.response?.data?.error || 'Failed to update test');
+    } finally {
+      setBusy(b => ({ ...b, [`${group.id}-meta`]: false }));
     }
   };
 
@@ -825,6 +935,7 @@ const LiveOpsTab = () => {
             onSaveSettings={handleSaveQuestionSettings}
             onSaveTimeWindow={handleSaveTimeWindow}
             onSaveAdmins={handleSaveAdminPermissions}
+            onSaveTestMeta={handleSaveTestMeta}
             onDeleteGroup={handleDeleteGroup}
             onAddTime={handleAddTime}
             onDeleteSection={handleDeleteSection}

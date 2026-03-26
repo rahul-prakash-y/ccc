@@ -31,8 +31,10 @@ module.exports = async function (fastify, opts) {
             // Find all rounds that have certificates released and a template assigned in DB
             const rounds = await Round.find({ 
                 certificatesReleased: true,
-                'certificateTemplate.data': { $exists: true, $ne: null }
-            }).lean();
+                'certificateTemplate.contentType': { $exists: true, $ne: null }
+            })
+            .select('-certificateTemplate.data -startOtp -endOtp -otpIssuedAt')
+            .lean();
             
             if (!rounds.length) return reply.send({ success: true, data: [] });
 
@@ -88,57 +90,78 @@ module.exports = async function (fastify, opts) {
     /**
      * 0. List All Rounds (GET /api/rounds)
      * Auth: Must use the authenticate hook (Student).
+     * OPTIMISED: 2-3 total DB calls instead of 2×N (no N+1)
      */
     fastify.get('/', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            // Exclude sensitive OTP fields from the initial query for students
+            const studentId = request.user.userId;
+
+            // ── 1. Fetch all rounds in one query ──────────────────────────────────
             const rounds = await Round.find({})
-                .select('-startOtp -endOtp -otpIssuedAt')
+                .select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data')
                 .sort({ createdAt: -1 })
                 .lean();
 
-            const studentId = request.user.userId;
-            const uploadsDir = path.join(__dirname, '../uploads');
+            if (!rounds.length) {
+                return reply.code(200).send({ success: true, data: [] });
+            }
 
-            // Enrich rounds with the student's submission status & eligibility
-            const enrichedRounds = await Promise.all(rounds.map(async (round) => {
-                const [submission, eligibility] = await Promise.all([
-                    Submission.findOne({ student: studentId, round: round._id }).select('status score'),
-                    isStudentEligible(studentId, round._id)
-                ]);
-                console.log("submission", submission);
-                console.log("eligibility", eligibility);
+            const roundIds = rounds.map(r => r._id);
 
-                // Determine if student is a "winner" if certificates are released
-                let isWinner = false;
-                if (round.certificatesReleased && submission && (submission.status === 'COMPLETED')) {
-                    // Check persistent DB flag first
-                    if (submission.hasCertificate) {
-                        isWinner = true;
-                    } else {
-                        // Fallback/Safety: Recalculate if flag not set but they might be a winner
-                        const topSubmissions = await Submission.find({
-                            round: round._id,
-                            status: { $in: ['COMPLETED'] }
-                        })
-                            .sort({ score: -1 })
-                            .limit(round.winnerLimit || 10)
-                            .select('student');
+            // ── 2. Fetch ALL of this student's submissions for these rounds at once ─
+            const submissions = await Submission.find({ student: studentId, round: { $in: roundIds } })
+                .select('status score hasCertificate round')
+                .lean();
 
-                        isWinner = topSubmissions.some(s => s.student.toString() === studentId);
-                    }
+            // Index by roundId for O(1) lookup
+            const submissionByRound = {};
+            submissions.forEach(s => { submissionByRound[s.round.toString()] = s; });
+
+            // ── 3. Only call getStudentRank if there's at least one capped round ──
+            // (skips the expensive aggregation in the common case of no maxParticipants)
+            const needsRankCheck = rounds.some(r => r.maxParticipants != null);
+            let studentRank = null;
+            if (needsRankCheck) {
+                const { getStudentRank } = require('../utils/eligibility');
+                studentRank = await getStudentRank(studentId);
+            }
+
+            // ── 4. Compute per-round data purely in-memory ────────────────────────
+            const enrichedRounds = rounds.map(round => {
+                const submission = submissionByRound[round._id.toString()] || null;
+
+                // Eligibility check (fast in-memory)
+                let eligibility;
+                if (round.maxParticipants == null) {
+                    eligibility = { eligible: true };
+                } else if (round.allowedStudentIds?.some(id => id.toString() === studentId.toString())) {
+                    eligibility = { eligible: true, reason: 'ADMIN_ALLOWED' };
+                } else if (studentRank != null && studentRank <= round.maxParticipants) {
+                    eligibility = { eligible: true, rank: studentRank };
+                } else {
+                    eligibility = {
+                        eligible: false,
+                        rank: studentRank,
+                        maxRank: round.maxParticipants,
+                        message: `Eligibility restricted to top ${round.maxParticipants} students. Your current rank is #${studentRank}.`
+                    };
                 }
+
+                // Winner check — rely on persistent `hasCertificate` flag
+                const isWinner = !!(
+                    submission?.hasCertificate &&
+                    round.certificatesReleased &&
+                    submission.status === 'COMPLETED'
+                );
 
                 return {
                     ...round,
                     mySubmissionStatus: submission ? submission.status : null,
                     eligibility,
                     isWinner,
-                    isWinner,
-                    isWinner,
-                    hasCertificate: !!(isWinner && round.certificatesReleased && round.certificateTemplate?.data)
+                    hasCertificate: !!(isWinner && round.certificateTemplate?.contentType)
                 };
-            }));
+            });
 
             return reply.code(200).send({ success: true, data: enrichedRounds });
         } catch (error) {
@@ -146,6 +169,7 @@ module.exports = async function (fastify, opts) {
             return reply.code(500).send({ error: 'Failed to fetch rounds' });
         }
     });
+
 
     /**
      * GET /api/rounds/:roundId/certificate
