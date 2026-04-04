@@ -1736,7 +1736,7 @@ module.exports = async function (fastify, opts) {
 
             const [students, total] = await Promise.all([
                 User.find(filter)
-                    .select('studentId name email isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob')
+                    .select('studentId name email isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob department allocatedServer')
                     .populate('team', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
@@ -3502,6 +3502,53 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    /**
+     * POST /api/superadmin/sync-servers
+     * Broadcasts a cache refresh to all student backend instances.
+     * Auth: Super Admin
+     */
+    fastify.post('/sync-servers', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        const axios = require('axios');
+        const urls = (process.env.STUDENT_BACKEND_URLS || '').split(',').filter(Boolean);
+        const secret = process.env.SHARED_SECRET_KEY;
 
+        if (!urls.length) {
+            return reply.code(400).send({ success: false, error: 'No student backend URLs configured in .env' });
+        }
+
+        const outcomes = await Promise.allSettled(urls.map(async (url) => {
+            const cleanUrl = url.trim();
+            const res = await axios.post(`${cleanUrl}/api/internal/sync-cache`, {}, {
+                headers: { 'Authorization': `Bearer ${secret}` },
+                timeout: 5000
+            });
+            return { url: cleanUrl, status: 'success', message: res.data.message };
+        }));
+
+        const results = outcomes.map((outcome, index) => {
+            if (outcome.status === 'fulfilled') return outcome.value;
+            return {
+                url: urls[index].trim(),
+                status: 'error',
+                error: outcome.reason.response?.data?.error || outcome.reason.message
+            };
+        });
+
+        // Log result to platform activity log
+        await logActivity({
+            action: 'SYNC_SERVERS_TRIGGERED',
+            performedBy: { 
+                userId: request.user?.userId, 
+                studentId: request.user?.studentId, 
+                name: request.user?.name, 
+                role: request.user?.role 
+            },
+            target: { type: 'System', id: 'cluster', label: `Sync on ${urls.length} nodes` },
+            metadata: { results },
+            ip: request.ip
+        });
+
+        return reply.send({ success: true, results });
+    });
 
 };

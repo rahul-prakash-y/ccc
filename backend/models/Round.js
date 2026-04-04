@@ -40,7 +40,7 @@ const roundSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL'],
+        enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL', 'PRACTICE'],
         default: 'GENERAL'
     },
     // Global test sequence grouping

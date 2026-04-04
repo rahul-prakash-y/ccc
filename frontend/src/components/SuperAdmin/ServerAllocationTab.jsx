@@ -1,30 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Users, Search, RefreshCcw, LayoutGrid, ServerCrash } from 'lucide-react';
+import { Server, Users, Search, RefreshCcw, LayoutGrid, ServerCrash, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStudentStore } from '../../store/studentStore';
 import toast from 'react-hot-toast';
 
 const SERVERS = [
     { id: 'server-1', name: 'Server 1', url: 'https://frontend-frenzy-backend.onrender.com' },
-    { id: 'server-2', name: 'Server 2', url: 'https://frontend-frenzy-backend-1.onrender.com' },
-    { id: 'server-3', name: 'Server 3', url: 'https://frontend-frenzy-backend-2.onrender.com' },
-    { id: 'server-4', name: 'Server 4', url: 'https://frontend-frenzy-backend-3.onrender.com' },
+    { id: 'server-2', name: 'Server 2', url: 'https://frontend-frenzy-backend-ajsn.onrender.com' },
+    { id: 'server-3', name: 'Server 3', url: 'https://frontend-frenzy-backend-3.onrender.com' },
+    { id: 'server-4', name: 'Server 4', url: 'https://frontend-frenzy-backend-8zj1.onrender.com' },
+    { id: 'server-5', name: 'Server 5', url: 'https://frontend-frenzy-backend-1-sff6.onrender.com' },
+    { id: 'server-6', name: 'Server 6', url: 'https://frontend-frenzy-backend-3ei3.onrender.com' },
+    { id: 'server-7', name: 'Server 7', url: 'https://frontend-frenzy-backend-1-8e61.onrender.com' },
+    { id: 'server-8', name: 'Server 8', url: 'https://frontend-frenzy-backend-1-7hw2.onrender.com' },
+    // Add more servers as needed
 ];
 
 const ServerAllocationTab = () => {
-    const { students, loading, fetchStudents, allocateServers } = useStudentStore();
+    const { students, loading, pagination, fetchStudents, allocateServers } = useStudentStore();
     const [search, setSearch] = useState('');
     const [selectedStudents, setSelectedStudents] = useState([]);
     const [selectedServerUrl, setSelectedServerUrl] = useState('');
     const [isAllocating, setIsAllocating] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [limit] = useState(30); // Show 25 per page
 
     useEffect(() => {
-        fetchStudents();
-    }, [fetchStudents]);
+        const timer = setTimeout(() => {
+            fetchStudents({ page: currentPage, limit, search }, true);
+        }, search ? 500 : 0); // Debounce search
+        
+        return () => clearTimeout(timer);
+    }, [currentPage, limit, search, fetchStudents]);
 
-    const filteredStudents = students.filter(s =>
-        s.name?.toLowerCase().includes(search.toLowerCase()) ||
-        s.studentId?.toLowerCase().includes(search.toLowerCase())
-    );
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= pagination.totalPages) {
+            setCurrentPage(newPage);
+        }
+    };
 
     const toggleStudent = (studentId) => {
         if (selectedStudents.includes(studentId)) {
@@ -35,10 +47,10 @@ const ServerAllocationTab = () => {
     };
 
     const toggleAll = () => {
-        if (selectedStudents.length === filteredStudents.length) {
+        if (selectedStudents.length === students.length) {
             setSelectedStudents([]);
         } else {
-            setSelectedStudents(filteredStudents.map(s => s.studentId));
+            setSelectedStudents(students.map(s => s.studentId));
         }
     };
 
@@ -133,7 +145,7 @@ const ServerAllocationTab = () => {
                             type="text"
                             placeholder="Find student by ID or name..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
                             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                         />
                     </div>
@@ -147,7 +159,7 @@ const ServerAllocationTab = () => {
                                 <th className="px-6 py-4 w-12 text-center">
                                     <input 
                                         type="checkbox" 
-                                        checked={filteredStudents.length > 0 && selectedStudents.length === filteredStudents.length}
+                                        checked={students.length > 0 && selectedStudents.length === students.length}
                                         onChange={toggleAll}
                                         className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                     />
@@ -158,7 +170,25 @@ const ServerAllocationTab = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredStudents.length === 0 ? (
+                            {loading ? (
+                                Array.from({ length: 10 }).map((_, i) => (
+                                    <tr key={`skeleton-${i}`} className="animate-pulse border-b border-slate-100 last:border-0">
+                                        <td className="px-6 py-4 w-12 text-center">
+                                            <div className="w-4 h-4 bg-slate-200 rounded mx-auto"></div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="h-4 bg-slate-200 rounded w-24 mb-2"></div>
+                                            <div className="h-3 bg-slate-100 rounded w-16 shadow-sm"></div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="h-6 bg-slate-100 rounded-md w-20"></div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="h-6 bg-slate-100 rounded-lg w-28"></div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : students.length === 0 ? (
                                 <tr>
                                     <td colSpan="4" className="px-6 py-12 text-center text-slate-400">
                                         <Users size={32} className="mx-auto mb-3 text-slate-300" />
@@ -166,7 +196,7 @@ const ServerAllocationTab = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredStudents.map((student) => (
+                                students.map((student) => (
                                     <tr 
                                         key={student._id} 
                                         onClick={() => toggleStudent(student.studentId)}
@@ -204,6 +234,41 @@ const ServerAllocationTab = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                        Showing {students.length} of {pagination.totalRecords} Students
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1 || loading}
+                            className="p-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronLeft size={18} className="text-slate-600" />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            <span className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded-md shadow-sm">
+                                {currentPage}
+                            </span>
+                            <span className="text-xs text-slate-400 px-1">of</span>
+                            <span className="px-3 py-1 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-md">
+                                {pagination.totalPages}
+                            </span>
+                        </div>
+
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === pagination.totalPages || loading}
+                            className="p-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronRight size={18} className="text-slate-600" />
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

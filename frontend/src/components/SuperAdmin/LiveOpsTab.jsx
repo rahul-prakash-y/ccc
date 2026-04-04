@@ -691,6 +691,8 @@ const LiveOpsTab = () => {
   const [maxParticipants, setMaxParticipants] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false, title: '', message: '', actionLabel: '', isDestructive: false, onConfirm: null
@@ -798,6 +800,21 @@ const LiveOpsTab = () => {
       handleForceEnd(sectionOrId);
     } else {
       act(sectionOrId, action, method, body);
+    }
+  };
+
+  const handleSyncServers = async () => {
+    setSyncing(true);
+    setSyncResults(null);
+    try {
+      const res = await api.post(`${API}/sync-servers`);
+      setSyncResults(res.data.results);
+      toast.success('Sync broadcast complete');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to broadcast sync');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -942,12 +959,24 @@ const LiveOpsTab = () => {
           <p className="text-xl font-bold text-slate-800">Live Operations</p>
         </div>
         {isSuperAdmin && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
-          >
-            <Plus size={18} /> Create Test
-          </button>
+          <div className="flex items-center gap-3">
+             <button
+              onClick={handleSyncServers}
+              disabled={syncing}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 ${
+                syncing ? 'bg-slate-100 text-slate-400' : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-slate-50 shadow-indigo-100/50'
+              }`}
+            >
+              {syncing ? <RefreshCw size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+              Sync All Servers
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+            >
+              <Plus size={18} /> Create Test
+            </button>
+          </div>
         )}
       </div>
 
@@ -1037,6 +1066,7 @@ const LiveOpsTab = () => {
                           <option value="MINI_HACKATHON">Hackathon</option>
                           <option value="HTML_CSS_QUIZ">HTML/CSS</option>
                           <option value="UI_UX_CHALLENGE">UI/UX Design</option>
+                          <option value="PRACTICE">Practice Test</option>
                         </select>
                       </div>
                     </div>
@@ -1110,6 +1140,63 @@ const LiveOpsTab = () => {
                 <ProjectorOtp section={projectorSection} />
               </div>
             </motion.div>
+          )
+        }
+
+        {/* Sync Results Modal */}
+        {
+          syncResults && (
+            <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                      <RefreshCw size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900">Cluster Sync Report</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Global Cache Refresh Status</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setSyncResults(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto max-h-[60vh] space-y-3">
+                  {syncResults.map((res, i) => (
+                    <div key={i} className={`p-4 rounded-2xl border flex items-center justify-between gap-4 ${
+                      res.status === 'success' ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'
+                    }`}>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{res.url}</p>
+                        <p className={`text-[10px] font-medium ${res.status === 'success' ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {res.status === 'success' ? res.message : res.error}
+                        </p>
+                      </div>
+                      {res.status === 'success' ? (
+                        <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                          <CheckCircle2 size={16} />
+                        </div>
+                      ) : (
+                        <div className="shrink-0 w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-500">
+                          <AlertTriangle size={16} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-6 bg-slate-50 border-t border-slate-100">
+                  <button 
+                    onClick={() => setSyncResults(null)}
+                    className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95"
+                  >
+                    Close Report
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           )
         }
       </AnimatePresence >

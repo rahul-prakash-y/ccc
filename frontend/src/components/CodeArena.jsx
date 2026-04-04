@@ -834,7 +834,14 @@ const CodeArena = ({ language = 'javascript' }) => {
                                             disabled={isSubmitting || ((!roundInfo?.hasNextRound || isTimeUp) && endOtp.join('').length !== 6)}
                                             className={`flex-2 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
                                         >
-                                            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Verifying</> : (roundInfo?.hasNextRound && !isTimeUp ? <><Send size={16} /> Proceed to Next</> : <><Send size={16} /> Confirm Sequence</>)}
+                                            {isSubmitting ? (
+                                                <Loader2 size={16} className="animate-spin" />
+                                            ) : (
+                                                <>
+                                                    {isTimeUp ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
+                                                    {roundInfo?.hasNextRound ? 'Proceed' : 'Commit & Exit'}
+                                                </>
+                                            )}
                                         </button>
                                     </div>
                                 </form>

@@ -3,8 +3,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck,
-  Power, PieChart, Server, Award
+  Power, PieChart, Server, Award, Play
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
 import { API } from './constants';
@@ -25,6 +26,7 @@ import AttendanceTab from './AttendanceTab';
 import AdminContributionsTab from './AdminContributionsTab';
 import ServerAllocationTab from './ServerAllocationTab';
 import CertificateManager from './CertificateManager';
+import SystemHealthTab from './SystemHealthTab';
 
 
 const TABS = [
@@ -43,9 +45,11 @@ const TABS = [
   { id: 'admin-contributions', label: 'Admin Contributions', icon: PieChart },
   { id: 'server-allocation', label: 'Server Allocation', icon: Server },
   { id: 'certificates', label: 'Certificates', icon: Award },
+  { id: 'health', label: 'System Health', icon: Activity },
 ];
 
 const SuperAdminDashboard = () => {
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { fetchRounds } = useRoundStore();
   const [activeTab, setActiveTab] = useState('liveops');
@@ -89,6 +93,25 @@ const SuperAdminDashboard = () => {
             </div>
           </div>
 
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Practice Test Button */}
+            <button
+               onClick={() => {
+                 const { rounds } = useRoundStore.getState();
+                 const practiceRound = rounds.find(r => r.type === 'PRACTICE' && (r.status === 'RUNNING' || r.status === 'WAITING_FOR_OTP'));
+                 if (practiceRound) {
+                   navigate(`/arena/${practiceRound._id}`);
+                 } else {
+                   alert("No active Practice Test available at the moment. Please create one in Live Operations first.");
+                 }
+               }}
+               className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] rounded-lg hover:bg-[#f59e0b] hover:text-white transition-all active:scale-95 shadow-sm"
+            >
+               <Play size={14} />
+               <span className="hidden sm:inline">Practice Test</span>
+               <span className="inline sm:hidden">Practice</span>
+            </button>
+
           {/* Global Sign Out */}
           <button
             onClick={logout}
@@ -97,6 +120,7 @@ const SuperAdminDashboard = () => {
             <Power size={14} />
             <span className="hidden xs:inline">Sign Out</span>
           </button>
+          </div>
         </div>
 
       </header>
@@ -232,6 +256,7 @@ const SuperAdminDashboard = () => {
                   {activeTab === 'admin-contributions' && <AdminContributionsTab />}
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
                   {activeTab === 'certificates' && <CertificateManager />}
+                  {activeTab === 'health' && <SystemHealthTab />}
                 </div>
               </div>
 

@@ -65,7 +65,7 @@ const AppRoutes = () => {
             <Route element={<ProtectedRoute />}>
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/performance" element={<PerformanceReport />} />
-                <Route path="/dashboard" element={<Navigate to="/" replace />} />
+                <Route path="/dashboard" element={<StudentDashboard />} />
 
                 {/* Dynamic route targeting the active Hackathon/Challenge ID */}
                 <Route path="/arena/:roundId" element={<CodeArena />} />

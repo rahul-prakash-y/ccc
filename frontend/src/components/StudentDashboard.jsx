@@ -200,16 +200,34 @@ const StudentDashboard = () => {
                             My Profile
                         </button>
 
+                        {/* Practice Test Button */}
+                        <button
+                            onClick={() => {
+                                const practiceRound = displayRounds.find(r => r.type === 'PRACTICE' && (r.status === 'RUNNING' || r.status === 'WAITING_FOR_OTP'));
+                                if (practiceRound) {
+                                    handleRoundClick(practiceRound);
+                                } else {
+                                    import('react-hot-toast').then(({ default: toast }) => toast.error("No active Practice Test available at the moment."));
+                                }
+                            }}
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] rounded-xl hover:bg-[#f59e0b] hover:text-white transition-all active:scale-95 shadow-sm"
+                        >
+                            <Play size={14} />
+                            <span className="hidden sm:inline">Practice Test</span>
+                            <span className="inline sm:hidden">Practice</span>
+                        </button>
+
                         {/* Standalone Attendance Button */}
                         <button
                             onClick={() => setIsAttendanceOpen(true)}
                             className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
                         >
                             <UserCheck size={14} />
-                            Mark Attendance
+                            <span className="hidden sm:inline">Mark Attendance</span>
+                            <span className="inline sm:hidden">Attend</span>
                         </button>
 
-                        <div className="hidden md:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
+                        <div className="hidden lg:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                             <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
                         </div>

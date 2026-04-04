@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power, Award } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power, Award, Play } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -24,6 +25,7 @@ const TABS = [
 ];
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
     const { user, logout } = useAuthStore();
     const [activeTab, setActiveTab] = useState('liveops');
     const [rounds, setRounds] = useState([]);
@@ -43,7 +45,10 @@ const AdminDashboard = () => {
     }, []);
 
     useEffect(() => {
-        fetchRounds();
+        const init = async () => {
+            await fetchRounds();
+        };
+        init();
         const t = setInterval(fetchRounds, 30000);
         return () => clearInterval(t);
     }, [fetchRounds]);
@@ -179,6 +184,19 @@ const AdminDashboard = () => {
                             </div>
 
                             <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => {
+                                        const practiceRound = rounds.find(r => r.type === 'PRACTICE' && (r.status === 'RUNNING' || r.status === 'WAITING_FOR_OTP'));
+                                        if (practiceRound) {
+                                            navigate(`/arena/${practiceRound._id}`);
+                                        } else {
+                                            alert("No active Practice Test available at the moment. Please create one in Live Operations first.");
+                                        }
+                                    }}
+                                    className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] rounded-xl hover:bg-[#f59e0b] hover:text-white transition-all active:scale-95 shadow-sm"
+                                >
+                                    Practice Test
+                                </button>
                                 <div className="hidden sm:flex flex-col text-right">
                                     <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest leading-none mb-1">
                                         ID: {user?.studentId || "UNKNOWN"}
@@ -198,9 +216,9 @@ const AdminDashboard = () => {
                                 {activeTab === 'students' && <StudentManagerTab />}
                                 {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
                                 {activeTab === 'evaluations' && <EvaluationTab />}
-                                { activeTab === 'teams' && <TeamManagerTab /> }
-                                { activeTab === 'attendance' && <AttendanceTab /> }
-                                { activeTab === 'certificates' && <CertificateManager /> }
+                                {activeTab === 'teams' && <TeamManagerTab />}
+                                {activeTab === 'attendance' && <AttendanceTab />}
+                                {activeTab === 'certificates' && <CertificateManager />}
                             </div>
 
                             {/* Bottom Gradient Overlay (Depth Indicator) */}
