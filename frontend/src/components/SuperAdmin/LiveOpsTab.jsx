@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   RefreshCw, PlayCircle, Eye, Loader2, StopCircle,
   Clock, CheckCircle2, Plus, AlertTriangle, Trash2, X, Timer, Shuffle, Settings2,
   KeyRound, User, Pencil, Users,
-  Play, LayoutGrid
+  Play, LayoutGrid,
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -525,53 +527,146 @@ const TestCardEditSettings = ({ group, onSave, busy }) => {
   );
 };
 
+// ── Test Settings Modal Handler ──────────────────────────────────────────────
+const TestSettingsModal = ({ isOpen, onClose, group, section, busy, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onSaveTestMeta, isSuperAdmin }) => {
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 py-8"
+        onClick={e => e.target === e.currentTarget && onClose()}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 10 }}
+          animate={{ scale: 1, y: 0 }}
+          exit={{ scale: 0.95, y: 10 }}
+          className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl max-h-full flex flex-col shadow-2xl overflow-hidden"
+        >
+          <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-indigo-50/50 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                <Settings2 size={18} />
+              </div>
+              <h2 className="font-bold text-slate-900 text-lg uppercase tracking-tight">Configure {group.name}</h2>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto no-scrollbar p-6 flex-1 space-y-6">
+            <TestCardEditSettings
+              group={group}
+              onSave={onSaveTestMeta}
+              busy={busy[`${group.id}-meta`]}
+            />
+            <QuestionSettings
+              section={section}
+              onSave={onSaveSettings}
+              busy={busy[`${section._id}-qsettings`]}
+              isSuperAdmin={isSuperAdmin}
+            />
+            <TimeWindowSettings
+              section={section}
+              onSave={onSaveTimeWindow}
+              busy={busy[`${section._id}-timesettings`]}
+              isSuperAdmin={isSuperAdmin}
+            />
+            <AdminAccessSettings
+              section={section}
+              onSave={onSaveAdmins}
+              busy={busy[`${section._id}-adminsettings`]}
+              isSuperAdmin={isSuperAdmin}
+            />
+          </div>
+
+          <div className="p-5 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end">
+             <button
+               onClick={onClose}
+               className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
+             >
+               Finish & Sync
+             </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 // ── A unified Test Card representing a group of sections ─────────────────────────
-const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onSaveTestMeta, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin }) => {
+const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSaveAdmins, onSaveTestMeta, onDeleteGroup, onAddTime, onDeleteSection, onProjector, isSuperAdmin, onJumpToTab }) => {
   const [activeIdx, setActiveIdx] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
   const section = group.sections[activeIdx] || group.sections[0];
   const isMulti = group.sections.length > 1;
 
   return (
     <motion.div
       layout
-      className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-indigo-300 transition-all shadow-sm flex flex-col h-full"
+      className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-indigo-300 transition-all shadow-sm flex flex-col h-full relative"
     >
+      {/* Settings Modal Injection */}
+      <TestSettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        group={group}
+        section={section}
+        busy={busy}
+        onSaveSettings={onSaveSettings}
+        onSaveTimeWindow={onSaveTimeWindow}
+        onSaveAdmins={onSaveAdmins}
+        onSaveTestMeta={onSaveTestMeta}
+        isSuperAdmin={isSuperAdmin}
+      />
+
       {/* Card Header: Group/Test Name */}
-      <div className="p-5 pb-3 border-b border-slate-50">
+      <div className="p-4 pb-3 border-b border-slate-50">
         <div className="flex justify-between items-start mb-1">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold text-slate-900 truncate tracking-tight">{group.name}</h3>
+            <h3 className="text-sm font-bold text-slate-800 truncate tracking-tight">{group.name}</h3>
             {group.testGroupId && (
-              <p className="text-[9px] text-slate-400 font-mono uppercase">ID: {group.testGroupId}</p>
+              <p className="text-[8px] text-slate-400 font-mono uppercase">ID: {group.testGroupId}</p>
             )}
           </div>
-          <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border shrink-0 ml-2 ${STATUS_COLORS[section.status] || 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+          <div className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border shrink-0 ml-2 ${STATUS_COLORS[section.status] || 'bg-slate-50 border-slate-200 text-slate-500'}`}>
             {section.status.replace(/_/g, ' ')}
           </div>
+          {section.type === 'PRACTICE' && (
+            <div className="absolute top-0 right-0 p-1.5">
+               <span className="flex items-center gap-1 bg-amber-500 text-white px-1.5 py-0.5 rounded-bl-lg rounded-tr-lg text-[7px] font-black uppercase shadow-sm">
+                  <Sparkles size={6} /> Practice
+               </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          <Clock size={12} className="text-slate-400" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase">
+          <Clock size={10} className="text-slate-400" />
+          <span className="text-[9px] font-bold text-slate-500 uppercase">
             {section.testDurationMinutes || section.durationMinutes} MIN (GLOBAL)
           </span>
         </div>
       </div>
 
-      <div className="p-5 flex-1 flex flex-col">
+      <div className="p-4 flex-1 flex flex-col no-scrollbar">
         {/* Section Selector for Multi-section Tests */}
         {isMulti && (
-          <div className="flex flex-wrap gap-1.5 mb-4 p-1.5 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="flex flex-wrap gap-1 mb-3 p-1 bg-slate-50 rounded-lg border border-slate-100">
             {group.sections.map((s, idx) => (
               <button
                 key={s._id}
                 onClick={() => setActiveIdx(idx)}
-                className={`flex-1 min-w-[60px] py-1 px-2 rounded-lg text-[9px] font-black uppercase transition-all ${activeIdx === idx
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'bg-white border border-slate-200 text-slate-400 hover:text-slate-600'
+                className={`flex-1 min-w-[50px] py-1 px-1.5 rounded text-[8px] font-black uppercase transition-all ${activeIdx === idx
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-white border border-slate-100 text-slate-400 hover:text-slate-600'
                   }`}
               >
-                Section {idx + 1}
+                S{idx + 1}
               </button>
             ))}
           </div>
@@ -580,46 +675,15 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSave
         {/* Live OTP Panel */}
         <OtpPanel section={section} />
 
-        {/* Test Identity Edit (name + team mode) — visible to all admins */}
-        <TestCardEditSettings
-          group={group}
-          onSave={onSaveTestMeta}
-          busy={busy[`${group.id}-meta`]}
-        />
-
-        {/* Question Settings */}
-        <QuestionSettings
-          section={section}
-          onSave={onSaveSettings}
-          busy={busy[`${section._id}-qsettings`]}
-          isSuperAdmin={isSuperAdmin}
-        />
-
-        {/* Time Window Settings */}
-        <TimeWindowSettings
-          section={section}
-          onSave={onSaveTimeWindow}
-          busy={busy[`${section._id}-timesettings`]}
-          isSuperAdmin={isSuperAdmin}
-        />
-
-        {/* Admin Access Settings */}
-        <AdminAccessSettings
-          section={section}
-          onSave={onSaveAdmins}
-          busy={busy[`${section._id}-adminsettings`]}
-          isSuperAdmin={isSuperAdmin}
-        />
-
         {/* Action Toolbar */}
-        <div className="mt-auto pt-4 border-t border-slate-50 flex flex-wrap items-center gap-2">
+        <div className="mt-auto pt-3 border-t border-slate-50 flex flex-wrap items-center gap-1.5">
           {section.status === 'LOCKED' && (
             <button
               onClick={() => onAct(section._id, 'generate-otp')}
               disabled={busy[`${section._id}-generate-otp`]}
-              className="flex-1 h-10 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-sm"
+              className="flex-1 h-9 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all disabled:opacity-50 shadow-sm"
             >
-              <KeyRound size={14} /> Initialize Keys
+              <KeyRound size={12} /> Initialize
             </button>
           )}
 
@@ -627,46 +691,44 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSave
             <button
               onClick={() => onAct(section._id, 'status', 'PATCH', { status: 'RUNNING' })}
               disabled={busy[`${section._id}-start`]}
-              className="flex-1 h-10 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-sm"
+              className="flex-1 h-9 flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-bold transition-all disabled:opacity-50 shadow-sm"
             >
-              <Play size={14} /> Activate
+              <Play size={12} /> Activate
             </button>
           )}
 
           {section.status === 'RUNNING' && (
-            <div className="flex-1 flex gap-2">
+            <div className="flex-1 flex gap-1.5">
               <button
                 onClick={() => onAddTime(section)}
-                className="flex-1 h-10 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                className="flex-1 h-9 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all shadow-sm"
               >
                 + Time
               </button>
               <button
                 onClick={() => onAct(section, 'FORCE_END')}
-                className="flex-1 h-10 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                className="flex-1 h-9 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
               >
-                <StopCircle size={14} /> Kill
+                <StopCircle size={12} /> Kill
               </button>
             </div>
           )}
 
-          {(section.status === 'WAITING_FOR_OTP' || section.status === 'RUNNING') && (
-            <button
-              onClick={onProjector}
-              className="h-10 w-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-sm"
-              title="Projector Mode"
-            >
-              <Eye size={16} />
-            </button>
-          )}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="h-9 w-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all shadow-sm"
+            title="Configure Settings"
+          >
+            <Eye size={14} />
+          </button>
 
           {isSuperAdmin && (
             <button
               onClick={() => isMulti ? onDeleteSection(section) : onDeleteGroup(group)}
               disabled={busy[`${section._id}-delete`] || busy[`${group.id}-delete`]}
-              className="h-10 w-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+              className="h-9 w-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
             >
-              {(busy[`${section._id}-delete`] || busy[`${group.id}-delete`]) ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              {(busy[`${section._id}-delete`] || busy[`${group.id}-delete`]) ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
             </button>
           )}
         </div>
@@ -675,7 +737,68 @@ const TestCard = ({ group, busy, onAct, onSaveSettings, onSaveTimeWindow, onSave
   );
 };
 
-const LiveOpsTab = () => {
+// ── Platform-wide cached overview (Admin Monitoring) ──────────────────────────
+const SystemOverview = () => {
+  const { dashboardStats, statsLoading, fetchDashboardStats, refreshDashboardStats } = useAdminStore();
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    fetchDashboardStats();
+    // Poll every 30s
+    const t = setInterval(() => fetchDashboardStats(), 30000);
+    return () => clearInterval(t);
+  }, [fetchDashboardStats]);
+
+  const stats = [
+    { label: 'Total Enrolled Students', value: dashboardStats.totalUsers, icon: Users, color: 'text-indigo-600', bg: 'bg-transparent border-slate-100 hover:border-indigo-200' },
+    { label: 'Submissions Captured', value: dashboardStats.totalSubmissions, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-transparent border-slate-100 hover:border-emerald-200' },
+    { label: 'Integrity Flags Raised', value: dashboardStats.totalCheatFlags, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-transparent border-slate-100 hover:border-red-200', canRefresh: isSuperAdmin }
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {stats.map((s, i) => (
+        <div key={i} className={`p-6 rounded-4xl border-2 ${s.bg} relative overflow-hidden group transition-all bg-white`}>
+          <div className="flex justify-between items-start">
+            <div className="relative z-10">
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-slate-400">{s.label}</h4>
+              <p className={`text-4xl font-black ${s.color}`}>
+                {statsLoading ? <Loader2 className="animate-spin opacity-40" /> : s.value.toLocaleString()}
+              </p>
+            </div>
+            <div className={`p-4 rounded-2xl ${s.color.replace('text', 'bg').replace('600', '50')} ${s.color} shrink-0`}>
+              <s.icon size={24} />
+            </div>
+          </div>
+          {s.canRefresh && (
+            <button
+              onClick={() => {
+                toast.promise(refreshDashboardStats(), {
+                  loading: 'Recalculating Platform Metrics...',
+                  success: 'Master Cache Refreshed',
+                  error: 'Failed to re-calculate'
+                });
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-200 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+              title="Force Master Re-calculation (Super Admin)"
+            >
+              <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''} />
+            </button>
+          )}
+          <div className="mt-4 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-200 animate-pulse" />
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+              Live Protocol Sync: {dashboardStats.lastUpdated ? new Date(dashboardStats.lastUpdated).toLocaleTimeString() : 'Stale'}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const LiveOpsTab = ({ onJumpToTab }) => {
   const { user } = useAuthStore();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { rounds: sections, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
@@ -952,6 +1075,9 @@ const LiveOpsTab = () => {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
+      {/* 0. PLATFORM OVERVIEW (CACHED) */}
+      <SystemOverview />
+      
       {/* Header Section */}
       <div className="flex justify-between items-end border-b border-slate-100 pb-4">
         <div>
@@ -997,6 +1123,7 @@ const LiveOpsTab = () => {
             onDeleteSection={handleDeleteSection}
             onProjector={() => setProjectorSection(group.sections[0])}
             isSuperAdmin={isSuperAdmin}
+            onJumpToTab={onJumpToTab}
           />
         ))}
       </div>
@@ -1066,7 +1193,7 @@ const LiveOpsTab = () => {
                           <option value="MINI_HACKATHON">Hackathon</option>
                           <option value="HTML_CSS_QUIZ">HTML/CSS</option>
                           <option value="UI_UX_CHALLENGE">UI/UX Design</option>
-                          <option value="PRACTICE">Practice Test</option>
+                          <option value="PRACTICE">🚀 Practice Arena (Personal Training)</option>
                         </select>
                       </div>
                     </div>
@@ -1094,6 +1221,14 @@ const LiveOpsTab = () => {
                         onChange={e => setMaxParticipants(e.target.value)}
                       />
                     </div>
+                    {roundsConfig[0].type === 'PRACTICE' && (
+                      <div className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
+                        <Sparkles size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-[10px] font-bold text-amber-800 leading-tight">
+                          Practice Mode: Students will see a dedicated "Attend Practice" button. Useful for orientation before the main event.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -12,6 +12,14 @@ export const useAdminStore = create((set, get) => ({
     contributions: [],
     contributionsLoading: false,
     lastFetchedContributions: null,
+    
+    // Admin Master Cache (Platform-wide Students)
+    masterCache: { students: [], lastUpdated: null },
+    masterLoading: false,
+    
+    // Global Dashboard Stats
+    dashboardStats: { totalUsers: 0, totalSubmissions: 0, totalCheatFlags: 0, lastUpdated: null },
+    statsLoading: false,
 
     fetchAdmins: async (params = {}, force = false) => {
         const { lastFetched } = get();
@@ -54,6 +62,62 @@ export const useAdminStore = create((set, get) => ({
         } catch (error) {
             console.error('Failed to fetch admin contributions:', error);
             set({ contributionsLoading: false });
+        }
+    },
+
+    fetchDashboardStats: async () => {
+        const { statsLoading } = get();
+        if (statsLoading) return;
+
+        set({ statsLoading: true });
+        try {
+            const res = await api.get('/admin/stats');
+            set({
+                dashboardStats: res.data.data,
+                statsLoading: false
+            });
+        } catch (error) {
+            console.error('Failed to fetch dashboard stats:', error);
+            set({ statsLoading: false });
+        }
+    },
+
+    refreshDashboardStats: async () => {
+        set({ statsLoading: true });
+        try {
+            const res = await api.post('/admin/refresh-stats');
+            set({
+                dashboardStats: res.data.data,
+                statsLoading: false
+            });
+        } catch (error) {
+            console.error('Failed to refresh dashboard stats:', error);
+            set({ statsLoading: false });
+            throw error;
+        }
+    },
+
+    fetchMasterDashboard: async () => {
+        set({ masterLoading: true });
+        try {
+            const res = await api.get('/admin/dashboard');
+            set({
+                masterCache: res.data.data,
+                masterLoading: false
+            });
+        } catch (error) {
+            console.error('Failed to fetch master dashboard:', error);
+            set({ masterLoading: false });
+        }
+    },
+
+    fetchStudentCode: async (studentId) => {
+        try {
+            const res = await api.get(`/admin/student/${studentId}/code`);
+            return res.data.data;
+        } catch (error) {
+            console.error('Failed to fetch student code:', error);
+            throw error;
         }
     },
 

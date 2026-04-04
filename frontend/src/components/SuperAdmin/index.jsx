@@ -241,7 +241,7 @@ const SuperAdminDashboard = () => {
 
                 {/* Component Injection */}
                 <div className="relative text-slate-600">
-                  {activeTab === 'liveops' && <LiveOpsTab />}
+                  {activeTab === 'liveops' && <LiveOpsTab onJumpToTab={setActiveTab} />}
                   {activeTab === 'activity' && <ActivityLogsTab />}
                   {activeTab === 'students' && <StudentManagerTab />}
                   {activeTab === 'admins' && <AdminManagerTab />}

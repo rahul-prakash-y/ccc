@@ -266,6 +266,7 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
         assignedAdmin: question?.assignedAdmin?._id || question?.assignedAdmin || '',
         rubrics: question?.rubrics || [],
         rubricInstructions: question?.rubricInstructions || '',
+        isPractice: question?.isPractice || false,
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -424,6 +425,26 @@ const QuestionModal = ({ question, roundId, onClose, onSave }) => {
                                         <option value="MINI_HACKATHON">Mini Hackathon</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Practice Mode Toggle */}
+                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                                        <BookOpen size={16} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">Practice Mode Only</p>
+                                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">This question will be hidden during real event tests</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setForm(f => ({ ...f, isPractice: !f.isPractice }))}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${form.isPractice ? 'bg-amber-500' : 'bg-slate-200'}`}
+                                >
+                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${form.isPractice ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
                             </div>
 
                             {/* Manual Evaluation Toggle */}
@@ -792,12 +813,17 @@ const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
 
 // ─── Main Question Manager Tab ──────────────────────────────────────────────────────
 const QuestionManagerTab = () => {
-    const { rounds } = useRoundStore();
+    const { rounds, activeRoundId } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
-    const [selectedRound, setSelectedRound] = useState('');
+    const [selectedRound, setSelectedRound] = useState(activeRoundId);
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState(null); // 'add', 'import', 'bulk-upload', or Question object
+
+    // Sync from store if jump-to happens
+    useEffect(() => {
+        if (activeRoundId) setSelectedRound(activeRoundId);
+    }, [activeRoundId]);
     const [expandedId, setExpandedId] = useState(null);
 
     // Pagination & Search States
@@ -1007,6 +1033,11 @@ const QuestionManagerTab = () => {
                                                 {q.isBank && (
                                                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-blue-50 border-blue-200 text-blue-700">
                                                         Library
+                                                    </span>
+                                                )}
+                                                {q.isPractice && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border bg-amber-50 border-amber-200 text-amber-600 flex items-center gap-1 ml-2">
+                                                        <Sparkles size={9} /> PRACTICE
                                                     </span>
                                                 )}
                                             </div>

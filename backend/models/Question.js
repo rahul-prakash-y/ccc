@@ -97,6 +97,11 @@ const questionSchema = new mongoose.Schema({
     rubricInstructions: {
         type: String,
         default: ''
+    },
+    isPractice: {
+        type: Boolean,
+        default: false,
+        index: true
     }
 }, {
     timestamps: true

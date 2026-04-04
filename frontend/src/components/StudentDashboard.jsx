@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { 
     Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, 
     Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer,
@@ -390,6 +390,13 @@ const StudentDashboard = () => {
                                                     <Award size={12} />
                                                     DOWNLOAD CERTIFICATE
                                                 </button>
+                                            ) : round.type === 'PRACTICE' && isInteractable ? (
+                                                <button
+                                                    className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black transition-all active:scale-95 shadow-md shadow-amber-200 animate-pulse"
+                                                >
+                                                    <Sparkles size={12} />
+                                                    ATTEND PRACTICE
+                                                </button>
                                             ) : (
                                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                                     {!isEligible ? 'Access Locked' :
@@ -398,7 +405,7 @@ const StudentDashboard = () => {
                                                                 round.status === 'LOCKED' ? 'Access Restricted' :
                                                                     round.status === 'COMPLETED' ? 'Data Sealed' :
                                                                         round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
-                                                                            'Session Ready'}
+                                                                            round.type === 'PRACTICE' ? 'Practice Mode' : 'Session Ready'}
                                                 </p>
                                             )}
 

@@ -4,10 +4,156 @@ const xlsx = require('xlsx');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { parse } = require('json2csv');
+const Submission = require('../models/Submission');
 const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
 
+let adminStats = {
+    totalUsers: 0,
+    totalSubmissions: 0,
+    totalCheatFlags: 0,
+    lastUpdated: null
+};
+
+// --- Admin Master Cache (Platform-wide Student Statuses) ---
+let adminState = {
+    students: [],
+    lastUpdated: null
+};
+
+/**
+ * Platform Hydrator: Fetches all student statuses and submission counts.
+ * Optimized with .lean() and .select() to keep the RAM payload beneath 10-20MB.
+ */
+const hydrateAdminState = async () => {
+    try {
+        const Round = require('../models/Round');
+        
+        // 1. Fetch Students (Identity & Meta)
+        const students = await User.find({ role: 'STUDENT' })
+            .select('studentId name isBanned isOnboarded role allocatedServer')
+            .lean();
+            
+        // 2. Fetch Submission Snapshots (No code content)
+        const submissions = await Submission.find({})
+            .select('student round status score cheatFlags tabSwitches updatedAt')
+            .lean();
+
+        // 3. Map submissions to their owners for fast O(1) lookup
+        const submissionMap = {};
+        submissions.forEach(sub => {
+            const sid = sub.student.toString();
+            if(!submissionMap[sid]) submissionMap[sid] = [];
+            submissionMap[sid].push({
+                roundId: sub.round,
+                status: sub.status,
+                score: sub.score,
+                cheatFlags: sub.cheatFlags,
+                tabSwitches: sub.tabSwitches,
+                lastUpdate: sub.updatedAt
+            });
+        });
+
+        // 4. Final Hydration
+        adminState.students = students.map(u => ({
+            _id: u._id,
+            studentId: u.studentId,
+            name: u.name,
+            isBanned: u.isBanned,
+            isOnboarded: u.isOnboarded,
+            allocatedServer: u.allocatedServer,
+            submissions: submissionMap[u._id.toString()] || [],
+            submissionCount: (submissionMap[u._id.toString()] || []).length
+        }));
+        
+        adminState.lastUpdated = new Date();
+    } catch (err) {
+        console.error('Master Cache Hydration Error:', err);
+    }
+};
+
+// Initial run and background loop
+hydrateAdminState();
+setInterval(hydrateAdminState, 20000); // 20s interval as requested
+async function aggregateDashboardStats() { // ... rest of existing aggregator
+    try {
+        const [userCount, subStats] = await Promise.all([
+            User.countDocuments({ role: 'STUDENT' }),
+            Submission.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalSubmissions: { $sum: 1 },
+                        totalCheatFlags: { $sum: "$cheatFlags" }
+                    }
+                }
+            ])
+        ]);
+
+        const stats = subStats[0] || { totalSubmissions: 0, totalCheatFlags: 0 };
+        adminStats = {
+            totalUsers: userCount,
+            totalSubmissions: stats.totalSubmissions,
+            totalCheatFlags: stats.totalCheatFlags,
+            lastUpdated: new Date()
+        };
+    } catch (err) {
+        // Fallback for empty DB
+        adminStats.lastUpdated = new Date();
+    }
+};
+
+// Initialize Background Process
+setInterval(aggregateDashboardStats, 30000);
+aggregateDashboardStats();
+
 module.exports = async function (fastify, opts) {
+
+    /**
+     * GET /api/admin/stats
+     * Returns cached dashboard statistics to prevent heavy DB hits.
+     */
+    fastify.get('/stats', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        return reply.send({ success: true, data: adminStats });
+    });
+
+    /**
+     * POST /api/admin/refresh-stats
+     * Force re-calculation of the in-memory stats cache.
+     * Auth: Super Admin Only
+     */
+    fastify.post('/refresh-stats', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+        await aggregateDashboardStats();
+        return reply.send({ success: true, message: 'Stats re-aggregated successfully', data: adminStats });
+    });
+
+    /**
+     * GET /api/admin/dashboard
+     * Returns the complete Admin Master Cache for platform monitoring.
+     * No DB queries performed inside the route to handle 31 simultaneous admins.
+     */
+    fastify.get('/dashboard', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        return reply.send({ success: true, data: adminState });
+    });
+
+    /**
+     * GET /api/admin/student/:studentId/code
+     * Lazy-loads actual code content only when specifically requested.
+     */
+    fastify.get('/student/:studentId/code', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { studentId } = request.params;
+            const userSubmissions = await Submission.find({ student: studentId })
+                .select('student round codeContent status')
+                .populate('round', 'name type')
+                .lean();
+                
+            return reply.send({ success: true, data: userSubmissions });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch student code' });
+        }
+    });
 
     /**
      * 1. Admin Bulk User Generator (POST /api/admin/bulk-upload-students)
