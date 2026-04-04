@@ -28,7 +28,7 @@ const PublicRoute = ({ children }) => {
     if (user) {
         if (user.isBanned) return <Navigate to="/blocked" replace />;
         if (user.role === 'STUDENT' && !user.isOnboarded) return <Navigate to="/onboarding" replace />;
-        if (user.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
+        if (user.role === 'SUPER_ADMIN' || user.role === 'SUPER_MASTER') return <Navigate to="/superadmin" replace />;
         if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
         
         return <Navigate to="/dashboard" replace />;
@@ -39,7 +39,7 @@ const PublicRoute = ({ children }) => {
 const RoleFallback = () => {
     const { user } = useAuthStore();
 
-    if (user?.role === 'SUPER_ADMIN') return <Navigate to="/superadmin" replace />;
+    if (user?.role === 'SUPER_ADMIN' || user?.role === 'SUPER_MASTER') return <Navigate to="/superadmin" replace />;
     if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
     
     return <Navigate to="/dashboard" replace />;

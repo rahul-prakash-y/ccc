@@ -27,6 +27,7 @@ import AdminContributionsTab from './AdminContributionsTab';
 import ServerAllocationTab from './ServerAllocationTab';
 import CertificateManager from './CertificateManager';
 import SystemHealthTab from './SystemHealthTab';
+import DatabaseManagerTab from './DatabaseManagerTab';
 
 
 const TABS = [
@@ -46,6 +47,7 @@ const TABS = [
   { id: 'server-allocation', label: 'Server Allocation', icon: Server },
   { id: 'certificates', label: 'Certificates', icon: Award },
   { id: 'health', label: 'System Health', icon: Activity },
+  { id: 'database', label: 'Database Manager', icon: Server, roles: ['SUPER_MASTER'] },
 ];
 
 const SuperAdminDashboard = () => {
@@ -131,7 +133,7 @@ const SuperAdminDashboard = () => {
         {/* 2. SIDEBAR NAVIGATION (ICONS WITH TOOLTIPS) */}
         <aside className="w-16 sm:w-20 bg-white border-r border-slate-200/60 flex flex-col items-center py-4 gap-2 z-30 shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] overflow-y-auto no-scrollbar">
           {
-            TABS.map((tab) => {
+            TABS.filter(tab => !tab.roles || tab.roles.includes(user?.role)).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -257,6 +259,7 @@ const SuperAdminDashboard = () => {
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
                   {activeTab === 'certificates' && <CertificateManager />}
                   {activeTab === 'health' && <SystemHealthTab />}
+                  {activeTab === 'database' && <DatabaseManagerTab />}
                 </div>
               </div>
 

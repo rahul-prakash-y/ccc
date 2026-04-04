@@ -13,7 +13,7 @@ const SuperAdminRoute = () => {
         return <Navigate to="/login" replace />;
     }
 
-    if (user.role !== 'SUPER_ADMIN') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'SUPER_MASTER') {
         const fallback = user.role === 'ADMIN' ? '/admin' : '/dashboard';
         return <Navigate to={fallback} replace />;
     }

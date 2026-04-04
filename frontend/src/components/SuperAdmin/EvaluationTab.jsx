@@ -489,7 +489,7 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
                                 {submission.student?.dob && (
                                     <div className="flex items-center gap-1 text-[9px] font-black text-slate-400">
                                         <Calendar size={10} />
-                                        <span>{new Date(submission.student.dob).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                        <span>{new Date(submission.student.dob).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric' })}</span>
                                     </div>
                                 )}
                                 <div className="flex items-center gap-1.5 ml-1">

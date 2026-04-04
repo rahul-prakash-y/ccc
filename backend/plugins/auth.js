@@ -50,7 +50,7 @@ module.exports = fp(async function (fastify, opts) {
     fastify.decorate('requireAdmin', async function (request, reply) {
         try {
             await request.jwtVerify();
-            if (request.user.role !== 'ADMIN' && request.user.role !== 'SUPER_ADMIN') {
+            if (request.user.role !== 'ADMIN' && request.user.role !== 'SUPER_ADMIN' && request.user.role !== 'SUPER_MASTER') {
                 return reply.code(403).send({ error: 'Forbidden: Admin access required' });
             }
             await checkForceLogout(request, reply);
@@ -63,8 +63,21 @@ module.exports = fp(async function (fastify, opts) {
     fastify.decorate('requireSuperAdmin', async function (request, reply) {
         try {
             await request.jwtVerify();
-            if (request.user.role !== 'SUPER_ADMIN') {
+            if (request.user.role !== 'SUPER_ADMIN' && request.user.role !== 'SUPER_MASTER') {
                 return reply.code(403).send({ error: 'Forbidden: Super Admin access required' });
+            }
+            await checkForceLogout(request, reply);
+        } catch (err) {
+            if (!reply.sent) reply.code(401).send({ error: 'Unauthorized: Invalid or missing token' });
+        }
+    });
+
+    // Decorator to verify SUPER_MASTER ONLY access
+    fastify.decorate('requireSuperMaster', async function (request, reply) {
+        try {
+            await request.jwtVerify();
+            if (request.user.role !== 'SUPER_MASTER') {
+                return reply.code(403).send({ error: 'Forbidden: Super Master access required' });
             }
             await checkForceLogout(request, reply);
         } catch (err) {

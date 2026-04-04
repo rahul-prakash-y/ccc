@@ -25,12 +25,12 @@ const ActivityLogsTab = () => {
         return () => clearTimeout(handler);
     }, [search]);
 
-    // Unified Fetch Effect: Fetch logs and reset page when filters change
+    // Reset page to 1 if filters change
     useEffect(() => {
-        // Reset page to 1 if filters change (this will trigger the next effect)
         setPage(1);
     }, [actionFilter, debouncedSearch, limit]);
 
+    // Fetch logs when page or filters change
     useEffect(() => {
         const params = { page, limit };
         if (actionFilter) params.action = actionFilter;
@@ -125,7 +125,8 @@ const ActivityLogsTab = () => {
                                             {log.target?.label || '—'}
                                         </td>
                                         <td className="px-5 py-3 text-gray-400 whitespace-nowrap font-mono text-xs">
-                                            {new Date(log.createdAt).toLocaleString(undefined, {
+                                            {new Date(log.createdAt).toLocaleString('en-IN', {
+                                                timeZone: 'Asia/Kolkata',
                                                 month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
                                             })}
                                         </td>

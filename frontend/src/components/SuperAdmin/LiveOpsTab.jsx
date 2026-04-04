@@ -277,8 +277,9 @@ const TimeWindowSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   const formatDateForInput = (date) => {
     if (!date) return '';
     const d = new Date(date);
-    const z = d.getTimezoneOffset() * 60 * 1000;
-    const local = new Date(d - z);
+    // Explicitly force IST (UTC + 5:30) for everyone
+    const istOffset = 330 * 60 * 1000; 
+    const local = new Date(d.getTime() + istOffset);
     return local.toISOString().slice(0, 16);
   };
 
@@ -789,7 +790,7 @@ const SystemOverview = () => {
           <div className="mt-4 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-200 animate-pulse" />
             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-              Live Protocol Sync: {dashboardStats.lastUpdated ? new Date(dashboardStats.lastUpdated).toLocaleTimeString() : 'Stale'}
+                Live Protocol Sync: {dashboardStats.lastUpdated ? new Date(dashboardStats.lastUpdated).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Stale'}
             </span>
           </div>
         </div>
@@ -800,7 +801,7 @@ const SystemOverview = () => {
 
 const LiveOpsTab = ({ onJumpToTab }) => {
   const { user } = useAuthStore();
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'SUPER_MASTER';
   const { rounds: sections, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
   const [loading, setLoading] = useState(!sections.length);
   const [projectorSection, setProjectorSection] = useState(null);
@@ -869,7 +870,9 @@ const LiveOpsTab = ({ onJumpToTab }) => {
   const handleSaveTimeWindow = async (sectionId, startTime, endTime) => {
     setBusy(b => ({ ...b, [`${sectionId}-timesettings`]: true }));
     try {
-      const res = await api.patch(`${API}/rounds/${sectionId}/status`, { startTime, endTime });
+      const startIso = startTime ? (startTime.includes('+') ? startTime : `${startTime}+05:30`) : null;
+      const endIso = endTime ? (endTime.includes('+') ? endTime : `${endTime}+05:30`) : null;
+      const res = await api.patch(`${API}/rounds/${sectionId}/status`, { startTime: startIso, endTime: endIso });
       const updatedSection = res.data.data;
       updateRound(sectionId, updatedSection);
     } catch (err) {
@@ -1021,8 +1024,8 @@ const LiveOpsTab = ({ onJumpToTab }) => {
         questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount),
         isTeamTest,
         maxParticipants: maxParticipants === '' ? null : Number(maxParticipants),
-        startTime: startTime || null,
-        endTime: endTime || null
+        startTime: startTime ? (startTime.includes('+') ? startTime : `${startTime}+05:30`) : null,
+        endTime: endTime ? (endTime.includes('+') ? endTime : `${endTime}+05:30`) : null
       });
       setShowAddModal(false);
       setTestName('');

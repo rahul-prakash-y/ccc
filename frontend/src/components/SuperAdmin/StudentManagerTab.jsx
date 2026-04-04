@@ -849,8 +849,8 @@ const StudentDetailsModal = ({ student,    onClose,
                                                         <Calendar size={12} />
                                                     </div>
                                                     <span className="text-xs font-bold text-slate-700">
-                                                        {new Date(student.dob).toLocaleDateString(undefined, {
-                                                            month: 'long', day: 'numeric', year: 'numeric'
+                                                        {new Date(student.dob).toLocaleDateString('en-IN', {
+                                                            timeZone: 'Asia/Kolkata', month: 'long', day: 'numeric', year: 'numeric'
                                                         })}
                                                     </span>
                                                 </div>
@@ -1237,7 +1237,7 @@ const StudentManagerTab = () => {
                                                     {student.dob && (
                                                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
                                                             <Calendar size={10} />
-                                                            <span>{new Date(student.dob).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                                            <span>{new Date(student.dob).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric' })}</span>
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-1.5 border-l border-slate-100 pl-2 ml-1">

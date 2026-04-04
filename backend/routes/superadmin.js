@@ -237,7 +237,7 @@ module.exports = async function (fastify, opts) {
                             { name: searchRegex }
                         ]
                     }).select('_id'),
-                    User.find({ name: searchRegex, role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id'),
+                    User.find({ name: searchRegex, role: { $in: ['ADMIN', 'SUPER_ADMIN', 'SUPER_MASTER'] } }).select('_id'),
                     Round.find({ name: searchRegex }).select('_id')
                 ]);
 
@@ -345,7 +345,7 @@ module.exports = async function (fastify, opts) {
             let filter = {};
 
             // If not superadmin, only show rounds where the admin is authorized
-            if (role !== 'SUPER_ADMIN') {
+            if (role !== 'SUPER_ADMIN' && role !== 'SUPER_MASTER') {
                 filter = { authorizedAdmins: userId };
             }
 
@@ -544,7 +544,7 @@ module.exports = async function (fastify, opts) {
             if (existingQuestion.round) {
                 const hasPermission = await checkRoundPermission(request.user, existingQuestion.round);
                 if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to update questions for this round' });
-            } else if (!existingQuestion.isBank && request.user.role !== 'SUPER_ADMIN') {
+            } else if (!existingQuestion.isBank && request.user.role !== 'SUPER_ADMIN' && request.user.role !== 'SUPER_MASTER') {
                 // If it's a standalone question (not bank), only SuperAdmin for now or we need another check
                 return reply.code(403).send({ error: 'Forbidden: Only Super Admins can update standalone questions' });
             }

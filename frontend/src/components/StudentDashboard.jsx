@@ -130,7 +130,7 @@ const StudentDashboard = () => {
     const handleRoundClick = (round) => {
         const windowStatus = getTimeWindowStatus(round);
         if (windowStatus?.type === 'WAITING') {
-            alert(`This assessment is scheduled to start at ${new Date(round.startTime).toLocaleString()}.`);
+            alert(`This assessment is scheduled to start at ${new Date(round.startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`);
             return;
         }
         if (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS') {

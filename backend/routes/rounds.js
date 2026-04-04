@@ -483,13 +483,13 @@ module.exports = async function (fastify, opts) {
             if (round.startTime && now < new Date(round.startTime)) {
                 return reply.code(403).send({
                     error: 'Test Not Started',
-                    message: `This test is scheduled to start at ${new Date(round.startTime).toLocaleString()}.`
+                    message: `This test is scheduled to start at ${new Date(round.startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`
                 });
             }
             if (round.endTime && now > new Date(round.endTime)) {
                 return reply.code(403).send({
                     error: 'Test Ended',
-                    message: `This test ended at ${new Date(round.endTime).toLocaleString()}.`
+                    message: `This test ended at ${new Date(round.endTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`
                 });
             }
 
