@@ -1,62 +1,83 @@
+'use strict';
+
 const Submission = require('../models/Submission');
 const Round = require('../models/Round');
 
-// In-memory cache for rankings — prevents hitting Atlas on every student request
+// ─── Task 3: Background Ranking Cache ─────────────────────────────────────────
+// Prevents hitting Atlas on every student request during high-concurrency spikes.
 let rankingCache = {
-    data: null, // Array of { id, totalScore, rank }
+    data: null,      // Array of { id, totalScore, rank }
     lastFetched: 0,
-    TTL: 5 * 60 * 1000 // 5 minutes
+    TTL: 5 * 60 * 1000, // 5 minutes
+    isFetching: false
 };
 
 /**
- * Calculates student rank based on total score across the platform.
- * Uses the pre-computed `score` field on Submission (set at grading time),
- * so no expensive per-doc $reduce needed.
+ * hydrateRankingCache()
+ * Performs a lean aggregation of all student scores and caches the results.
+ * Called at boot time and periodically.
  */
-async function getStudentRank(studentObjectId) {
-    const now = Date.now();
+async function hydrateRankingCache() {
+    if (rankingCache.isFetching) return;
+    
+    rankingCache.isFetching = true;
+    try {
+        const now = Date.now();
+        // Sum up pre-computed scores across all rounds/submissions
+        const results = await Submission.aggregate([
+            { $match: { score: { $gt: 0 } } },
+            { $group: { _id: '$student', totalScore: { $sum: '$score' } } },
+            { $sort: { totalScore: -1 } }
+        ]);
 
-    // Return from cache if still fresh
-    if (rankingCache.data && (now - rankingCache.lastFetched < rankingCache.TTL)) {
-        const found = rankingCache.data.find(s => s.id === studentObjectId.toString());
-        return found ? found.rank : rankingCache.data.length + 1;
+        const rankedResults = results.map((r, index) => ({
+            id: r._id ? r._id.toString() : 'unknown',
+            totalScore: r.totalScore,
+            rank: index + 1
+        }));
+
+        rankingCache.data = rankedResults;
+        rankingCache.lastFetched = now;
+        console.info(`[RankingCache] Hydrated ${rankedResults.length} students into global leaderboard cache.`);
+    } catch (err) {
+        console.error('[RankingCache] Hydration failed:', err.message);
+    } finally {
+        rankingCache.isFetching = false;
     }
-
-    // Lean 3-stage aggregation using the pre-computed score column
-    const results = await Submission.aggregate([
-        { $match: { score: { $gt: 0 } } },
-        { $group: { _id: '$student', totalScore: { $sum: '$score' } } },
-        { $sort: { totalScore: -1 } }
-    ]);
-
-    const rankedResults = results.map((r, index) => ({
-        id: r._id ? r._id.toString() : 'unknown',
-        totalScore: r.totalScore,
-        rank: index + 1
-    }));
-
-    rankingCache.data = rankedResults;
-    rankingCache.lastFetched = now;
-
-    const found = rankedResults.find(s => s.id === studentObjectId.toString());
-    return found ? found.rank : rankedResults.length + 1;
 }
 
 /**
- * Force clear the ranking cache (call after manual grading)
+ * getStudentRank(studentObjectId)
+ * Returns the latest known rank for a student from memory.
  */
+async function getStudentRank(studentObjectId) {
+    const now = Date.now();
+    const sid = studentObjectId.toString();
+
+    // Trigger background refresh if expired, but don't block the current request
+    if (now - rankingCache.lastFetched > rankingCache.TTL) {
+        hydrateRankingCache();
+    }
+
+    if (!rankingCache.data) return 9999; // Default for unranked during first boot if slow
+
+    const found = rankingCache.data.find(s => s.id === sid);
+    return found ? found.rank : rankingCache.data.length + 1;
+}
+
 function invalidateRankingCache() {
     rankingCache.data = null;
     rankingCache.lastFetched = 0;
 }
 
 /**
+ * isStudentEligible(studentObjectId, roundId)
  * Checks if a student is eligible for a specific round.
- * NOTE: This still does a Round.findById — only use this in routes that haven't
- * already loaded the round. For the bulk /rounds endpoint, eligibility is
- * computed inline from the already-loaded round objects.
  */
 async function isStudentEligible(studentObjectId, roundId) {
+    // Note: In high-concurrency routes like /api/rounds/, round should be 
+    // passed as an object to avoid this extra DB hit.
+    const Round = require('../models/Round');
     const round = await Round.findById(roundId);
     if (!round) return { eligible: false, message: 'Round not found' };
 
@@ -84,5 +105,6 @@ async function isStudentEligible(studentObjectId, roundId) {
 module.exports = {
     getStudentRank,
     isStudentEligible,
-    invalidateRankingCache
+    invalidateRankingCache,
+    hydrateRankingCache
 };

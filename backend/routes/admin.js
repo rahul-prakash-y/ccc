@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { parse } = require('json2csv');
 const Submission = require('../models/Submission');
+const PracticeSubmission = require('../models/PracticeSubmission');
 const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
 
@@ -34,10 +35,17 @@ const hydrateAdminState = async () => {
             .select('studentId name isBanned isOnboarded role allocatedServer')
             .lean();
             
-        // 2. Fetch Submission Snapshots (No code content)
-        const submissions = await Submission.find({})
-            .select('student round status score cheatFlags tabSwitches updatedAt')
-            .lean();
+        // 2. Fetch Submission Snapshots from both regular and practice collections
+        const [regularSubs, practiceSubs] = await Promise.all([
+            Submission.find({})
+                .select('student round status score cheatFlags tabSwitches updatedAt')
+                .lean(),
+            PracticeSubmission.find({})
+                .select('student round status score cheatFlags tabSwitches updatedAt')
+                .lean()
+        ]);
+
+        const submissions = [...regularSubs, ...practiceSubs];
 
         // 3. Map submissions to their owners for fast O(1) lookup
         const submissionMap = {};
@@ -79,22 +87,24 @@ async function aggregateDashboardStats() { // ... rest of existing aggregator
     try {
         const [userCount, subStats] = await Promise.all([
             User.countDocuments({ role: 'STUDENT' }),
-            Submission.aggregate([
-                {
-                    $group: {
-                        _id: null,
-                        totalSubmissions: { $sum: 1 },
-                        totalCheatFlags: { $sum: "$cheatFlags" }
-                    }
-                }
+            Promise.all([
+                Submission.aggregate([
+                    { $group: { _id: null, totalSubmissions: { $sum: 1 }, totalCheatFlags: { $sum: "$cheatFlags" } } }
+                ]),
+                PracticeSubmission.aggregate([
+                    { $group: { _id: null, totalSubmissions: { $sum: 1 }, totalCheatFlags: { $sum: "$cheatFlags" } } }
+                ])
             ])
         ]);
 
-        const stats = subStats[0] || { totalSubmissions: 0, totalCheatFlags: 0 };
+        const [regStats, pracStats] = subStats;
+        const reg = regStats[0] || { totalSubmissions: 0, totalCheatFlags: 0 };
+        const prac = pracStats[0] || { totalSubmissions: 0, totalCheatFlags: 0 };
+
         adminStats = {
             totalUsers: userCount,
-            totalSubmissions: stats.totalSubmissions,
-            totalCheatFlags: stats.totalCheatFlags,
+            totalSubmissions: reg.totalSubmissions + prac.totalSubmissions,
+            totalCheatFlags: reg.totalCheatFlags + prac.totalCheatFlags,
             lastUpdated: new Date()
         };
     } catch (err) {

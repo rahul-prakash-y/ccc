@@ -30,7 +30,7 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [roundInfo, setRoundInfo] = useState(null);
     const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+    const [isMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
     const [showPreview, setShowPreview] = useState(true);
 
 

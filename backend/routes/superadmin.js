@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Question = require('../models/Question');
 const Submission = require('../models/Submission');
+const PracticeSubmission = require('../models/PracticeSubmission');
 const Round = require('../models/Round');
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
@@ -13,7 +14,7 @@ const XLSX = require('xlsx');
 const PDFDocument = require('pdfkit-table');
 const JSZip = require('jszip');
 const fs = require('fs');
-const path = require('path');
+const path = require('path'); // Cache test
 
 
 module.exports = async function (fastify, opts) {
@@ -995,18 +996,21 @@ module.exports = async function (fastify, opts) {
                 submissionFilter.student = { $in: students.map(s => s._id) };
             }
 
-            // 3. Find and Paginate Submissions
-            const [submissions, total] = await Promise.all([
-                Submission.find(submissionFilter)
-                    .populate('student', 'name studentId')
-                    .populate('round', 'name')
-                    .sort({ updatedAt: -1 })
-                    .skip(skip)
-                    .limit(limitNum)
-                    .lean(),
-                Submission.countDocuments(submissionFilter)
+            // 3. Find and Paginate from BOTH collections
+            const [regularSubs, regularCount, practiceSubs, practiceCount] = await Promise.all([
+                Submission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean(),
+                Submission.countDocuments(submissionFilter),
+                PracticeSubmission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean(),
+                PracticeSubmission.countDocuments(submissionFilter)
             ]);
 
+            const allCombinedResults = [
+                ...regularSubs.map(s => ({ ...s, isPractice: false })),
+                ...practiceSubs.map(s => ({ ...s, isPractice: true }))
+            ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+            const total = regularCount + practiceCount;
+            const submissions = allCombinedResults.slice(skip, skip + limitNum);
             // 4. Transform results to show Student -> [Questions]
             const result = submissions.map(sub => {
                 let answers = {};
@@ -1025,7 +1029,8 @@ module.exports = async function (fastify, opts) {
                     return {
                         question: q,
                         answer: answers[q._id.toString()],
-                        existingScore: null // Since we filtered for ungraded, there's no existing score
+                        existingScore: null,
+                        isPractice: sub.isPractice
                     };
                 });
 
@@ -1035,10 +1040,11 @@ module.exports = async function (fastify, opts) {
                     round: sub.round,
                     pdfUrl: sub.pdfUrl,
                     status: sub.status,
+                    isPractice: sub.isPractice,
                     assignedQuestionsCount: sub.assignedQuestions.length,
                     questions: relevantQuestions
                 };
-            });
+            }).filter(item => item.questions.length > 0);
 
             return reply.code(200).send({
                 success: true,
@@ -1078,7 +1084,7 @@ module.exports = async function (fastify, opts) {
                 return reply.code(403).send({ error: 'You are not authorized to evaluate this question' });
             }
 
-            const submission = await Submission.findById(submissionId);
+            let submission = await Submission.findById(submissionId) || await PracticeSubmission.findById(submissionId);
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
             let finalQuestionScore = score;
@@ -3019,7 +3025,7 @@ module.exports = async function (fastify, opts) {
                     attended,
                     score: totalScore
                 };
-            }));
+            })); // Target test area
 
             const pdfBuffer = await new Promise(async (resolve, reject) => {
                 try {

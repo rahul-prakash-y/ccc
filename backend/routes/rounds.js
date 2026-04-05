@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Round = require('../models/Round');
 const Submission = require('../models/Submission');
+const PracticeSubmission = require('../models/PracticeSubmission');
 const User = require('../models/User');
 const AdminOTP = require('../models/AdminOTP');
 const { logActivity } = require('../utils/logger');
@@ -45,11 +46,14 @@ module.exports = async function (fastify, opts) {
             const certificates = [];
 
             for (const round of rounds) {
-                const submission = await Submission.findOne({
+                const isPractice = round.type === 'PRACTICE';
+                const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
+
+                const submission = await ActiveSubmissionModel.findOne({
                     student: studentId,
                     round: round._id,
                     status: { $in: ['SUBMITTED', 'COMPLETED'] }
-                });
+                }).sort({ score: -1 });
 
                 if (!submission) continue;
 
@@ -57,7 +61,7 @@ module.exports = async function (fastify, opts) {
 
                 if (!isWinner) {
                     // Fallback check if flag not set (e.g. recalculated by admin later)
-                    const topSubmissions = await Submission.find({
+                    const topSubmissions = await ActiveSubmissionModel.find({
                         round: round._id,
                         status: { $in: ['SUBMITTED', 'COMPLETED'] }
                     })
@@ -97,10 +101,9 @@ module.exports = async function (fastify, opts) {
             const studentId = request.user.userId;
 
             // ── 1. Fetch all rounds in one query ──────────────────────────────────
-            const rounds = await Round.find({})
-                .select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data')
-                .sort({ createdAt: -1 })
-                .lean();
+            // ── 1. Fetch all rounds from RAM Cache (O(1)) ─────────────────────────
+            const { getRoundsCache } = require('../services/cacheService');
+            const rounds = getRoundsCache();
 
             if (!rounds.length) {
                 return reply.code(200).send({ success: true, data: [] });
@@ -108,23 +111,31 @@ module.exports = async function (fastify, opts) {
 
             const roundIds = rounds.map(r => r._id);
 
-            // ── 2. Fetch ALL of this student's submissions for these rounds at once ─
-            // Sort by attemptNumber ascending so latest ones overwrite in the lookup map
-            const submissions = await Submission.find({ student: studentId, round: { $in: roundIds } })
-                .select('status score hasCertificate round attemptNumber')
-                .sort({ attemptNumber: 1 })
-                .lean();
+            // ── 2. Fetch submissions from both regular and practice collections ──
+            const [regularSubmissions, practiceSubmissions] = await Promise.all([
+                Submission.find({ student: studentId, round: { $in: roundIds } })
+                    .select('status score hasCertificate round attemptNumber')
+                    .sort({ attemptNumber: 1 })
+                    .lean(),
+                PracticeSubmission.find({ student: studentId, round: { $in: roundIds } })
+                    .select('status score hasCertificate round attemptNumber')
+                    .sort({ attemptNumber: 1 })
+                    .lean()
+            ]);
+
+            // Merge them into one list for indexing
+            const allSubmissions = [...regularSubmissions, ...practiceSubmissions];
 
             // Index by roundId for O(1) lookup
             const submissionByRound = {};
             const attemptCountByRound = {};
             const bestScoreByRound = {};
             
-            submissions.forEach(s => { 
+            allSubmissions.forEach(s => { 
                 submissionByRound[s.round.toString()] = s; 
                 attemptCountByRound[s.round.toString()] = (attemptCountByRound[s.round.toString()] || 0) + 1;
                 
-                // Track best score specifically for completed submissions
+                // Track best score specifically for completed/submitted ones
                 if (s.status === 'COMPLETED' || s.status === 'SUBMITTED') {
                     if (bestScoreByRound[s.round.toString()] === undefined || (s.score || 0) > bestScoreByRound[s.round.toString()]) {
                         bestScoreByRound[s.round.toString()] = s.score || 0;
@@ -493,8 +504,12 @@ module.exports = async function (fastify, opts) {
         let submissionDetails = {};
 
         try {
-            const round = await Round.findById(roundId);
+            const { getRoundById } = require('../services/cacheService');
+            const round = getRoundById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const isPractice = round.type === 'PRACTICE';
+            const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
 
             // ─── Time Window Check ──────────────────────────────────────────────────
             const now = new Date();
@@ -521,7 +536,7 @@ module.exports = async function (fastify, opts) {
             }
 
             // Check if student already has a submission for this round first
-            let submissions = await Submission.find({ student: studentId, round: roundId }).sort({ attemptNumber: -1 });
+            let submissions = await ActiveSubmissionModel.find({ student: studentId, round: roundId }).sort({ attemptNumber: -1 });
             let lastSubmission = submissions[0];
 
             if (lastSubmission) {
@@ -558,6 +573,7 @@ module.exports = async function (fastify, opts) {
                 }
                 const prevRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder - 1 });
                 if (!prevRound) return reply.code(403).send({ error: 'Sequence broken: Previous round not found' });
+                // Note: Auto-join is currently only allowed for regular tests in sequential groups
                 const prevSub = await Submission.findOne({ student: studentId, round: prevRound._id, status: { $in: ['SUBMITTED', 'DISQUALIFIED'] } });
                 if (!prevSub) return reply.code(403).send({ error: 'You must complete the previous section first' });
             } else {
@@ -580,7 +596,9 @@ module.exports = async function (fastify, opts) {
             // Determine if we should inherit the clock from Round 1 of the Test Group
             let startTime = new Date();
             if (round.testGroupId && round.roundOrder > 1) {
-                const firstRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: 1 });
+                const { getRoundsCache } = require('../services/cacheService');
+                const rounds = getRoundsCache();
+                const firstRound = rounds.find(r => r.testGroupId === round.testGroupId && r.roundOrder === 1);
                 if (firstRound) {
                     const firstSub = await Submission.findOne({ student: studentId, round: firstRound._id });
                     if (firstSub) {
@@ -593,7 +611,7 @@ module.exports = async function (fastify, opts) {
             }
 
             // Create new submission tracking record
-            const submission = new Submission({
+            const submission = new ActiveSubmissionModel({
                 student: studentId,
                 round: roundId,
                 status: 'IN_PROGRESS',
@@ -635,12 +653,17 @@ module.exports = async function (fastify, opts) {
         const studentId = request.user.userId;
 
         try {
-            const round = await Round.findById(roundId);
+            const { getRoundById, getRoundsCache } = require('../services/cacheService');
+            const round = getRoundById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const isPractice = round.type === 'PRACTICE';
+            const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
 
             let nextRoundId = null;
             if (round.testGroupId) {
-                const nextRound = await Round.findOne({ testGroupId: round.testGroupId, roundOrder: round.roundOrder + 1 });
+                const rounds = getRoundsCache();
+                const nextRound = rounds.find(r => r.testGroupId === round.testGroupId && r.roundOrder === round.roundOrder + 1);
                 if (nextRound) nextRoundId = nextRound._id;
             }
 
@@ -658,7 +681,7 @@ module.exports = async function (fastify, opts) {
             }
 
             // Find the active IN_PROGRESS submission for this student and round
-            const submission = await Submission.findOne({
+            const submission = await ActiveSubmissionModel.findOne({
                 student: studentId,
                 round: roundId,
                 status: 'IN_PROGRESS'
@@ -722,12 +745,15 @@ module.exports = async function (fastify, opts) {
             const answeredIds = Object.keys(parsedAnswers).filter(id => mongoose.Types.ObjectId.isValid(id));
 
             if (answeredIds.length > 0) {
-                const questionsToEval = await Question.find({ _id: { $in: answeredIds }, type: 'MCQ' });
-                for (const q of questionsToEval) {
-                    const studentAnswer = String(parsedAnswers[q._id.toString()] || '').trim();
-                    const correctAns = String(q.correctAnswer || '').trim();
-                    if (correctAns && studentAnswer === correctAns) {
-                        autoScore += (q.points || 0);
+                const { getFullQuestionById } = require('../services/cacheService');
+                for (const qId of answeredIds) {
+                    const q = getFullQuestionById(qId);
+                    if (q && q.type === 'MCQ') {
+                        const studentAnswer = String(parsedAnswers[qId] || '').trim();
+                        const correctAns = String(q.correctAnswer || '').trim();
+                        if (correctAns && studentAnswer === correctAns) {
+                            autoScore += (q.points || 0);
+                        }
                     }
                 }
             }
@@ -742,7 +768,9 @@ module.exports = async function (fastify, opts) {
 
             if (pdfUrl) submission.pdfUrl = pdfUrl;
 
-            await submission.save();
+            // Queue the submission for background batch processing
+            const { enqueueSubmission } = require('../services/submissionQueue');
+            enqueueSubmission(submission.toObject(), isPractice);
 
             // Log section submission
             await logActivity({
@@ -778,8 +806,12 @@ module.exports = async function (fastify, opts) {
         }
 
         try {
-            const round = await Round.findById(roundId);
+            const { getRoundById } = require('../services/cacheService');
+            const round = getRoundById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const isPractice = round.type === 'PRACTICE';
+            const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
 
             // Bypass anti-cheat checks for creative or practice rounds
             const isSecurityDisabled = round.type === 'UI_UX_CHALLENGE' || round.type === 'MINI_HACKATHON' || round.type === 'PRACTICE';
@@ -787,7 +819,7 @@ module.exports = async function (fastify, opts) {
                 return reply.send({ success: true, message: 'Cheat monitoring disabled for this round type' });
             }
 
-            const submission = await Submission.findOne({
+            const submission = await ActiveSubmissionModel.findOne({
                 student: userId,
                 round: roundId,
                 status: 'IN_PROGRESS'
@@ -870,10 +902,18 @@ module.exports = async function (fastify, opts) {
         }
 
         try {
-            const round = await Round.findById(roundId);
+            const { getRoundById } = require('../services/cacheService');
+            const round = getRoundById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
-            const submission = await Submission.findOne({ student: studentId, round: roundId });
+            const isPractice = round.type === 'PRACTICE';
+            const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
+
+            const submission = await ActiveSubmissionModel.findOne({
+                student: studentId,
+                round: roundId,
+                status: 'IN_PROGRESS'
+            });
 
             if (!submission) {
                 return reply.code(403).send({ error: 'Access denied. You must start the round first.' });
@@ -894,22 +934,24 @@ module.exports = async function (fastify, opts) {
             const Question = require('../models/Question');
             let assignedQuestions;
 
+            const { getFullQuestionById } = require('../services/cacheService');
+
             if (submission.assignedQuestions && submission.assignedQuestions.length > 0) {
-                // Student already has an assigned set — return it in the saved order
-                const qMap = {};
-                const allQ = await Question.find({ _id: { $in: submission.assignedQuestions } });
-                allQ.forEach(q => { qMap[q._id.toString()] = q; });
+                // Student already has an assigned set — return it purely from RAM
                 assignedQuestions = submission.assignedQuestions
-                    .map(id => qMap[id.toString()])
+                    .map(id => {
+                        const q = getFullQuestionById(id);
+                        if (!q) return null;
+                        const publicQ = { ...q };
+                        delete publicQ.correctAnswer;
+                        return publicQ;
+                    })
                     .filter(Boolean);
             } else {
                 // First load: build and persist the student's question set
-                const allQuestions = await Question.find({
-                    $or: [
-                        { round: roundId },
-                        { linkedRounds: roundId }
-                    ]
-                }).sort({ order: 1 });
+                // Fetch questions for this round from RAM Cache (O(1))
+                const { getQuestionsByRound } = require('../services/cacheService');
+                const allQuestions = getQuestionsByRound(roundId);
 
                 // Group the available questions by their type field
                 const groupedQuestions = {
@@ -986,7 +1028,7 @@ module.exports = async function (fastify, opts) {
 
                 // Persist the assignment so reconnects return the same set
                 submission.assignedQuestions = selected.map(q => q._id);
-                await submission.save();
+                await submission.save(); // Direct save for first-load assignment
                 assignedQuestions = selected;
             }
 
@@ -1058,8 +1100,19 @@ module.exports = async function (fastify, opts) {
         const studentId = request.user.userId;
 
         try {
-            const submission = await Submission.findOne({ student: studentId, round: roundId });
-            if (!submission) return reply.code(404).send({ error: 'Submission not found' });
+            const { getRoundById } = require('../services/cacheService');
+            const round = getRoundById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            const isPractice = round.type === 'PRACTICE';
+            const ActiveSubmissionModel = isPractice ? PracticeSubmission : Submission;
+
+            const submission = await ActiveSubmissionModel.findOne({
+                student: studentId,
+                round: roundId,
+                status: 'IN_PROGRESS'
+            });
+            if (!submission) return reply.code(404).send({ error: 'Active submission session not found or already submitted.' });
 
             if (submission.status !== 'IN_PROGRESS') {
                 // Silently return success to avoid noisy frontend errors once the session is done

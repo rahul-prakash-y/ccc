@@ -58,7 +58,15 @@ const closeServer = async (signal) => {
     try {
         // Close Fastify HTTP connections first
         await fastify.close();
-        fastify.log.info('Fastify server closed.');
+        fastify.log.info('Fastify server closed. No new requests will be accepted.');
+
+        // ─── Task 2: Drain Submission Queue ──────────────────────────────────
+        // Ensures any pending student submissions in RAM are flushed to MongoDB
+        // before the process exits.
+        const { flushNow } = require('./services/submissionQueue');
+        fastify.log.info('Flushing in-memory submission queue to MongoDB...');
+        await flushNow();
+        fastify.log.info('Submission queue drained.');
 
         // Safely drain the MongoDB connection pool
         if (mongoose.connection.readyState === 1) {
@@ -88,6 +96,20 @@ const start = async () => {
             family: 4 // Force IPv4
         });
         fastify.log.info('MongoDB Connected with optimized PoolSize 🚀');
+
+        // ─── Task 3: Boot-Time Hydration ──────────────────────────────────
+        // Pre-fetches static data (Rounds, Questions) to RAM to survive 
+        // high-concurrency spikes on the student dashboard.
+        const { hydrateStaticData } = require('./services/cacheService');
+        const { hydrateRankingCache } = require('./utils/eligibility');
+        await Promise.all([
+            hydrateStaticData(),
+            hydrateRankingCache()
+        ]);
+
+        // ─── Task 1: Start Background Workers ──────────────────────────────────
+        const { startSubmissionQueue } = require('./services/submissionQueue');
+        startSubmissionQueue();
 
         // Start Node.js Server
         const port = process.env.PORT || 5000;
