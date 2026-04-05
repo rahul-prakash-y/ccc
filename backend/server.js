@@ -1,5 +1,8 @@
 require('dotenv').config();
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ 
+    logger: true,
+    bodyLimit: 10 * 1024 * 1024 // 10MB limit (default is 1MB)
+});
 const mongoose = require('mongoose');
 const fastifyStatic = require("@fastify/static");
 const path = require("path");

@@ -138,7 +138,15 @@ const StudentDashboard = () => {
             return;
         }
 
-        if (round.status === 'WAITING_FOR_OTP' || (round.status === 'RUNNING' && !round.mySubmissionStatus)) {
+        const canReenterPractice = round.type === 'PRACTICE' && (round.attemptCount || 0) < 3;
+
+        // Open OTP gate if:
+        // 1. Round is awaiting OTP
+        // 2. Round is running AND (student hasn't started OR it's a practice test with available attempts)
+        const shouldShowOtp = round.status === 'WAITING_FOR_OTP' || 
+                             (round.status === 'RUNNING' && (!round.mySubmissionStatus || (canReenterPractice && round.mySubmissionStatus !== 'IN_PROGRESS')));
+
+        if (shouldShowOtp) {
             setSelectedRound(round);
             setIsOtpOpen(true);
         } else if (round.status === 'RUNNING' || round.mySubmissionStatus === 'IN_PROGRESS') {
@@ -295,16 +303,29 @@ const StudentDashboard = () => {
                                 };
 
                                 if (isEligible && (round.mySubmissionStatus === 'SUBMITTED' || round.mySubmissionStatus === 'COMPLETED')) {
-                                    config = {
-                                        ...statusConfig['COMPLETED'],
-                                        label: round.mySubmissionStatus === 'SUBMITTED' ? 'Response Locked' : 'Mission Accomplished'
-                                    };
+                                    if (round.type === 'PRACTICE' && (round.attemptCount || 0) < 3) {
+                                        config = {
+                                            ...statusConfig['RUNNING'],
+                                            label: `PRACTICE: ${round.attemptCount || 0}/3 DONE`,
+                                            badge: 'bg-amber-100 text-amber-700 border-amber-200'
+                                        };
+                                    } else {
+                                        config = {
+                                            ...statusConfig['COMPLETED'],
+                                            label: round.mySubmissionStatus === 'SUBMITTED' ? 'Response Locked' : 'Mission Accomplished'
+                                        };
+                                    }
                                 }
 
                                 const Icon = config.icon;
                                 const windowStatus = getTimeWindowStatus(round);
                                 const isWindowRestricted = windowStatus?.type === 'WAITING' || (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS');
-                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && isEligible && !isWindowRestricted;
+                                
+                                const canReenterPractice = round.type === 'PRACTICE' && (round.attemptCount || 0) < 3;
+                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && 
+                                                      isEligible && 
+                                                      (!isWindowRestricted || (canReenterPractice && round.mySubmissionStatus !== 'IN_PROGRESS'));
+                                                      
                                 const isLive = round.status === 'RUNNING' && isEligible && !isWindowRestricted;
 
                                 return (
@@ -350,11 +371,24 @@ const StudentDashboard = () => {
                                                         <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                                                             <Clock size={14} className="text-slate-400" />
                                                             {round.testDurationMinutes || round.durationMinutes} Minutes Limit
+                                                            {round.type === 'PRACTICE' && (
+                                                                <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md text-[10px] font-black tracking-widest border border-amber-100 uppercase ml-auto">
+                                                                    Attempt {round.attemptCount || 0}/3
+                                                                </span>
+                                                            )}
                                                             {round.totalSections > 1 && (
                                                                 <>
                                                                     <span className="text-slate-300">|</span>
                                                                     <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
                                                                         {round.totalSections} Sections
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                            {round.myScore !== null && (
+                                                                <>
+                                                                    <span className="text-slate-300">|</span>
+                                                                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 rounded-md border border-emerald-100">
+                                                                        Score: {round.myScore.toFixed(2)}
                                                                     </span>
                                                                 </>
                                                             )}

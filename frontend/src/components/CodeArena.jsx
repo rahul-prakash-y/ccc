@@ -67,13 +67,13 @@ const CodeArena = ({ language = 'javascript' }) => {
     }, [roundId, updateUser]);
 
 
-    // Determine if this is a creative round (UI/UX or Hackathon).
-    // For creative rounds, copy/paste/right-click are allowed so students can submit links.
-    const isCreativeRound = roundInfo?.type === 'UI_UX_CHALLENGE' || roundInfo?.type === 'MINI_HACKATHON';
+    // Determine if this is a creative or practice round.
+    // For these rounds, copy/paste/right-click are allowed for ease of use or utility.
+    const isSecurityDisabled = roundInfo?.type === 'UI_UX_CHALLENGE' || roundInfo?.type === 'MINI_HACKATHON' || roundInfo?.type === 'PRACTICE';
 
     useEffect(() => {
-        // Do NOT block clipboard or context menu for creative rounds — students need to paste URLs.
-        if (isCreativeRound) return;
+        // Do NOT block clipboard or context menu for these rounds.
+        if (isSecurityDisabled) return;
 
         const handlePaste = (e) => {
             e.preventDefault();
@@ -110,7 +110,7 @@ const CodeArena = ({ language = 'javascript' }) => {
             window.removeEventListener('contextmenu', blockAction, { capture: true });
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
         };
-    }, [handleCheatDetected, isCreativeRound]);
+    }, [handleCheatDetected, isSecurityDisabled]);
 
     // --- Data Loading ---
     useEffect(() => {
@@ -173,8 +173,8 @@ const CodeArena = ({ language = 'javascript' }) => {
         durationMinutes: roundInfo?.durationMinutes || 60,
         extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        // Disable cheat detection entirely for creative rounds (UI/UX, Mini Hackathon)
-        onCheatDetected: isCreativeRound ? null : handleCheatDetected
+        // Disable cheat detection entirely for specific round types
+        onCheatDetected: isSecurityDisabled ? null : handleCheatDetected
     });
 
     const { saveStatus } = useAutoSave(answers, roundId, 60000, isTimeUp || isBanned, (responsePayload) => {

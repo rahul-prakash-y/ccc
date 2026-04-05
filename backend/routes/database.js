@@ -69,21 +69,33 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
-     * PUT /api/database/:collection/:id
-     * Update a document in a collection
+     * PUT/PATCH /api/database/:collection/:id
+     * Update a document in a collection (supports partial updates)
      */
-    fastify.put('/:collection/:id', async (request, reply) => {
-        const { collection, id } = request.params;
-        const data = request.body;
+    fastify.route({
+        method: ['PUT', 'PATCH'],
+        url: '/:collection/:id',
+        handler: async (request, reply) => {
+            const { collection, id } = request.params;
+            const data = request.body;
 
-        try {
-            const Model = mongoose.connection.models[collection] || mongoose.model(collection, new mongoose.Schema({}, { strict: false }), collection);
-            const updatedDoc = await Model.findByIdAndUpdate(id, data, { new: true });
-            if (!updatedDoc) return reply.code(404).send({ error: 'Document not found' });
-            return { success: true, document: updatedDoc };
-        } catch (error) {
-            fastify.log.error(error);
-            return reply.code(500).send({ error: `Failed to update document in ${collection}` });
+            try {
+                const Model = mongoose.connection.models[collection] || mongoose.model(collection, new mongoose.Schema({}, { strict: false }), collection);
+                
+                // Remove immutable/meta fields from the update payload if present
+                const updateData = { ...data };
+                delete updateData._id;
+                delete updateData.createdAt;
+                delete updateData.updatedAt;
+                delete updateData.__v;
+
+                const updatedDoc = await Model.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true });
+                if (!updatedDoc) return reply.code(404).send({ error: 'Document not found' });
+                return { success: true, document: updatedDoc };
+            } catch (error) {
+                fastify.log.error(error);
+                return reply.code(500).send({ error: `Failed to update document in ${collection}` });
+            }
         }
     });
 

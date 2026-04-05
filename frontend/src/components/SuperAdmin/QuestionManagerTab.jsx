@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, X, Check, Filter, Loader2,
-    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon, Download, Upload, FileSpreadsheet
+    ChevronDown, AlertTriangle, Eye, EyeOff, BookOpen, ClipboardCheck, Import, Search, User as UserIcon, Download, Upload, FileSpreadsheet,
+    Sparkles
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';

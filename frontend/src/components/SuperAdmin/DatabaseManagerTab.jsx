@@ -176,7 +176,26 @@ const DatabaseManagerTab = () => {
       }
 
       if (currentDoc) {
-        await axios.put(`${API_BASE}/${selectedCollection}/${currentDoc._id}`, payload, {
+        // Compute diff to send only changed fields
+        const diff = {};
+        Object.keys(payload).forEach(key => {
+          if (key === '_id' || key === 'createdAt' || key === 'updatedAt' || key === '__v') return;
+          
+          const original = JSON.stringify(currentDoc[key]);
+          const updated = JSON.stringify(payload[key]);
+          
+          if (original !== updated) {
+            diff[key] = payload[key];
+          }
+        });
+
+        if (Object.keys(diff).length === 0) {
+          toast.info('No changes detected');
+          setIsModalOpen(false);
+          return;
+        }
+
+        await axios.patch(`${API_BASE}/${selectedCollection}/${currentDoc._id}`, diff, {
           headers: { Authorization: `Bearer ${token}` }
         });
         toast.success('Document updated successfully');

@@ -29,13 +29,13 @@ module.exports = async function (fastify, opts) {
             const studentId = request.user.userId;
 
             // Find all rounds that have certificates released and a template assigned in DB
-            const rounds = await Round.find({ 
+            const rounds = await Round.find({
                 certificatesReleased: true,
                 'certificateTemplate.contentType': { $exists: true, $ne: null }
             })
-            .select('-certificateTemplate.data -startOtp -endOtp -otpIssuedAt')
-            .lean();
-            
+                .select('-certificateTemplate.data -startOtp -endOtp -otpIssuedAt')
+                .lean();
+
             if (!rounds.length) return reply.send({ success: true, data: [] });
 
             const roundIds = rounds.map(r => r._id);
@@ -45,8 +45,8 @@ module.exports = async function (fastify, opts) {
             const certificates = [];
 
             for (const round of rounds) {
-                const submission = await Submission.findOne({ 
-                    student: studentId, 
+                const submission = await Submission.findOne({
+                    student: studentId,
                     round: round._id,
                     status: { $in: ['SUBMITTED', 'COMPLETED'] }
                 });
@@ -54,17 +54,17 @@ module.exports = async function (fastify, opts) {
                 if (!submission) continue;
 
                 let isWinner = submission.hasCertificate;
-                
+
                 if (!isWinner) {
                     // Fallback check if flag not set (e.g. recalculated by admin later)
-                    const topSubmissions = await Submission.find({ 
-                        round: round._id, 
-                        status: { $in: ['SUBMITTED', 'COMPLETED'] } 
+                    const topSubmissions = await Submission.find({
+                        round: round._id,
+                        status: { $in: ['SUBMITTED', 'COMPLETED'] }
                     })
-                    .sort({ score: -1 })
-                    .limit(round.winnerLimit || 10)
-                    .select('student');
-                    
+                        .sort({ score: -1 })
+                        .limit(round.winnerLimit || 10)
+                        .select('student');
+
                     isWinner = topSubmissions.some(s => s.student.toString() === studentId);
                 }
 
@@ -109,13 +109,28 @@ module.exports = async function (fastify, opts) {
             const roundIds = rounds.map(r => r._id);
 
             // ── 2. Fetch ALL of this student's submissions for these rounds at once ─
+            // Sort by attemptNumber ascending so latest ones overwrite in the lookup map
             const submissions = await Submission.find({ student: studentId, round: { $in: roundIds } })
-                .select('status score hasCertificate round')
+                .select('status score hasCertificate round attemptNumber')
+                .sort({ attemptNumber: 1 })
                 .lean();
 
             // Index by roundId for O(1) lookup
             const submissionByRound = {};
-            submissions.forEach(s => { submissionByRound[s.round.toString()] = s; });
+            const attemptCountByRound = {};
+            const bestScoreByRound = {};
+            
+            submissions.forEach(s => { 
+                submissionByRound[s.round.toString()] = s; 
+                attemptCountByRound[s.round.toString()] = (attemptCountByRound[s.round.toString()] || 0) + 1;
+                
+                // Track best score specifically for completed submissions
+                if (s.status === 'COMPLETED' || s.status === 'SUBMITTED') {
+                    if (bestScoreByRound[s.round.toString()] === undefined || (s.score || 0) > bestScoreByRound[s.round.toString()]) {
+                        bestScoreByRound[s.round.toString()] = s.score || 0;
+                    }
+                }
+            });
 
             // ── 3. Only call getStudentRank if there's at least one capped round ──
             // (skips the expensive aggregation in the common case of no maxParticipants)
@@ -129,6 +144,7 @@ module.exports = async function (fastify, opts) {
             // ── 4. Compute per-round data purely in-memory ────────────────────────
             const enrichedRounds = rounds.map(round => {
                 const submission = submissionByRound[round._id.toString()] || null;
+                const bestScore = bestScoreByRound[round._id.toString()];
 
                 // Eligibility check (fast in-memory)
                 let eligibility;
@@ -157,6 +173,8 @@ module.exports = async function (fastify, opts) {
                 return {
                     ...round,
                     mySubmissionStatus: submission ? submission.status : null,
+                    myScore: (round.type === 'PRACTICE' || round.type === 'UI_UX_CHALLENGE' || round.type === 'MINI_HACKATHON') && bestScore !== undefined ? bestScore : null,
+                    attemptCount: attemptCountByRound[round._id.toString()] || 0,
                     eligibility,
                     isWinner,
                     hasCertificate: !!(isWinner && round.certificateTemplate?.contentType)
@@ -205,7 +223,7 @@ module.exports = async function (fastify, opts) {
             const templateFile = round.certificateTemplate;
 
             if (!templateFile || !templateFile.data) return reply.code(400).send({ error: 'Certificate template not assigned or missing in DB for this round.' });
-            
+
             const templateBuffer = templateFile.data;
             const contentType = templateFile.contentType || 'image/png';
 
@@ -219,20 +237,20 @@ module.exports = async function (fastify, opts) {
                 const pdfDoc = await PDFLibDoc.load(templateBuffer);
                 const { StandardFonts, rgb } = require('pdf-lib');
                 const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-                
+
                 const pages = pdfDoc.getPages();
                 const firstPage = pages[0];
                 const { width, height } = firstPage.getSize();
-                
+
                 const fontSize = 40;
                 const textWidth = helveticaFont.widthOfTextAtSize(studentName, fontSize);
-                
+
                 firstPage.drawText(studentName, {
                     x: (width - textWidth) / 2,
                     y: height / 2.2,
                     size: fontSize,
                     font: helveticaFont,
-                    color: rgb(30/255, 41/255, 59/255) // #1e293b
+                    color: rgb(30 / 255, 41 / 255, 59 / 255) // #1e293b
                 });
 
                 pdfBuffer = Buffer.from(await pdfDoc.save());
@@ -503,20 +521,34 @@ module.exports = async function (fastify, opts) {
             }
 
             // Check if student already has a submission for this round first
-            let submission = await Submission.findOne({ student: studentId, round: roundId });
+            let submissions = await Submission.find({ student: studentId, round: roundId }).sort({ attemptNumber: -1 });
+            let lastSubmission = submissions[0];
 
-            if (submission) {
-                if (submission.status === 'SUBMITTED' || submission.status === 'DISQUALIFIED') {
+            if (lastSubmission) {
+                if (lastSubmission.status === 'IN_PROGRESS') {
+                    // Resume existing active attempt
+                    return reply.code(200).send({
+                        success: true,
+                        message: 'Round resumed successfully',
+                        startTime: lastSubmission.startTime,
+                        durationMinutes: round.testDurationMinutes || round.durationMinutes,
+                        extraTimeMinutes: lastSubmission.extraTimeMinutes || 0
+                    });
+                }
+
+                // If it was submitted or disqualified, check if we can start a NEW attempt for PRACTICE tests
+                if (round.type === 'PRACTICE') {
+                    if (submissions.length >= 3) {
+                        return reply.code(403).send({
+                            error: 'Practice Limit Reached',
+                            message: 'You have already reached the maximum of 3 practice attempts for this round.'
+                        });
+                    }
+                    // Prepare details for a new attempt
+                    submissionDetails.attemptNumber = submissions.length + 1;
+                } else {
                     return reply.code(403).send({ error: 'You have already completed or been disqualified from this round' });
                 }
-                // If IN_PROGRESS, they might be resuming after a crash. We just return the existing start time.
-                return reply.code(200).send({
-                    success: true,
-                    message: 'Round resumed successfully',
-                    startTime: submission.startTime,
-                    durationMinutes: round.testDurationMinutes || round.durationMinutes,
-                    extraTimeMinutes: submission.extraTimeMinutes || 0
-                });
             }
 
             // If no existing submission, check authorization
@@ -561,7 +593,7 @@ module.exports = async function (fastify, opts) {
             }
 
             // Create new submission tracking record
-            submission = new Submission({
+            const submission = new Submission({
                 student: studentId,
                 round: roundId,
                 status: 'IN_PROGRESS',
@@ -625,9 +657,15 @@ module.exports = async function (fastify, opts) {
                 if (!validOtpDoc) return reply.code(401).send({ error: 'Invalid End OTP' });
             }
 
-            const submission = await Submission.findOne({ student: studentId, round: roundId });
+            // Find the active IN_PROGRESS submission for this student and round
+            const submission = await Submission.findOne({
+                student: studentId,
+                round: roundId,
+                status: 'IN_PROGRESS'
+            });
+
             if (!submission) {
-                return reply.code(400).send({ error: 'No active session found for this round' });
+                return reply.code(400).send({ error: 'No active session found for this round. You may have already submitted or timed out.' });
             }
 
             if (submission.status === 'SUBMITTED') {
@@ -740,8 +778,21 @@ module.exports = async function (fastify, opts) {
         }
 
         try {
-            const submission = await Submission.findOne({ student: userId, round: roundId });
-            if (!submission) return reply.code(404).send({ error: 'Submission session not found' });
+            const round = await Round.findById(roundId);
+            if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Bypass anti-cheat checks for creative or practice rounds
+            const isSecurityDisabled = round.type === 'UI_UX_CHALLENGE' || round.type === 'MINI_HACKATHON' || round.type === 'PRACTICE';
+            if (isSecurityDisabled) {
+                return reply.send({ success: true, message: 'Cheat monitoring disabled for this round type' });
+            }
+
+            const submission = await Submission.findOne({
+                student: userId,
+                round: roundId,
+                status: 'IN_PROGRESS'
+            });
+            if (!submission) return reply.code(404).send({ error: 'Active submission session not found' });
 
             const user = await User.findById(userId);
             if (!user) return reply.code(404).send({ error: 'User not found' });
