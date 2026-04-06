@@ -112,34 +112,6 @@ function App() {
             <Toaster position="top-right" />
             <ConfirmModal />
             <AppRoutes />
-            <div 
-                style={{
-                    position: 'fixed',
-                    bottom: '1.5rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    fontSize: '11px',
-                    fontWeight: '800',
-                    color: '#64748b', // slate-500
-                    background: 'rgba(255, 255, 255, 0.4)', 
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    padding: '6px 14px',
-                    borderRadius: '14px',
-                    zIndex: 9999,
-                    pointerEvents: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)',
-                    border: '1px solid rgba(226, 232, 240, 0.5)', // slate-200
-                    fontFamily: '"Sen", sans-serif',
-                    letterSpacing: '0.025em',
-                    textTransform: 'uppercase'
-                }}
-            >
-                Website Created by <span style={{ color: '#4f46e5' }}>RCB Fan boy</span> ❤️
-            </div>
         </Router>
     );
 }
