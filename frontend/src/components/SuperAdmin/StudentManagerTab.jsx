@@ -4,7 +4,7 @@ import {
     Plus, Loader2, AlertTriangle, X, Check, Eye, Mail, Phone, FileText,
     Users, UserX, UserCheck, KeyRound, LogIn, Trash2, Search, Upload,
     Linkedin, Github, Calendar, Download,
-    Send, CheckCircle
+    Send, CheckCircle, Edit2, Save
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -688,16 +688,45 @@ const ResetStudentPasswordModal = ({ student, onClose }) => {
     );
 };
 
-const StudentDetailsModal = ({ student,    onClose,
-    onUpdate
-}) => {
+const StudentDetailsModal = ({ student, onClose }) => {
+    const updateStudentInStore = useStudentStore(state => state.updateStudent);
+    const { teams } = useTeamStore();
     const [downloading, setDownloading] = useState(false);
     const [publishing, setPublishing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [isPublished, setIsPublished] = useState(student.isReportPublished || false);
+    const [formData, setFormData] = useState({
+        name: student.name || '',
+        email: student.email || '',
+        phone: student.phone || '',
+        department: student.department || '',
+        team: student.team?._id || student.team || '',
+        bio: student.bio || '',
+        linkedinProfile: student.linkedinProfile || '',
+        githubProfile: student.githubProfile || '',
+        dob: student.dob ? new Date(student.dob).toISOString().split('T')[0] : ''
+    });
 
     useEffect(() => {
         setIsPublished(student.isReportPublished || false);
     }, [student.isReportPublished]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const res = await api.patch(`${API}/students/${student._id}`, formData);
+            if (res.data.success) {
+                updateStudentInStore(student._id, res.data.data);
+                toast.success('Student details updated successfully');
+                setIsEditing(false);
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.error || "Failed to save details");
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handlePublishToggle = async () => {
         setPublishing(true);
@@ -707,7 +736,7 @@ const StudentDetailsModal = ({ student,    onClose,
             });
             setIsPublished(res.data.isReportPublished);
             toast.success(`Report ${res.data.isReportPublished ? 'published' : 'unpublished'} successfully`);
-            if (onUpdate) onUpdate();
+            updateStudentInStore(student._id, { isReportPublished: res.data.isReportPublished });
         } catch (err) {
             toast.error(err.response?.data?.error || "Failed to update publication status");
         } finally {
@@ -766,7 +795,14 @@ const StudentDetailsModal = ({ student,    onClose,
                             <div className="absolute bottom-0 right-0 w-48 h-48 bg-indigo-300 rounded-full blur-3xl translate-x-1/4 translate-y-1/4" />
                         </div>
                         
-                        <div className="absolute top-6 right-6 z-10">
+                        <div className="absolute top-6 right-6 z-10 flex items-center gap-2">
+                            <button 
+                                onClick={() => setIsEditing(!isEditing)} 
+                                className={`${isEditing ? 'bg-white text-indigo-600' : 'text-white/80 bg-white/10'} hover:bg-white/20 backdrop-blur-md p-2 rounded-2xl transition-all border border-white/10 active:scale-90 flex items-center gap-2 px-3`}
+                            >
+                                {isEditing ? <X size={16} /> : <Edit2 size={16} />}
+                                <span className="text-[10px] font-black uppercase tracking-widest">{isEditing ? 'Cancel' : 'Edit'}</span>
+                            </button>
                             <button 
                                 onClick={onClose} 
                                 className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 backdrop-blur-md p-2 rounded-2xl transition-all border border-white/10 active:scale-90"
@@ -790,14 +826,32 @@ const StudentDetailsModal = ({ student,    onClose,
                             </div>
                             
                             <div className="flex-1 pb-2">
-                                <h2 className="text-3xl font-black text-white tracking-tight leading-tight">
-                                    {student.name || 'Anonymous Student'}
-                                </h2>
+                                {isEditing ? (
+                                    <input 
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        className="bg-indigo-700/30 border border-white/30 rounded-xl px-3 py-2 text-white text-2xl font-black focus:outline-none focus:ring-2 focus:ring-white/50 w-full placeholder:text-white/40"
+                                        placeholder="Full Name"
+                                    />
+                                ) : (
+                                    <h2 className="text-3xl font-black text-white tracking-tight leading-tight">
+                                        {student.name || 'Anonymous Student'}
+                                    </h2>
+                                )}
                                 <div className="flex flex-wrap items-center gap-2 mt-2">
                                     <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-indigo-100 shadow-sm">
                                         {student.studentId}
                                     </span>
-                                    {student.department && (
+                                    {isEditing ? (
+                                        <input 
+                                            type="text"
+                                            value={formData.department}
+                                            onChange={e => setFormData({ ...formData, department: e.target.value })}
+                                            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="Department"
+                                        />
+                                    ) : student.department && (
                                         <span className="px-3 py-1 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200">
                                             {student.department}
                                         </span>
@@ -810,7 +864,19 @@ const StudentDetailsModal = ({ student,    onClose,
                         <div className="max-h-[calc(100vh-280px)] overflow-y-auto pr-2 custom-scrollbar space-y-4">
                             {/* Details Column */}
                             <div className="space-y-4">
-                                {student.bio && (
+                                {isEditing ? (
+                                    <div className="p-4 bg-indigo-50/30 rounded-2xl border border-indigo-100">
+                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                            <FileText size={12} /> Executive Summary
+                                        </h3>
+                                        <textarea 
+                                            value={formData.bio}
+                                            onChange={e => setFormData({ ...formData, bio: e.target.value })}
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600 font-medium h-24 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="Write a short summary about the student..."
+                                        />
+                                    </div>
+                                ) : student.bio && (
                                     <div className="relative p-4 bg-slate-50/50 rounded-2xl border border-slate-100 overflow-hidden">
                                         <div className="absolute top-0 right-0 p-3 opacity-5 pointer-events-none">
                                             <FileText size={32} />
@@ -832,27 +898,54 @@ const StudentDetailsModal = ({ student,    onClose,
                                         </h3>
                                         <div className="space-y-2">
                                             <div className="flex items-center gap-3 group">
-                                                <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                                <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400">
                                                     <Mail size={12} />
                                                 </div>
-                                                <span className="text-xs font-bold text-slate-700 truncate">{student.email || 'No email registered'}</span>
+                                                {isEditing ? (
+                                                    <input 
+                                                        type="email"
+                                                        value={formData.email}
+                                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                                        className="text-xs font-bold text-slate-700 bg-slate-50 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                    />
+                                                ) : (
+                                                    <span className="text-xs font-bold text-slate-700 truncate">{student.email || 'No email registered'}</span>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-3 group">
-                                                <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                                                <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400">
                                                     <Phone size={12} />
                                                 </div>
-                                                <span className="text-xs font-bold text-slate-700">{student.phone || 'No phone registered'}</span>
+                                                {isEditing ? (
+                                                    <input 
+                                                        type="text"
+                                                        value={formData.phone}
+                                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                                        className="text-xs font-bold text-slate-700 bg-slate-50 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                    />
+                                                ) : (
+                                                    <span className="text-xs font-bold text-slate-700">{student.phone || 'No phone registered'}</span>
+                                                )}
                                             </div>
-                                            {student.dob && (
+                                            {(isEditing || student.dob) && (
                                                 <div className="flex items-center gap-3 group">
-                                                    <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400 group-hover:bg-amber-50 group-hover:text-amber-600 transition-colors">
+                                                    <div className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400">
                                                         <Calendar size={12} />
                                                     </div>
-                                                    <span className="text-xs font-bold text-slate-700">
-                                                        {new Date(student.dob).toLocaleDateString('en-IN', {
-                                                            timeZone: 'Asia/Kolkata', month: 'long', day: 'numeric', year: 'numeric'
-                                                        })}
-                                                    </span>
+                                                    {isEditing ? (
+                                                        <input 
+                                                            type="date"
+                                                            value={formData.dob}
+                                                            onChange={e => setFormData({ ...formData, dob: e.target.value })}
+                                                            className="text-xs font-bold text-slate-700 bg-slate-50 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xs font-bold text-slate-700">
+                                                            {new Date(student.dob).toLocaleDateString('en-IN', {
+                                                                timeZone: 'Asia/Kolkata', month: 'long', day: 'numeric', year: 'numeric'
+                                                            })}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -863,64 +956,102 @@ const StudentDetailsModal = ({ student,    onClose,
                                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                             <Users size={12} className="text-indigo-500" /> Digital Identity
                                         </h3>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {student.linkedinProfile && (
-                                                <a href={student.linkedinProfile} target="_blank" rel="noopener noreferrer" 
-                                                   className="flex flex-col items-center justify-center p-2.5 bg-blue-50/50 border border-blue-100/50 rounded-xl text-blue-700 hover:bg-blue-600 hover:text-white transition-all group shadow-sm active:scale-95">
-                                                    <Linkedin size={18} className="mb-1" />
-                                                    <span className="text-[9px] font-black uppercase tracking-tight">LinkedIn</span>
-                                                </a>
-                                            )}
-                                            {student.githubProfile && (
-                                                <a href={student.githubProfile} target="_blank" rel="noopener noreferrer" 
-                                                   className="flex flex-col items-center justify-center p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white hover:bg-slate-700 transition-all group shadow-sm active:scale-95">
-                                                    <Github size={18} className="mb-1" />
-                                                    <span className="text-[9px] font-black uppercase tracking-tight">GitHub</span>
-                                                </a>
-                                            )}
-                                            {!student.linkedinProfile && !student.githubProfile && (
-                                                <div className="col-span-2 py-2 flex flex-col items-center justify-center text-slate-400 italic">
-                                                    <span className="text-[10px]">No links shared</span>
+                                        {isEditing ? (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Linkedin size={14} className="text-blue-600" />
+                                                    <input 
+                                                        type="text"
+                                                        value={formData.linkedinProfile}
+                                                        onChange={e => setFormData({ ...formData, linkedinProfile: e.target.value })}
+                                                        className="text-[10px] font-bold text-slate-700 bg-slate-50 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                        placeholder="LinkedIn URL"
+                                                    />
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center justify-between pt-1">
-                                            <div className="flex flex-col">
-                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Status</span>
-                                                <div className="flex items-center gap-1 mt-0.5">
-                                                    <div className={`w-1 h-1 rounded-full ${student.isBanned ? 'bg-red-500 pulse' : 'bg-emerald-500'}`} />
-                                                    <span className="text-[9px] font-black text-slate-600 uppercase">{student.isBanned ? 'Blocked' : 'Active'}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <Github size={14} className="text-slate-900" />
+                                                    <input 
+                                                        type="text"
+                                                        value={formData.githubProfile}
+                                                        onChange={e => setFormData({ ...formData, githubProfile: e.target.value })}
+                                                        className="text-[10px] font-bold text-slate-700 bg-slate-50 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                        placeholder="GitHub URL"
+                                                    />
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Entry</span>
-                                                <div className="flex items-center gap-1 mt-0.5">
-                                                    <span className={`text-[9px] font-black uppercase ${student.isOnboarded ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                        {student.isOnboarded ? 'Ready' : 'Pending'}
-                                                    </span>
-                                                    <Check size={8} className={student.isOnboarded ? 'text-emerald-500' : 'text-slate-300'} />
+                                        ) : (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {student.linkedinProfile && (
+                                                        <a href={student.linkedinProfile} target="_blank" rel="noopener noreferrer" 
+                                                           className="flex flex-col items-center justify-center p-2.5 bg-blue-50/50 border border-blue-100/50 rounded-xl text-blue-700 hover:bg-blue-600 hover:text-white transition-all group shadow-sm active:scale-95">
+                                                            <Linkedin size={18} className="mb-1" />
+                                                            <span className="text-[9px] font-black uppercase tracking-tight">LinkedIn</span>
+                                                        </a>
+                                                    )}
+                                                    {student.githubProfile && (
+                                                        <a href={student.githubProfile} target="_blank" rel="noopener noreferrer" 
+                                                           className="flex flex-col items-center justify-center p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white hover:bg-slate-700 transition-all group shadow-sm active:scale-95">
+                                                            <Github size={18} className="mb-1" />
+                                                            <span className="text-[9px] font-black uppercase tracking-tight">GitHub</span>
+                                                        </a>
+                                                    )}
+                                                    {!student.linkedinProfile && !student.githubProfile && (
+                                                        <div className="col-span-2 py-2 flex flex-col items-center justify-center text-slate-400 italic">
+                                                            <span className="text-[10px]">No links shared</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        </div>
+                                                <div className="flex items-center justify-between pt-1">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Status</span>
+                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                            <div className={`w-1 h-1 rounded-full ${student.isBanned ? 'bg-red-500 pulse' : 'bg-emerald-500'}`} />
+                                                            <span className="text-[9px] font-black text-slate-600 uppercase">{student.isBanned ? 'Blocked' : 'Active'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Entry</span>
+                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                            <span className={`text-[9px] font-black uppercase ${student.isOnboarded ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                {student.isOnboarded ? 'Ready' : 'Pending'}
+                                                            </span>
+                                                            <Check size={8} className={student.isOnboarded ? 'text-emerald-500' : 'text-slate-300'} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
-
                                 {/* Team Assignment Card */}
-                                {student.team && (
-                                    <div className="p-4 bg-linear-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-100 rounded-2xl shadow-sm relative overflow-hidden group hover:shadow-indigo-100/50 transition-all">
-                                        <div className="absolute top-0 right-0 p-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                                            <Users size={48} />
-                                        </div>
+                                {(isEditing || student.team) && (
+                                    <div className={`p-4 ${isEditing ? 'bg-white border-indigo-200 ring-1 ring-indigo-50' : 'bg-linear-to-r from-indigo-50/80 to-purple-50/80 border-indigo-100'} border rounded-2xl shadow-sm relative overflow-hidden group transition-all`}>
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-white rounded-xl border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-md group-hover:rotate-3 transition-transform">
+                                            <div className="w-12 h-12 bg-white rounded-xl border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-md">
                                                 <Users size={18} />
                                             </div>
-                                            <div>
+                                            <div className="flex-1">
                                                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none">Team Assignment</h4>
-                                                <p className="text-lg font-black text-slate-900 mt-1">{student.team.name}</p>
-                                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 flex items-center gap-1">
-                                                    <span className="w-1 h-1 rounded-full bg-indigo-400" /> Core Contributor
-                                                </p>
+                                                {isEditing ? (
+                                                    <select
+                                                        value={formData.team}
+                                                        onChange={e => setFormData({ ...formData, team: e.target.value })}
+                                                        className="w-full mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    >
+                                                        <option value="">No Team Assigned</option>
+                                                        {teams.map(team => (
+                                                            <option key={team._id} value={team._id}>{team.name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-lg font-black text-slate-900 mt-1">{student.team?.name || 'No Team'}</p>
+                                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 flex items-center gap-1">
+                                                            <span className="w-1 h-1 rounded-full bg-indigo-400" /> Core Contributor
+                                                        </p>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -932,18 +1063,43 @@ const StudentDetailsModal = ({ student,    onClose,
                                         <div className="p-2 bg-white rounded-xl shadow-sm text-slate-400">
                                             <Users size={14} />
                                         </div>
-                                        <div>
+                                        <div className="flex-1">
                                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Gender</p>
-                                            <p className="text-xs font-black text-slate-700 mt-1">{student.gender || 'Not Specified'}</p>
+                                            {isEditing ? (
+                                                <select
+                                                    value={formData.gender || ''}
+                                                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                                                    className="w-full mt-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                >
+                                                    <option value="">Not Specified</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Female">Female</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                            ) : (
+                                                <p className="text-xs font-black text-slate-700 mt-1">{student.gender || 'Not Specified'}</p>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl flex items-center gap-3">
                                         <div className="p-2 bg-white rounded-xl shadow-sm text-slate-400">
                                             <div className="w-3.5 h-3.5 border-2 border-slate-300 rounded-sm" />
                                         </div>
-                                        <div>
+                                        <div className="flex-1">
                                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Accommodation</p>
-                                            <p className="text-xs font-black text-slate-700 mt-1">{student.accommodation || 'Not Specified'}</p>
+                                            {isEditing ? (
+                                                <select
+                                                    value={formData.accommodation || ''}
+                                                    onChange={e => setFormData({ ...formData, accommodation: e.target.value })}
+                                                    className="w-full mt-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                >
+                                                    <option value="">Not Specified</option>
+                                                    <option value="YES">YES</option>
+                                                    <option value="NO">NO</option>
+                                                </select>
+                                            ) : (
+                                                <p className="text-xs font-black text-slate-700 mt-1">{student.accommodation || 'Not Specified'}</p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -952,41 +1108,52 @@ const StudentDetailsModal = ({ student,    onClose,
 
                         {/* Actions Area */}
                         <div className="mt-6 pt-6 border-t border-slate-100">
-                            <button
-                                onClick={handleDownloadReport}
-                                disabled={downloading}
-                                className="w-full relative group"
-                            >
-                                <div className="absolute inset-0 bg-indigo-600 rounded-2xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity" />
-                                <div className="relative flex items-center justify-center gap-3 py-3.5 bg-indigo-600 hover:bg-slate-900 disabled:opacity-50 rounded-2xl text-white font-black uppercase tracking-[0.2em] text-[10px] transition-all active:scale-[0.98]">
-                                    {downloading ? (
-                                        <Loader2 size={16} className="animate-spin" />
-                                    ) : (
-                                        <Download size={16} />
-                                    )}
-                                    <span>Download Performance Analytics</span>
+                            {isEditing ? (
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving}
+                                    className="w-full relative group"
+                                >
+                                    <div className="absolute inset-0 bg-emerald-600 rounded-2xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity" />
+                                    <div className="relative flex items-center justify-center gap-3 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-2xl text-white font-black uppercase tracking-[0.2em] text-[10px] transition-all active:scale-[0.98]">
+                                        {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                        <span>Save Profile Changes</span>
+                                    </div>
+                                </button>
+                            ) : (
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={handleDownloadReport}
+                                        disabled={downloading}
+                                        className="w-full relative group"
+                                    >
+                                        <div className="absolute inset-0 bg-indigo-600 rounded-2xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity" />
+                                        <div className="relative flex items-center justify-center gap-3 py-3.5 bg-indigo-600 hover:bg-slate-900 disabled:opacity-50 rounded-2xl text-white font-black uppercase tracking-[0.2em] text-[10px] transition-all active:scale-[0.98]">
+                                            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                                            <span>Download Performance Analytics</span>
+                                        </div>
+                                    </button>
+
+                                    {/* Publish Toggle Button */}
+                                    <button
+                                        onClick={handlePublishToggle}
+                                        disabled={publishing}
+                                        className={`w-full relative group overflow-hidden transition-all duration-300 ${isPublished ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-2xl py-3.5 px-6 font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50`}
+                                    >
+                                        {publishing ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : isPublished ? (
+                                            <CheckCircle size={16} className="text-emerald-500" />
+                                        ) : (
+                                            <Send size={16} className="text-amber-500" />
+                                        )}
+                                        <span>{isPublished ? 'Report Published (Click to Revoke)' : 'Publish Performance Report'}</span>
+                                        {!isPublished && (
+                                            <div className="absolute inset-0 bg-amber-500/5 group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
+                                        )}
+                                    </button>
                                 </div>
-                            </button>
-
-                            {/* Publish Toggle Button */}
-                            <button
-                                onClick={handlePublishToggle}
-                                disabled={publishing}
-                                className={`w-full relative group mt-3 overflow-hidden transition-all duration-300 ${isPublished ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-2xl py-3.5 px-6 font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50`}
-                            >
-                                {publishing ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : isPublished ? (
-                                    <CheckCircle size={16} className="text-emerald-500" />
-                                ) : (
-                                    <Send size={16} className="text-amber-500" />
-                                )}
-                                <span>{isPublished ? 'Report Published (Click to Revoke)' : 'Publish Performance Report'}</span>
-                                {!isPublished && (
-                                    <div className="absolute inset-0 bg-amber-500/5 group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
-                                )}
-                            </button>
-
+                            )}
                             <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest mt-3">
                                 Internal Administrator Access Only • {new Date().getFullYear()} CCC Portal
                             </p>
