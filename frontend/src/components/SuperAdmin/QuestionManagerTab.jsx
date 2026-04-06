@@ -679,15 +679,20 @@ const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+    const [templateType, setTemplateType] = useState('');
     const round = rounds.find(r => r._id === roundId);
+
+    React.useEffect(() => {
+        if (round && !templateType) setTemplateType(round.type);
+    }, [round, templateType]);
 
     const handleDownloadTemplate = async () => {
         try {
-            const res = await api.get(`${API}/rounds/${roundId}/upload-template`, { responseType: 'blob' });
+            const res = await api.get(`${API}/rounds/${roundId}/upload-template?type=${templateType}`, { responseType: 'blob' });
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `template_${round?.type || 'questions'}.xlsx`);
+            link.setAttribute('download', `template_${templateType.toLowerCase()}.xlsx`);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -737,7 +742,7 @@ const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
                             </div>
                             <div>
                                 <h2 className="font-bold text-slate-900 text-lg">Bulk Upload Questions</h2>
-                                {round && <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Target: {round.name} ({round.type})</p>}
+                                {round && <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Target: {round.name}</p>}
                             </div>
                         </div>
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
@@ -746,16 +751,34 @@ const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
                     </div>
 
                     <div className="p-6 space-y-5" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-bold text-slate-700">Download Template</p>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Columns match your round type</p>
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Select Question Type Template</label>
+                                <div className="relative">
+                                    <select 
+                                        value={templateType}
+                                        onChange={e => setTemplateType(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm transition-all"
+                                    >
+                                        <option value="GENERAL">Standard (MCQ/Explanation)</option>
+                                        <option value="SQL_CONTEST">SQL Programming</option>
+                                        <option value="HTML_CSS_QUIZ">HTML/CSS MCQ</option>
+                                        <option value="HTML_CSS_DEBUG">HTML/CSS Debugging</option>
+                                        <option value="UI_UX_CHALLENGE">UI/UX Design Submission</option>
+                                        <option value="MINI_HACKATHON">Mini Hackathon (Project)</option>
+                                        <option value="PRACTICE">General Practice</option>
+                                    </select>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                        <ChevronDown size={14} />
+                                    </div>
+                                </div>
                             </div>
+                            
                             <button
                                 onClick={handleDownloadTemplate}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded-lg text-slate-600 text-xs font-bold transition-all shadow-sm"
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl text-indigo-600 text-sm font-black transition-all shadow-sm active:scale-[0.98]"
                             >
-                                <Download size={14} /> Template
+                                <Download size={16} /> DOWNLOAD {templateType.replace(/_/g, ' ')} TEMPLATE
                             </button>
                         </div>
 
@@ -820,7 +843,7 @@ const QuestionManagerTab = ({ forcePractice = false }) => {
     // Filtering rounds based on forcePractice
     const filteredRounds = React.useMemo(() => {
         if (forcePractice) return (rounds || []).filter(r => r.type === 'PRACTICE');
-        return rounds || [];
+        return (rounds || []).filter(r => r.type !== 'PRACTICE');
     }, [rounds, forcePractice]);
 
     const [selectedRound, setSelectedRound] = useState(activeRoundId);
@@ -834,12 +857,13 @@ const QuestionManagerTab = ({ forcePractice = false }) => {
 
     // Sync from store if jump-to happens, but verify it's in filteredRounds
     useEffect(() => {
+        const isValid = filteredRounds.some(r => r._id === selectedRound);
         if (activeRoundId && filteredRounds.some(r => r._id === activeRoundId)) {
             setSelectedRound(activeRoundId);
-        } else if (forcePractice && filteredRounds.length > 0 && !selectedRound) {
+        } else if ((!selectedRound || !isValid) && filteredRounds.length > 0) {
             setSelectedRound(filteredRounds[0]._id);
         }
-    }, [activeRoundId, filteredRounds, forcePractice, selectedRound]);
+    }, [activeRoundId, filteredRounds, selectedRound]);
     const [expandedId, setExpandedId] = useState(null);
 
     // Pagination & Search States

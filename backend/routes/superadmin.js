@@ -1765,6 +1765,7 @@ module.exports = async function (fastify, opts) {
     fastify.get('/rounds/:roundId/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
+            const { type: queryType } = request.query;
             const round = await Round.findById(roundId);
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
@@ -1772,35 +1773,41 @@ module.exports = async function (fastify, opts) {
             const hasPermission = await checkRoundPermission(request.user, roundId);
             if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to access templates for this round' });
 
+            const activeType = queryType || round.type;
+
             // Base columns for all templates
             const data = [{
                 Title: 'Sample Question Title',
                 Description: 'Detailed problem statement here...',
                 Difficulty: 'MEDIUM', // EASY, MEDIUM, HARD
                 Points: 10,
-                isManualEvaluation: 'FALSE', // TRUE or FALSE
+                isManualEvaluation: (activeType === 'UI_UX_CHALLENGE' || activeType === 'MINI_HACKATHON') ? 'TRUE' : 'FALSE', // TRUE or FALSE
                 Assigned_Admin: 'AdminStudentId', // Student ID of the admin for manual evaluation
-                Category: round.type || 'GENERAL',
+                Category: activeType || 'GENERAL',
             }];
 
             // Type-specific columns
-            if (round.type === 'HTML_CSS_QUIZ' || round.type === 'GENERAL') {
+            if (activeType === 'HTML_CSS_QUIZ' || activeType === 'GENERAL') {
                 data[0].Type = 'MCQ';
                 data[0].Option1 = 'Option A';
                 data[0].Option2 = 'Option B';
                 data[0].Option3 = 'Option C';
                 data[0].Option4 = 'Option D';
                 data[0].Correct_Answer = 'Option A';
-            } else if (round.type === 'SQL_CONTEST' || round.type === 'HTML_CSS_DEBUG' || round.type === 'MINI_HACKATHON') {
+            } else if (activeType === 'SQL_CONTEST' || activeType === 'HTML_CSS_DEBUG' || activeType === 'MINI_HACKATHON') {
                 data[0].Type = 'CODE';
                 data[0].Input_Format = 'Standard input description';
                 data[0].Output_Format = 'Expected output description';
                 data[0].Sample_Input = '1 2';
                 data[0].Sample_Output = '3';
-            } else if (round.type === 'UI_UX_CHALLENGE') {
+            } else if (activeType === 'UI_UX_CHALLENGE') {
                 data[0].Type = 'UI_UX';
                 data[0].Problem_Statement = 'Design a glassmorphic dashboard for...';
                 data[0].isManualEvaluation = 'TRUE';
+            } else if (activeType === 'PRACTICE') {
+                data[0].Type = 'CODE';
+                data[0].Input_Format = 'Practice test input';
+                data[0].Output_Format = 'Practice test output';
             }
 
             const ws = XLSX.utils.json_to_sheet(data);
