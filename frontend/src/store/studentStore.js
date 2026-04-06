@@ -6,6 +6,7 @@ export const useStudentStore = create((set, get) => ({
     students: [],
     loading: false,
     pagination: { totalPages: 1, totalRecords: 0 },
+    onboardingStats: { onboarded: 0, pending: 0 },
     lastFetched: null,
 
     fetchStudents: async (params = {}, force = false) => {
@@ -23,6 +24,7 @@ export const useStudentStore = create((set, get) => ({
             set({
                 students: res.data.data || [],
                 pagination: res.data.pagination || { totalPages: 1, totalRecords: 0 },
+                onboardingStats: res.data.onboardingStats || { onboarded: 0, pending: 0 },
                 loading: false,
                 lastFetched: now
             });

@@ -760,7 +760,7 @@ const StudentDetailsModal = ({ student,    onClose,
                     className="bg-white border border-slate-200 rounded-[2.5rem] w-full max-w-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden relative"
                 >
                     {/* Header with Gradient */}
-                    <div className="relative h-24 bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 overflow-hidden">
+                    <div className="relative h-24 bg-linear-to-br from-indigo-600 via-violet-600 to-purple-700 overflow-hidden">
                         <div className="absolute inset-0 opacity-20 pointer-events-none">
                             <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
                             <div className="absolute bottom-0 right-0 w-48 h-48 bg-indigo-300 rounded-full blur-3xl translate-x-1/4 translate-y-1/4" />
@@ -781,7 +781,7 @@ const StudentDetailsModal = ({ student,    onClose,
                         <div className="relative -mt-12 mb-4 flex flex-col sm:flex-row sm:items-end gap-5">
                             <div className="w-24 h-22 bg-white rounded-3xl border-4 border-white shadow-xl flex items-center justify-center text-indigo-600 shrink-0 overflow-hidden">
                                 {student.name ? (
-                                    <div className="w-full h-full bg-gradient-to-br from-indigo-50/50 to-white flex items-center justify-center text-3xl font-black">
+                                    <div className="w-full h-full bg-linear-to-br from-indigo-50/50 to-white flex items-center justify-center text-3xl font-black">
                                         {student.name.charAt(0).toUpperCase()}
                                     </div>
                                 ) : (
@@ -907,7 +907,7 @@ const StudentDetailsModal = ({ student,    onClose,
 
                                 {/* Team Assignment Card */}
                                 {student.team && (
-                                    <div className="p-4 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-100 rounded-2xl shadow-sm relative overflow-hidden group hover:shadow-indigo-100/50 transition-all">
+                                    <div className="p-4 bg-linear-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-100 rounded-2xl shadow-sm relative overflow-hidden group hover:shadow-indigo-100/50 transition-all">
                                         <div className="absolute top-0 right-0 p-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
                                             <Users size={48} />
                                         </div>
@@ -998,7 +998,6 @@ const StudentDetailsModal = ({ student,    onClose,
     );
 };
 
-
 const StudentManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
 
@@ -1007,6 +1006,7 @@ const StudentManagerTab = () => {
         students,
         loading,
         pagination,
+        onboardingStats,
         fetchStudents,
         addStudent,
         removeStudent,
@@ -1016,6 +1016,7 @@ const StudentManagerTab = () => {
 
     // UI State
     const [search, setSearch] = useState('');
+    const [onboardingFilter, setOnboardingFilter] = useState('ALL'); // ALL, ONBOARDED, PENDING
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -1029,10 +1030,20 @@ const StudentManagerTab = () => {
     // 1. Fetch Logic
     useEffect(() => {
         const timer = setTimeout(() => {
-            fetchStudents({ search, page, limit });
+            fetchStudents({ 
+                search, 
+                page, 
+                limit, 
+                onboardingStatus: onboardingFilter === 'ALL' ? undefined : onboardingFilter 
+            });
         }, 500);
         return () => clearTimeout(timer);
-    }, [search, page, limit, fetchStudents]);
+    }, [search, onboardingFilter, page, limit, fetchStudents]);
+
+    // Reset to page 1 when search or filter changes
+    useEffect(() => {
+        setPage(1);
+    }, [search, onboardingFilter]);
 
     useEffect(() => {
         fetchTeams();
@@ -1128,21 +1139,43 @@ const StudentManagerTab = () => {
 
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center bg-slate-50 p-2 rounded-2xl border border-slate-200/60">
-                <div className="relative flex-1 max-w-md">
-                    <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="Search student ID or name..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                    />
+                <div className="flex flex-1 flex-col sm:flex-row gap-2 max-w-2xl">
+                    <div className="relative flex-1">
+                        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Search student ID or name..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                        />
+                    </div>
+                    
+                    <select
+                        value={onboardingFilter}
+                        onChange={e => setOnboardingFilter(e.target.value)}
+                        className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-700 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 shadow-sm min-w-[140px]"
+                    >
+                        <option value="ALL">All Students</option>
+                        <option value="PENDING">Need Onboarding</option>
+                        <option value="ONBOARDED">Onboarded</option>
+                    </select>
                 </div>
 
                 <div className="flex items-center gap-4 px-2">
-                    <div className="hidden sm:block text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Directory</p>
-                        <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Records</p>
+                    <div className="hidden sm:flex items-center gap-6 text-right">
+                        <div>
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">Onboarded</p>
+                            <p className="text-sm font-bold text-slate-700 leading-none mt-1">{onboardingStats.onboarded}</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none">Onboarding</p>
+                            <p className="text-sm font-bold text-slate-700 leading-none mt-1">{onboardingStats.pending}</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Records</p>
+                            <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords}</p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <button

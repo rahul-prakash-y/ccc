@@ -1948,9 +1948,13 @@ module.exports = async function (fastify, opts) {
     // GET /api/superadmin/students — list all STUDENT users
     fastify.get('/students', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search, page = 1, limit = 20 } = request.query;
+            const { search, page = 1, limit = 20, onboardingStatus } = request.query;
 
             const filter = { role: 'STUDENT' };
+            
+            if (onboardingStatus === 'ONBOARDED') filter.isOnboarded = true;
+            else if (onboardingStatus === 'PENDING') filter.isOnboarded = false;
+
             if (search) {
                 const searchRegex = new RegExp(search, 'i');
                 filter.$or = [
@@ -1963,14 +1967,16 @@ module.exports = async function (fastify, opts) {
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
 
-            const [students, total] = await Promise.all([
+            const [students, total, onboardedCount, pendingCount] = await Promise.all([
                 User.find(filter)
                     .select('studentId name email isBanned tokenIssuedAfter createdAt team linkedinProfile githubProfile phone bio isOnboarded dob department allocatedServer')
                     .populate('team', 'name')
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),
-                User.countDocuments(filter)
+                User.countDocuments(filter),
+                User.countDocuments({ role: 'STUDENT', isOnboarded: true }),
+                User.countDocuments({ role: 'STUDENT', isOnboarded: false })
             ]);
 
             const totalPages = Math.ceil(total / limitNum);
@@ -1978,6 +1984,10 @@ module.exports = async function (fastify, opts) {
             return reply.code(200).send({
                 success: true,
                 data: students,
+                onboardingStats: {
+                    onboarded: onboardedCount,
+                    pending: pendingCount
+                },
                 pagination: {
                     totalRecords: total,
                     total,
