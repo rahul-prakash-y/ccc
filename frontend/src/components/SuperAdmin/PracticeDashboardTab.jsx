@@ -4,11 +4,10 @@ import {
 } from 'lucide-react';
 import { useRoundStore } from '../../store/roundStore';
 import EvaluationTab from './EvaluationTab';
-import AttendanceTab from './AttendanceTab';
 import QuestionManagerTab from './QuestionManagerTab';
 
 const PracticeDashboardTab = () => {
-    const [subTab, setSubTab] = useState('overview'); // 'overview', 'attendance', 'evaluations', 'questions'
+    const [subTab, setSubTab] = useState('overview'); // 'overview', 'evaluations', 'questions'
     const { rounds, fetchRounds } = useRoundStore();
 
     const practiceRounds = (rounds || []).filter(r => r.type === 'PRACTICE');
@@ -37,12 +36,6 @@ const PracticeDashboardTab = () => {
                         className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'overview' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         Overview
-                    </button>
-                    <button
-                        onClick={() => setSubTab('attendance')}
-                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'attendance' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                        Attendance
                     </button>
                     <button
                         onClick={() => setSubTab('evaluations')}
@@ -135,10 +128,10 @@ const PracticeDashboardTab = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button 
-                                                        onClick={() => setSubTab('attendance')}
+                                                        onClick={() => setSubTab('evaluations')}
                                                         className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 hover:underline tracking-tighter transition-colors"
                                                     >
-                                                        VIEW ATTENDANCE
+                                                        VIEW PERFORMANCE
                                                     </button>
                                                 </td>
                                             </tr>
@@ -154,12 +147,6 @@ const PracticeDashboardTab = () => {
                                 </table>
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {subTab === 'attendance' && (
-                    <div className="h-full">
-                         <AttendanceTab forcePractice={true} />
                     </div>
                 )}
 
