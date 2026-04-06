@@ -105,6 +105,10 @@ const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEli
                 {/* Progress bar + score */}
                 <div className="hidden sm:flex flex-col gap-1 min-w-[140px]">
                     <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Questions Solved</span>
+                        <span className="text-sm font-black text-indigo-700">{entry.totalSolved || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-0.5">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Score</span>
                         <span className="text-sm font-black text-slate-900">{entry.totalScore}</span>
                     </div>
@@ -121,7 +125,10 @@ const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEli
                 </div>
 
                 {/* Mobile score */}
-                <span className="sm:hidden font-black text-slate-900 text-sm shrink-0">{entry.totalScore} pts</span>
+                <div className="sm:hidden flex flex-col items-end gap-0.5 shrink-0">
+                    <span className="font-black text-slate-900 text-sm whitespace-nowrap">{entry.totalScore} pts</span>
+                    <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter">Solved: {entry.totalSolved || 0}</span>
+                </div>
 
                 {expanded
                     ? <ChevronUp size={15} className="text-slate-400 shrink-0" />
@@ -196,7 +203,7 @@ const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEli
 };
 
 // ─── Main component ────────────────────────────────────────────────────────────
-const StudentScoreDashboard = () => {
+const StudentScoreDashboard = ({ forceType = null }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -218,6 +225,7 @@ const StudentScoreDashboard = () => {
             if (search) params.append('search', search);
             params.append('page', page);
             params.append('limit', limit);
+            if (forceType) params.append('type', forceType);
 
             const res = await api.get(`${API}/student-scores?${params.toString()}`);
             setData(res.data.data || []);
@@ -227,7 +235,7 @@ const StudentScoreDashboard = () => {
         } finally {
             if (isInitial) setLoading(false);
         }
-    }, [search, page, limit]);
+    }, [search, page, limit, forceType]);
 
     // Reset page on search
     useEffect(() => {
@@ -294,7 +302,9 @@ const StudentScoreDashboard = () => {
                             onChange={(e) => setSelectedRoundId(e.target.value)}
                         >
                             <option value="">Participation Manager (All)</option>
-                            {rounds.map(r => (
+                            {rounds
+                                .filter(r => forceType === 'PRACTICE' ? r.type === 'PRACTICE' : true)
+                                .map(r => (
                                 <option key={r._id} value={r._id}>
                                     {r.name} {r.maxParticipants ? `(Limit: Top ${r.maxParticipants})` : ''}
                                 </option>

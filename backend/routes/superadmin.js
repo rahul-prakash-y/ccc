@@ -1164,6 +1164,10 @@ module.exports = async function (fastify, opts) {
 
             // Recalculate total score as sum of all manual scores + autoScore
             const totalManualScore = submission.manualScores.reduce((sum, ms) => sum + (ms.score || 0), 0);
+            
+            // Recalculate solved count (MCQ + Manual scores > 0)
+            const manualSolvedCount = submission.manualScores.filter(ms => ms.score > 0).length;
+            submission.solvedCount = (submission.mcqSolvedCount || 0) + manualSolvedCount;
 
             // Fetch round to check if it's a team test
             const round = await Round.findById(submission.round);
@@ -1233,10 +1237,12 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/student-scores', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search, page = 1, limit = 20 } = request.query;
+            const { search, page = 1, limit = 20, type = 'ALL' } = request.query;
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
+
+            const ActiveSubmissionModel = type === 'PRACTICE' ? PracticeSubmission : Submission;
 
             // 1. Build Match Stage
             const matchStage = {
@@ -1268,7 +1274,8 @@ module.exports = async function (fastify, opts) {
                                     }
                                 }
                             ]
-                        }
+                        },
+                        submissionSolved: { $ifNull: ["$solvedCount", 0] }
                     }
                 },
                 // Join Round name
@@ -1286,11 +1293,13 @@ module.exports = async function (fastify, opts) {
                     $group: {
                         _id: "$student",
                         totalScore: { $sum: "$submissionScore" },
+                        totalSolved: { $sum: "$submissionSolved" },
                         rounds: {
                             $push: {
                                 roundId: "$round",
                                 roundName: { $ifNull: ["$roundDetails.name", "Unknown Round"] },
                                 score: "$submissionScore",
+                                solved: "$submissionSolved",
                                 status: "$status",
                                 evaluatedAt: "$updatedAt"
                             }
@@ -1322,11 +1331,11 @@ module.exports = async function (fastify, opts) {
 
             // Get total count (for pagination)
             const countPipeline = [...pipeline, { $count: "total" }];
-            const countResult = await Submission.aggregate(countPipeline);
+            const countResult = await ActiveSubmissionModel.aggregate(countPipeline);
             const total = countResult[0]?.total || 0;
 
             // Get paginated results
-            const results = await Submission.aggregate([
+            const results = await ActiveSubmissionModel.aggregate([
                 ...pipeline,
                 { $skip: skip },
                 { $limit: limitNum }
@@ -1340,6 +1349,7 @@ module.exports = async function (fastify, opts) {
                     name: r.studentDetails.name
                 },
                 totalScore: r.totalScore,
+                totalSolved: r.totalSolved,
                 rounds: r.rounds,
                 // Optional: add dummy dayWise if still needed by frontend (or refactor frontend)
                 dayWise: []

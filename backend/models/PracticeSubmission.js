@@ -92,6 +92,14 @@ const practiceSubmissionSchema = new mongoose.Schema({
     attemptNumber: {
         type: Number,
         default: 1
+    },
+    solvedCount: {
+        type: Number,
+        default: 0
+    },
+    mcqSolvedCount: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: true

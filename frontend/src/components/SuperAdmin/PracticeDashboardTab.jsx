@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Sparkles, Users, ClipboardCheck, CheckCircle2, Clock, PlayCircle
+    Sparkles, Users, ClipboardCheck, CheckCircle2, Clock, PlayCircle, Trophy
 } from 'lucide-react';
 import { useRoundStore } from '../../store/roundStore';
 import EvaluationTab from './EvaluationTab';
 import QuestionManagerTab from './QuestionManagerTab';
+import StudentScoreDashboard from './StudentScoreDashboard';
 
 const PracticeDashboardTab = () => {
-    const [subTab, setSubTab] = useState('overview'); // 'overview', 'evaluations', 'questions'
+    const [subTab, setSubTab] = useState('overview'); // 'overview', 'leaderboard', 'evaluations', 'questions'
     const { rounds, fetchRounds } = useRoundStore();
 
     const practiceRounds = (rounds || []).filter(r => r.type === 'PRACTICE');
@@ -36,6 +37,12 @@ const PracticeDashboardTab = () => {
                         className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'overview' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         Overview
+                    </button>
+                    <button
+                        onClick={() => setSubTab('leaderboard')}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'leaderboard' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Success metrics
                     </button>
                     <button
                         onClick={() => setSubTab('evaluations')}
@@ -128,7 +135,7 @@ const PracticeDashboardTab = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button 
-                                                        onClick={() => setSubTab('evaluations')}
+                                                        onClick={() => setSubTab('leaderboard')}
                                                         className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 hover:underline tracking-tighter transition-colors"
                                                     >
                                                         VIEW PERFORMANCE
@@ -147,6 +154,12 @@ const PracticeDashboardTab = () => {
                                 </table>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {subTab === 'leaderboard' && (
+                    <div className="h-full">
+                        <StudentScoreDashboard forceType="PRACTICE" />
                     </div>
                 )}
 

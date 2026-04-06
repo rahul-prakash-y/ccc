@@ -742,6 +742,7 @@ module.exports = async function (fastify, opts) {
             // --- Auto-evaluate MCQ questions ---
             const Question = require('../models/Question');
             let autoScore = 0;
+            let mcqSolvedCount = 0;
             const answeredIds = Object.keys(parsedAnswers).filter(id => mongoose.Types.ObjectId.isValid(id));
 
             if (answeredIds.length > 0) {
@@ -753,11 +754,16 @@ module.exports = async function (fastify, opts) {
                         const correctAns = String(q.correctAnswer || '').trim();
                         if (correctAns && studentAnswer === correctAns) {
                             autoScore += (q.points || 0);
+                            mcqSolvedCount += 1;
                         }
                     }
                 }
             }
             submission.autoScore = autoScore;
+            submission.mcqSolvedCount = mcqSolvedCount;
+            const manualSolvedCount = (submission.manualScores || []).filter(ms => ms.score > 0).length;
+            submission.solvedCount = mcqSolvedCount + manualSolvedCount;
+
             const totalManualScore = (submission.manualScores || []).reduce((sum, ms) => sum + (ms.score || 0), 0);
 
             let finalScore = autoScore + totalManualScore;
