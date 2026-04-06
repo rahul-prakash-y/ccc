@@ -2156,6 +2156,112 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    // 1b. GET /api/superadmin/student-scores/export — export leaderboard as XLSX
+    fastify.get('/student-scores/export', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { search, type = 'ALL' } = request.query;
+            const ActiveSubmissionModel = type === 'PRACTICE' ? PracticeSubmission : Submission;
+
+            // Reuse aggregation pipeline (no pagination)
+            const pipeline = [
+                {
+                    $match: {
+                        $or: [
+                            { 'manualScores.0': { $exists: true } },
+                            { score: { $ne: null } },
+                            { autoScore: { $gt: 0 } }
+                        ]
+                    }
+                },
+                {
+                    $project: {
+                        student: 1,
+                        round: 1,
+                        status: 1,
+                        submissionScore: {
+                            $add: [
+                                { $ifNull: ["$autoScore", 0] },
+                                {
+                                    $reduce: {
+                                        input: { $ifNull: ["$manualScores", []] },
+                                        initialValue: 0,
+                                        in: { $add: ["$$value", { $ifNull: ["$$this.score", 0] }] }
+                                    }
+                                }
+                            ]
+                        },
+                        submissionSolved: { $ifNull: ["$solvedCount", 0] }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'rounds',
+                        localField: 'round',
+                        foreignField: '_id',
+                        as: 'roundDetails'
+                    }
+                },
+                { $unwind: { path: '$roundDetails', preserveNullAndEmptyArrays: true } },
+                {
+                    $group: {
+                        _id: "$student",
+                        totalScore: { $sum: "$submissionScore" },
+                        totalSolved: { $sum: "$submissionSolved" },
+                        rounds: {
+                            $push: {
+                                name: { $ifNull: ["$roundDetails.name", "Unknown"] },
+                                score: "$submissionScore"
+                            }
+                        }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'studentDetails'
+                    }
+                },
+                { $unwind: '$studentDetails' },
+                ...(search ? [{
+                    $match: {
+                        $or: [
+                            { 'studentDetails.studentId': { $regex: search, $options: 'i' } },
+                            { 'studentDetails.name': { $regex: search, $options: 'i' } }
+                        ]
+                    }
+                }] : []),
+                { $sort: { totalScore: -1 } }
+            ];
+
+            const results = await ActiveSubmissionModel.aggregate(pipeline);
+
+            // Format for Excel
+            const excelRows = results.map((r, i) => ({
+                'Rank': i + 1,
+                'Roll No': r.studentDetails.studentId,
+                'Full Name': r.studentDetails.name,
+                'Total Score': r.totalScore,
+                'Questions Solved': r.totalSolved,
+                'Rounds Info': r.rounds.map(round => `${round.name}: ${round.score}`).join(' | ')
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Scores');
+            const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+            return reply
+                .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                .header('Content-Disposition', `attachment; filename=Leaderboard_${type}_${new Date().toISOString().split('T')[0]}.xlsx`)
+                .send(buffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Exporter encountered a failure' });
+        }
+    });
+
     // GET /api/superadmin/students/:id/report — export student performance as PDF
     fastify.get('/students/:id/report', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
@@ -2163,10 +2269,10 @@ module.exports = async function (fastify, opts) {
             const student = await User.findById(id).populate('team').lean();
             if (!student) return reply.code(404).send({ error: 'Student not found' });
 
-            const submissions = await Submission.find({ student: id })
-                .populate('round')
-                .sort({ 'round.createdAt': 1 })
-                .lean();
+            const [contestSubmissions, practiceSubmissions] = await Promise.all([
+                Submission.find({ student: id }).populate('round').lean(),
+                PracticeSubmission.find({ student: id }).populate('round').lean()
+            ]);
 
             const pdfBuffer = await new Promise(async (resolve, reject) => {
                 try {
@@ -2176,44 +2282,31 @@ module.exports = async function (fastify, opts) {
                     doc.on('end', () => resolve(Buffer.concat(buffers)));
                     doc.on('error', reject);
 
-                    // --- Colors & Styles ---
                     const NAVY = '#1e293b';
                     const PURPLE = '#581c87';
-                    const ACCENT = '#f59e0b'; // Amber/Yellow
+                    const AMBER = '#f59e0b';
                     const LIGHT_BLUE = '#eff6ff';
 
-                    // --- Header Section ---
                     doc.font('Helvetica-Bold').fontSize(22).fillColor(NAVY).text('BANNARI AMMAN INSTITUTE OF', { align: 'center' });
                     doc.text('TECHNOLOGY', { align: 'center' });
                     doc.moveDown(0.2);
                     doc.fontSize(16).fillColor(PURPLE).text('CODE CIRCLE CLUB', { align: 'center' });
                     doc.moveDown(0.5);
 
-                    // Yellow Bar
                     const pageWidth = doc.page.width;
                     const barWidth = 100;
-                    doc.rect((pageWidth - barWidth) / 2, doc.y, barWidth, 3).fill(ACCENT);
+                    doc.rect((pageWidth - barWidth) / 2, doc.y, barWidth, 3).fill(AMBER);
                     doc.moveDown(0.8);
 
-                    // Pill Shape for "C-CAP REPORT"
-                    const pillWidth = 140;
+                    const pillWidth = 180;
                     const pillHeight = 24;
                     const pillX = (pageWidth - pillWidth) / 2;
                     doc.roundedRect(pillX, doc.y, pillWidth, pillHeight, 12).fill(NAVY);
-                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold').text('C-CAP REPORT', pillX, doc.y + 7, { width: pillWidth, align: 'center' });
+                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold').text('PERFORMANCE ANALYTICS REPORT', pillX, doc.y + 7, { width: pillWidth, align: 'center' });
                     doc.moveDown(1.5);
 
-                    // Horizontal Divider
                     doc.moveTo(40, doc.y).lineTo(pageWidth - 40, doc.y).strokeColor('#cbd5e1').lineWidth(1).stroke();
-                    doc.moveDown(0.2);
-                    doc.moveTo(40, doc.y).lineTo(pageWidth - 40, doc.y).strokeColor('#cbd5e1').lineWidth(1).stroke();
-                    doc.moveDown(1);
-
-                    // Styled Title Box
-                    const titleBoxY = doc.y;
-                    doc.roundedRect(40, titleBoxY, pageWidth - 80, 45, 8).fill(LIGHT_BLUE).strokeColor('#e2e8f0').stroke();
-                    doc.fillColor(NAVY).fontSize(18).text('STUDENT REPORT #1', 55, titleBoxY + 14);
-                    doc.moveDown(2.5);
+                    doc.moveDown(1.5);
 
                     // --- 1. STUDENT PROFILE ---
                     doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
@@ -2222,7 +2315,7 @@ module.exports = async function (fastify, opts) {
 
                     const profileY = doc.y;
                     const col1X = 60;
-                    const col2X = pageWidth / 2 + 50; // Increased padding for center space
+                    const col2X = pageWidth / 2 + 50;
 
                     const drawField = (label, value, x, y, width) => {
                         doc.fillColor('#64748b').fontSize(10).text(label.toUpperCase(), x, y);
@@ -2230,37 +2323,33 @@ module.exports = async function (fastify, opts) {
                         doc.moveTo(x, y + 14).lineTo(x + (pageWidth / 2) - 30, y + 14).strokeColor('#f1f5f9').dash(2, { space: 2 }).stroke().undash();
                     };
 
-                    const attendedCount = submissions.filter(s => s.status !== 'NOT_STARTED').length;
+                    const attendedCount = contestSubmissions.filter(s => s.status !== 'NOT_STARTED').length;
 
                     drawField('Full Name', student.name, col1X, profileY);
                     drawField('Roll Number', student.studentId, col2X, profileY);
                     drawField('Department', student.department, col1X, profileY + 35);
-                    drawField('Current Level', `Level ${attendedCount}`, col2X, profileY + 35);
+                    drawField('Round Stats', `${attendedCount} Contests Attempted`, col2X, profileY + 35);
 
-                    doc.moveDown(4);
+                    doc.moveDown(4.5);
 
-                    // --- 2. ASSESSMENT SUMMARY ---
+                    // --- 2. ASSESSMENT SUMMARY (CONTESTS) ---
                     doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
-                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('2. ASSESSMENT SUMMARY', 50, doc.y);
+                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('2. CONTEST PERFORMANCE', 50, doc.y);
                     doc.moveDown(1);
 
-                    if (submissions.length > 0) {
+                    if (contestSubmissions.length > 0) {
                         const assessmentRows = [];
-                        for (const s of submissions) {
-                            // Calculate Pass/Fail
+                        for (const s of contestSubmissions) {
                             const questions = await Question.find({
-                                $or: [
-                                    { round: s.round?._id },
-                                    { linkedRounds: s.round?._id }
-                                ]
+                                $or: [{ round: s.round?._id }, { linkedRounds: s.round?._id }]
                             });
                             const totalPoints = questions.reduce((acc, q) => acc + (q.points || 0), 0);
-                            const qualified = (s.score >= totalPoints * 0.5);
-                            const resultText = qualified ? 'QUALIFIED' : 'ELIMINATED';
+                            const qualified = s.score >= totalPoints * 0.5;
+                            const resultText = qualified ? 'PASS' : 'FAIL';
 
                             assessmentRows.push([
                                 new Date(s.createdAt).toLocaleDateString(),
-                                s.round?.name || 'Round',
+                                s.round?.name || 'Untitled Round',
                                 String(s.score ?? 0),
                                 resultText
                             ]);
@@ -2269,47 +2358,64 @@ module.exports = async function (fastify, opts) {
                         const assessmentTable = {
                             headers: [
                                 { label: "Date", property: 'date', width: 100 },
-                                { label: "Level", property: 'level', width: 220 },
+                                { label: "Assessment Title", property: 'level', width: 220 },
                                 { label: "Score", property: 'score', width: 80 },
-                                { label: "Result", property: 'result', width: 100 }
+                                { label: "Status", property: 'result', width: 100 }
                             ],
                             rows: assessmentRows
                         };
 
                         await doc.table(assessmentTable, {
                             prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
-                            prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
+                            prepareRow: (row, indexColumn) => {
                                 doc.font("Helvetica").fontSize(10);
-                                if (indexColumn === 3) { // Result Column
-                                    if (row[3] === 'QUALIFIED') doc.fillColor('#16a34a');
-                                    else doc.fillColor('#dc2626');
+                                if (indexColumn === 3) {
+                                    doc.fillColor(row[3] === 'PASS' ? '#16a34a' : '#dc2626');
                                 } else {
                                     doc.fillColor(NAVY);
                                 }
                             }
                         });
                     } else {
-                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No assessments found.');
+                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No contest attempts recorded.');
                     }
                     doc.moveDown(2);
 
-                    // --- 3. CODING CHALLENGE HISTORY ---
+                    // --- 3. PRACTICE PERFORMANCE ---
                     doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
-                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('3. CODING CHALLENGE HISTORY', 50, doc.y);
+                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('3. PRACTICE SESSIONS', 50, doc.y);
                     doc.moveDown(1);
 
-                    // Fetch coding challenges
-                    const codingSubmissions = submissions.filter(s => s.round?.type === 'CODE' || s.round?.type === 'SQL_CONTEST');
-                    if (codingSubmissions.length > 0) {
-                        // Similar table or list
-                        doc.font('Helvetica').fontSize(10).fillColor(NAVY).text('Challenges attempted across contests: ' + codingSubmissions.length);
+                    if (practiceSubmissions.length > 0) {
+                        const practiceRows = practiceSubmissions.map(s => ([
+                            new Date(s.createdAt).toLocaleDateString(),
+                            s.round?.name || 'Practice Test',
+                            String(s.score ?? 0),
+                            'COMPLETED'
+                        ]));
+
+                        const practiceTable = {
+                            headers: [
+                                { label: "Date", property: 'date', width: 100 },
+                                { label: "Practice Environment", property: 'level', width: 220 },
+                                { label: "Score", property: 'score', width: 80 },
+                                { label: "Activity", property: 'result', width: 100 }
+                            ],
+                            rows: practiceRows
+                        };
+
+                        await doc.table(practiceTable, {
+                            prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
+                            prepareRow: () => doc.font("Helvetica").fontSize(10).fillColor(NAVY)
+                        });
                     } else {
-                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No coding challenges attempted.');
+                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No practice records found.');
                     }
 
-                    // --- Footer Decor ---
-                    const footerY = doc.page.height - 60;
-                    doc.rect(40, footerY, doc.page.width - 80, 6).fill(NAVY);
+                    // --- Footer ---
+                    const footerY = doc.page.height - 40;
+                    doc.moveTo(40, footerY).lineTo(doc.page.width - 40, footerY).strokeColor(AMBER).lineWidth(2).stroke();
+                    doc.fillColor('#94a3b8').fontSize(8).text('Generated by CCC Internal Portal · Verification Code: ' + student._id.toString().slice(-8).toUpperCase(), 40, footerY + 8, { align: 'center' });
 
                     doc.end();
                 } catch (err) {
@@ -2326,6 +2432,7 @@ module.exports = async function (fastify, opts) {
             return reply.code(500).send({ error: 'Failed to generate report' });
         }
     });
+
     // GET /api/superadmin/students/upload-template - DOWNLOAD SAMPLE EXCEL
     fastify.get('/students/upload-template', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {

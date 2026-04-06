@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     User, BarChart2, Calendar, Medal, RefreshCw,
     ShieldCheck, ShieldX, UserPlus, UserMinus,
-    Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp
+    Trophy, Loader2, AlertTriangle, ChevronDown, ChevronUp,
+    Download, FileText
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -67,13 +68,21 @@ const RoundPills = ({ rounds }) => (
 );
 
 // ─── Single student row (expandable) ─────────────────────────────────────────
-const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEligibility }) => {
+const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEligibility, onDownloadReport }) => {
     const [expanded, setExpanded] = useState(false);
+    const [downloading, setDownloading] = useState(false);
     const pct = maxScore > 0 ? Math.min((entry.totalScore / maxScore) * 100, 100) : 0;
 
     const isWhitelisted = selectedRound?.allowedStudentIds?.includes(entry.student?._id);
     const isTopRank = selectedRound?.maxParticipants ? entry.rank <= selectedRound.maxParticipants : true;
     const isEligible = isWhitelisted || isTopRank;
+
+    const handleReportClick = async (e) => {
+        e.stopPropagation();
+        setDownloading(true);
+        await onDownloadReport(entry.student?._id, entry.student?.studentId);
+        setDownloading(false);
+    };
 
     return (
         <div className={`border rounded-2xl overflow-hidden transition-all ${entry.rank === 1 ? 'border-amber-200 bg-amber-50/30' :
@@ -130,10 +139,20 @@ const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEli
                     <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter">Solved: {entry.totalSolved || 0}</span>
                 </div>
 
-                {expanded
-                    ? <ChevronUp size={15} className="text-slate-400 shrink-0" />
-                    : <ChevronDown size={15} className="text-slate-400 shrink-0" />
-                }
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        onClick={handleReportClick}
+                        disabled={downloading}
+                        className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                        title="Download Report"
+                    >
+                        {downloading ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                    </button>
+                    {expanded
+                        ? <ChevronUp size={15} className="text-slate-400" />
+                        : <ChevronDown size={15} className="text-slate-400" />
+                    }
+                </div>
             </button>
 
             {/* Expanded detail */}
@@ -206,6 +225,7 @@ const StudentRow = ({ entry, maxScore, selectedRound, onToggleAllow, updatingEli
 const StudentScoreDashboard = ({ forceType = null }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [exporting, setExporting] = useState(false);
 
     // Pagination & Search States
     const [search, setSearch] = useState('');
@@ -270,11 +290,51 @@ const StudentScoreDashboard = ({ forceType = null }) => {
         }
     };
 
-    const activeRound = rounds.find(r => r._id === selectedRoundId);
+    const handleDownloadReport = async (studentId, studentRoll) => {
+        try {
+            const response = await api.get(`${API}/students/${studentId}/report`, {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Report_${studentRoll}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Download failed:', error);
+        }
+    };
 
+    const handleExportXLSX = async () => {
+        setExporting(true);
+        try {
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (forceType) params.append('type', forceType);
+            
+            const response = await api.get(`${API}/student-scores/export?${params.toString()}`, {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Leaderboard_${forceType || 'ALL'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Export failed:', error);
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const activeRound = rounds.find(r => r._id === selectedRoundId);
     const maxScore = data.length > 0 ? data[0].totalScore : 1;
     const totalStudents = pagination.totalRecords;
-    const evaluated = data.filter(e => e.totalScore > 0).length; // This is only for the current page, which might be slightly misleading if we want global evaluated count, but let's stick to what's visible or what the API provides if it provides stats.
+    const evaluated = data.filter(e => e.totalScore > 0).length;
 
     return (
         <div className="space-y-4 h-full flex flex-col">
@@ -293,6 +353,16 @@ const StudentScoreDashboard = ({ forceType = null }) => {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Export Button */}
+                    <button
+                        onClick={handleExportXLSX}
+                        disabled={exporting || loading}
+                        className="flex items-center gap-2 px-3 py-2 text-[10px] font-black bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 shadow-lg shadow-emerald-100 transition-all"
+                    >
+                        {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                        <span className="hidden lg:inline">EXPORT LEADERBOARD (XLSX)</span>
+                    </button>
+
                     {/* Round Selector */}
                     <div className="hidden md:flex items-center gap-2 mr-4">
                         <ShieldCheck size={14} className="text-indigo-400" />
@@ -356,6 +426,7 @@ const StudentScoreDashboard = ({ forceType = null }) => {
                             selectedRound={activeRound}
                             onToggleAllow={handleToggleAllow}
                             updatingEligibility={updatingEligibility}
+                            onDownloadReport={handleDownloadReport}
                         />
                     ))
                 )}
