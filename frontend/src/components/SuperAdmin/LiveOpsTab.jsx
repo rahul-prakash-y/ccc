@@ -217,7 +217,6 @@ const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   const [shuffle, setShuffle] = useState(section.shuffleQuestions !== false);
   const [saved, setSaved] = useState(false);
 
-  if (!isSuperAdmin) return null;
 
   const handleSave = async () => {
     await onSave(section._id, qCount === '' ? null : Number(qCount), shuffle);
@@ -287,7 +286,6 @@ const TimeWindowSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   const [end, setEnd] = useState(formatDateForInput(section.endTime));
   const [saved, setSaved] = useState(false);
 
-  if (!isSuperAdmin) return null;
 
   const handleSave = async () => {
     await onSave(section._id, start || null, end || null);
@@ -569,13 +567,12 @@ const TestSettingsModal = ({ isOpen, onClose, group, section, busy, onSaveSettin
               section={section}
               onSave={onSaveSettings}
               busy={busy[`${section._id}-qsettings`]}
-              isSuperAdmin={isSuperAdmin}
             />
             <TimeWindowSettings
               section={section}
               onSave={onSaveTimeWindow}
               busy={busy[`${section._id}-timesettings`]}
-              isSuperAdmin={isSuperAdmin}
+
             />
             <AdminAccessSettings
               section={section}

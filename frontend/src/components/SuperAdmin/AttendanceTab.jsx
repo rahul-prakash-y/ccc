@@ -7,7 +7,7 @@ import { useAttendanceStore } from '../../store/attendanceStore';
 import { useRoundStore } from '../../store/roundStore';
 import { SkeletonList } from '../Skeleton';
 
-const AttendanceTab = () => {
+const AttendanceTab = ({ forcePractice = false }) => {
     // 1. Global Store State
     const {
         attendanceRecords: attendance,
@@ -32,16 +32,21 @@ const AttendanceTab = () => {
     const { rounds, loading: roundsLoading, fetchRounds } = useRoundStore();
     const [selectedRoundId, setSelectedRoundId] = useState('');
 
+    const filteredRounds = React.useMemo(() => {
+        if (forcePractice) return (rounds || []).filter(r => r.type === 'PRACTICE');
+        return rounds || [];
+    }, [rounds, forcePractice]);
+
     useEffect(() => {
         fetchRounds();
     }, [fetchRounds]);
 
     // Auto-select first round when rounds are loaded
     useEffect(() => {
-        if (rounds.length > 0 && !selectedRoundId) {
-            setSelectedRoundId(rounds[0]._id);
+        if (filteredRounds.length > 0 && !selectedRoundId) {
+            setSelectedRoundId(filteredRounds[0]._id);
         }
-    }, [rounds, selectedRoundId]);
+    }, [filteredRounds, selectedRoundId]);
 
     // 1. Fetch Logic — re-fetch when round filter changes
     useEffect(() => {
@@ -133,8 +138,8 @@ const AttendanceTab = () => {
                                 disabled={roundsLoading}
                                 className="w-full appearance-none bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm disabled:opacity-60"
                             >
-                                <option value="">— All Rounds (No Round Filter) —</option>
-                                {rounds.map(r => (
+                                {!forcePractice && <option value="">— All Rounds (No Round Filter) —</option>}
+                                {filteredRounds.map(r => (
                                     <option key={r._id} value={r._id}>{r.name}</option>
                                 ))}
                             </select>
@@ -142,7 +147,7 @@ const AttendanceTab = () => {
                         </div>
                         {selectedRoundId && (
                             <span className="inline-flex items-center px-2.5 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-                                Scoped to: {rounds.find(r => r._id === selectedRoundId)?.name || '…'}
+                                Scoped to: {filteredRounds.find(r => r._id === selectedRoundId)?.name || '…'}
                             </span>
                         )}
                     </div>

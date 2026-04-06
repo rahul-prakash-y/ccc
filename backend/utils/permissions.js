@@ -13,12 +13,15 @@ async function checkRoundPermission(user, roundId) {
     if (!user || (!user.userId && !user.id)) return false;
     
     // Super Admins bypass all round-based restrictions
-    if (user.role === 'SUPER_ADMIN') return true;
+    if (user.role === 'SUPER_ADMIN' || user.role === 'SUPER_MASTER') return true;
     
-    // Standard Admins must be explicitly authorized for this round
+    // Standard Admins must be explicitly authorized for this round OR it must be a PRACTICE round
     if (user.role === 'ADMIN') {
-        const round = await Round.findById(roundId).select('authorizedAdmins');
+        const round = await Round.findById(roundId).select('authorizedAdmins type');
         if (!round) return false;
+        
+        // Practice rounds are open to all admins for oversight
+        if (round.type === 'PRACTICE') return true;
         
         const userId = user.userId || user.id;
         return round.authorizedAdmins && round.authorizedAdmins.some(adminId => adminId.toString() === userId.toString());

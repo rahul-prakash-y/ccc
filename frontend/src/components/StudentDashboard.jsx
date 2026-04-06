@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { 
     Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, 
     Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer,
@@ -35,6 +35,7 @@ const StudentDashboard = () => {
     const { user, logout } = useAuthStore();
     const [rounds, setRounds] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('active'); // 'active' or 'practice'
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -59,7 +60,7 @@ const StudentDashboard = () => {
         fetchRounds();
     }, [fetchRounds]);
 
-    const displayRounds = React.useMemo(() => {
+    const allProcessedRounds = React.useMemo(() => {
         const groups = {};
         const singles = [];
 
@@ -97,6 +98,13 @@ const StudentDashboard = () => {
 
         return result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }, [rounds]);
+
+    const displayRounds = React.useMemo(() => {
+        if (activeTab === 'practice') {
+            return allProcessedRounds.filter(r => r.type === 'PRACTICE');
+        }
+        return allProcessedRounds.filter(r => r.type !== 'PRACTICE');
+    }, [allProcessedRounds, activeTab]);
 
     const getTimeWindowStatus = (round) => {
         const now = new Date();
@@ -208,20 +216,16 @@ const StudentDashboard = () => {
                             My Profile
                         </button>
 
-                        {/* Practice Test Button */}
+                        {/* Practice Arena Button */}
                         <button
                             onClick={() => {
-                                const practiceRound = displayRounds.find(r => r.type === 'PRACTICE' && (r.status === 'RUNNING' || r.status === 'WAITING_FOR_OTP'));
-                                if (practiceRound) {
-                                    handleRoundClick(practiceRound);
-                                } else {
-                                    import('react-hot-toast').then(({ default: toast }) => toast.error("No active Practice Test available at the moment."));
-                                }
+                                setActiveTab('practice');
+                                window.scrollTo({ top: 500, behavior: 'smooth' });
                             }}
-                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] rounded-xl hover:bg-[#f59e0b] hover:text-white transition-all active:scale-95 shadow-sm"
+                            className={`flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm rounded-xl border ${activeTab === 'practice' ? 'bg-amber-500 text-white border-amber-600' : 'text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] hover:bg-[#f59e0b] hover:text-white'}`}
                         >
                             <Play size={14} />
-                            <span className="hidden sm:inline">Practice Test</span>
+                            <span className="hidden sm:inline">Practice Arena</span>
                             <span className="inline sm:hidden">Practice</span>
                         </button>
 
@@ -264,13 +268,32 @@ const StudentDashboard = () => {
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
                         <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                            <Sparkles className="text-indigo-500" size={28} />
-                            Available Assessments
+                            <Sparkles className={activeTab === 'practice' ? "text-amber-500" : "text-indigo-500"} size={28} />
+                            {activeTab === 'practice' ? 'Practice Arena' : 'Available Assessments'}
                         </h2>
                         <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
-                            {loading ? 'Scanning server nodes for active deployments...' : 'Select an active assessment to initialize your session. Ensure you have the required access keys.'}
+                            {loading ? 'Scanning server nodes for active deployments...' : 
+                             activeTab === 'practice' ? 'Sharpen your skills with tutorial missions and simulation environments.' : 
+                             'Select an active assessment to initialize your session. Ensure you have the required access keys.'}
                         </p>
                     </div>
+
+                    {!loading && (
+                        <div className="bg-slate-200/50 p-1 rounded-2xl flex items-center gap-1 shadow-inner self-start md:self-end">
+                            <button
+                                onClick={() => setActiveTab('active')}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'active' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Live Ops
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('practice')}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'practice' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Practice Mode
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {loading ? (

@@ -474,7 +474,14 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
                         <User size={18} />
                     </div>
                     <div className="min-w-0">
-                        <p className="font-bold text-slate-900 text-[14px] truncate">{submission.student?.name || 'Unknown'}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-900 text-[14px] truncate">{submission.student?.name || 'Unknown'}</p>
+                            {submission.isPractice && (
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-tighter rounded border border-amber-200">
+                                    PRACTICE
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-3 mt-1">
                             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
                                 {submission.student?.studentId} &bull; {submission.round?.name}
@@ -596,7 +603,7 @@ const SubmissionEvalCard = ({ submission, onScoreSaved, onTransfer }) => {
 };
 
 // ─── Main Evaluation Tab ─────────────────────────────────────────────────────
-const EvaluationTab = () => {
+const EvaluationTab = ({ forceType = 'ALL' }) => {
     // 1. Global Store State
     const {
         evaluationQueue: data,
@@ -615,8 +622,8 @@ const EvaluationTab = () => {
 
     // 1. Fetch Logic
     useEffect(() => {
-        fetchEvaluations({ search, page, limit });
-    }, [search, page, limit, fetchEvaluations]);
+        fetchEvaluations({ search, page, limit, type: forceType });
+    }, [search, page, limit, fetchEvaluations, forceType]);
 
     const totalQuestions = data.reduce((sum, sub) => sum + sub.questions.length, 0);
     const totalGraded = data.reduce((sum, sub) =>

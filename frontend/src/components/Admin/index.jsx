@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power, Award, Play } from 'lucide-react';
+import { ShieldCheck, BookOpen, LogOut, Users, PlayCircle, ClipboardCheck, Trophy, ClipboardList, UserCog, UserCheck, Power, Award, Play, Sparkles } from 'lucide-react';
 import { api, useAuthStore } from '../../store/authStore';
 import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -13,6 +13,7 @@ import EvaluationTab from '../SuperAdmin/EvaluationTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
 import AttendanceTab from "../SuperAdmin/AttendanceTab";
 import CertificateManager from '../SuperAdmin/CertificateManager';
+import PracticeDashboardTab from '../SuperAdmin/PracticeDashboardTab';
 
 const TABS = [
     { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
@@ -22,6 +23,7 @@ const TABS = [
     { id: 'teams', label: 'Teams', icon: Users },
     { id: 'attendance', label: 'Attendance', icon: UserCheck },
     { id: 'certificates', label: 'Certificates', icon: Award },
+    { id: 'practice', label: 'Practice Dashboard', icon: Sparkles },
 ];
 
 const AdminDashboard = () => {
@@ -219,6 +221,7 @@ const AdminDashboard = () => {
                                 {activeTab === 'teams' && <TeamManagerTab />}
                                 {activeTab === 'attendance' && <AttendanceTab />}
                                 {activeTab === 'certificates' && <CertificateManager />}
+                                {activeTab === 'practice' && <PracticeDashboardTab />}
                             </div>
 
                             {/* Bottom Gradient Overlay (Depth Indicator) */}

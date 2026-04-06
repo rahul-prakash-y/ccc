@@ -8,6 +8,7 @@ const User = require('../models/User');
 const AdminOTP = require('../models/AdminOTP');
 const Team = require('../models/Team');
 const { logActivity } = require('../utils/logger');
+const { hydrateStaticData } = require('../services/cacheService');
 const { checkRoundPermission } = require('../utils/permissions');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
@@ -345,9 +346,14 @@ module.exports = async function (fastify, opts) {
             const { userId, role } = request.user;
             let filter = {};
 
-            // If not superadmin, only show rounds where the admin is authorized
+            // If not superadmin, only show rounds where the admin is authorized OR practice rounds
             if (role !== 'SUPER_ADMIN' && role !== 'SUPER_MASTER') {
-                filter = { authorizedAdmins: userId };
+                filter = { 
+                    $or: [
+                        { authorizedAdmins: userId },
+                        { type: 'PRACTICE' }
+                    ]
+                };
             }
 
             const rounds = await Round.find(filter).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data').sort({ createdAt: 1 });
@@ -921,17 +927,28 @@ module.exports = async function (fastify, opts) {
     fastify.get('/manual-evaluations', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const adminId = request.user.userId;
-            const { page = 1, limit = 10, search = '' } = request.query;
+            const { page = 1, limit = 10, search = '', type = 'ALL' } = request.query;
 
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
 
             // 1. Get all questions assigned to this admin for manual evaluation
-            const adminQuestions = await Question.find({
-                isManualEvaluation: true,
-                assignedAdmin: adminId
-            }).select('_id title description points type round category correctAnswer rubrics rubricInstructions').lean();
+            // If type is PRACTICE, we also include all practice-round questions that need manual evaluation
+            const questionFilter = { isManualEvaluation: true };
+            if (type === 'PRACTICE') {
+                const practiceRounds = await Round.find({ type: 'PRACTICE' }).select('_id');
+                const practiceRoundIds = practiceRounds.map(r => r._id);
+                questionFilter.$or = [
+                    { assignedAdmin: adminId },
+                    { round: { $in: practiceRoundIds } },
+                    { linkedRounds: { $in: practiceRoundIds } }
+                ];
+            } else {
+                questionFilter.assignedAdmin = adminId;
+            }
+
+            const adminQuestions = await Question.find(questionFilter).select('_id title description points type round category correctAnswer rubrics rubricInstructions').lean();
 
             if (adminQuestions.length === 0) {
                 return reply.code(200).send({
@@ -997,12 +1014,27 @@ module.exports = async function (fastify, opts) {
             }
 
             // 3. Find and Paginate from BOTH collections
-            const [regularSubs, regularCount, practiceSubs, practiceCount] = await Promise.all([
-                Submission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean(),
-                Submission.countDocuments(submissionFilter),
-                PracticeSubmission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean(),
-                PracticeSubmission.countDocuments(submissionFilter)
-            ]);
+            const queries = [];
+            
+            // Regular submissions
+            if (type === 'ALL' || type === 'REGULAR') {
+                queries.push(Submission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean());
+                queries.push(Submission.countDocuments(submissionFilter));
+            } else {
+                queries.push(Promise.resolve([]));
+                queries.push(Promise.resolve(0));
+            }
+
+            // Practice submissions
+            if (type === 'ALL' || type === 'PRACTICE') {
+                queries.push(PracticeSubmission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean());
+                queries.push(PracticeSubmission.countDocuments(submissionFilter));
+            } else {
+                queries.push(Promise.resolve([]));
+                queries.push(Promise.resolve(0));
+            }
+
+            const [regularSubs, regularCount, practiceSubs, practiceCount] = await Promise.all(queries);
 
             const allCombinedResults = [
                 ...regularSubs.map(s => ({ ...s, isPractice: false })),
@@ -1344,15 +1376,29 @@ module.exports = async function (fastify, opts) {
 
             if (roundId && question.isBank) {
                 // Just unlink from the round
-                question.linkedRounds = question.linkedRounds.filter(rid => rid.toString() !== roundId);
-                await question.save();
+                let modified = false;
+                if (question.round?.toString() === roundId) {
+                    question.round = null;
+                    modified = true;
+                }
+                if (question.linkedRounds?.some(rid => rid.toString() === roundId)) {
+                    question.linkedRounds = question.linkedRounds.filter(rid => rid.toString() !== roundId);
+                    modified = true;
+                }
 
-                await logActivity({
-                    action: 'UNLINKED',
-                    performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                    target: { type: 'Question', id: questionId, label: `Unlinked from round ${roundId}` },
-                    ip: request.ip
-                });
+                if (modified) {
+                    await question.save();
+
+                    await logActivity({
+                        action: 'UNLINKED',
+                        performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                        target: { type: 'Question', id: questionId, label: `Unlinked from round ${roundId}` },
+                        ip: request.ip
+                    });
+
+                    // Refresh RAM Cache
+                    await hydrateStaticData();
+                }
 
                 return reply.code(200).send({ success: true, message: 'Question unlinked successfully' });
             }
@@ -1366,10 +1412,170 @@ module.exports = async function (fastify, opts) {
                 ip: request.ip
             });
 
+            // Refresh RAM Cache
+            await hydrateStaticData();
+
             return reply.code(200).send({ success: true, message: 'Question deleted successfully' });
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to delete question' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/questions/bulk-delete
+     * Deletes or unlinks multiple questions based on mode.
+     * Modes: 'delete' (default, deletes non-bank, unlinks bank), 'unlink' (only unlinks bank, skips others)
+     */
+    fastify.post('/questions/bulk-delete', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { questionIds, roundId, mode = 'delete' } = request.body;
+
+            if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+                return reply.code(400).send({ error: 'Valid array of questionIds is required' });
+            }
+
+            let unlinkedCount = 0;
+            let deletedCount = 0;
+            let skippedCount = 0;
+
+            for (const qId of questionIds) {
+                const question = await Question.findById(qId);
+                if (!question) continue;
+
+                const belongsToRound = question.round?.toString() === roundId;
+                const isLinkedToRound = question.linkedRounds?.some(rid => rid.toString() === roundId);
+
+                if (!belongsToRound && !isLinkedToRound) {
+                    skippedCount++;
+                    continue;
+                }
+
+                if (question.isBank) {
+                    // Check if we are in a round context for unlinking
+                    if (roundId) {
+                        let modified = false;
+                        if (belongsToRound) {
+                            question.round = null; 
+                            modified = true;
+                        }
+                        if (isLinkedToRound) {
+                            question.linkedRounds = question.linkedRounds.filter(rid => rid.toString() !== roundId);
+                            modified = true;
+                        }
+                        if (modified) {
+                            await question.save();
+                            unlinkedCount++;
+                        }
+                    } else if (mode === 'delete') {
+                        // Permanent delete of the BANK record itself (no roundId provided)
+                        await Question.findByIdAndDelete(qId);
+                        deletedCount++;
+                    } else {
+                        skippedCount++;
+                    }
+                } else {
+                    // It's a standard round-specific question record
+                    if (mode === 'delete') {
+                        await Question.findByIdAndDelete(qId);
+                        deletedCount++;
+                    } else {
+                        // For non-bank questions, 'unlink' effectively means nulling the round
+                        // but usually these should just be deleted. If mode is unlink, we'll
+                        // just null it out so it hides from the round.
+                        question.round = null;
+                        await question.save();
+                        unlinkedCount++;
+                    }
+                }
+            }
+
+            await logActivity({
+                action: 'BULK_QUESTION_OP',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Question', label: `Bulk ${mode.toUpperCase()}: ${deletedCount} deleted, ${unlinkedCount} unlinked, ${skippedCount} skipped` },
+                metadata: { questionIds, deletedCount, unlinkedCount, skippedCount, roundId, mode },
+                ip: request.ip
+            });
+
+            // Update RAM Cache for student test view
+            await hydrateStaticData();
+
+            return reply.code(200).send({
+                success: true,
+                message: `Bulk operation complete. ${deletedCount} deleted, ${unlinkedCount} unlinked, ${skippedCount} skipped.`,
+                data: { deletedCount, unlinkedCount, skippedCount }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to bulk process questions' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/rounds/:roundId/unlink-all
+     * Remove or delete ALL questions associated with a round.
+     */
+    fastify.post('/rounds/:roundId/unlink-all', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+
+            // Check Permission
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden' });
+
+            const questions = await Question.find({
+                $or: [{ round: roundId }, { linkedRounds: roundId }]
+            });
+
+            if (questions.length === 0) {
+                return reply.code(200).send({ success: true, message: 'No questions to remove.' });
+            }
+
+            let unlinkedCount = 0;
+            let deletedCount = 0;
+
+            for (const q of questions) {
+                if (q.isBank) {
+                    let modified = false;
+                    if (q.round?.toString() === roundId) {
+                        q.round = null; 
+                        modified = true;
+                    }
+                    if (q.linkedRounds?.some(rid => rid.toString() === roundId)) {
+                        q.linkedRounds = q.linkedRounds.filter(rid => rid.toString() !== roundId);
+                        modified = true;
+                    }
+                    if (modified) {
+                        await q.save();
+                        unlinkedCount++;
+                    }
+                } else {
+                    // Standard question record
+                    await Question.findByIdAndDelete(q._id);
+                    deletedCount++;
+                }
+            }
+
+            await logActivity({
+                action: 'UNLINK_ALL_QUESTIONS',
+                performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Round', id: roundId, label: `Unlinked all questions from round ${roundId}` },
+                metadata: { deletedCount, unlinkedCount },
+                ip: request.ip
+            });
+
+            // Update RAM Cache for student test view
+            await hydrateStaticData();
+
+            return reply.code(200).send({
+                success: true,
+                message: `Successfully removed all ${questions.length} questions. ${unlinkedCount} unlinked, ${deletedCount} deleted.`,
+                data: { unlinkedCount, deletedCount }
+            });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to unlink all questions' });
         }
     });
 

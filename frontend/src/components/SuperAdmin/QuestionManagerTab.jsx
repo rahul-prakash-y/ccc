@@ -813,18 +813,33 @@ const BulkUploadModal = ({ roundId, rounds, onClose, onUploadSuccess }) => {
 };
 
 // ─── Main Question Manager Tab ──────────────────────────────────────────────────────
-const QuestionManagerTab = () => {
-    const { rounds, activeRoundId } = useRoundStore();
+const QuestionManagerTab = ({ forcePractice = false }) => {
+    const { rounds, activeRoundId, fetchRounds } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
+    
+    // Filtering rounds based on forcePractice
+    const filteredRounds = React.useMemo(() => {
+        if (forcePractice) return (rounds || []).filter(r => r.type === 'PRACTICE');
+        return rounds || [];
+    }, [rounds, forcePractice]);
+
     const [selectedRound, setSelectedRound] = useState(activeRoundId);
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState(null); // 'add', 'import', 'bulk-upload', or Question object
 
-    // Sync from store if jump-to happens
     useEffect(() => {
-        if (activeRoundId) setSelectedRound(activeRoundId);
-    }, [activeRoundId]);
+        if (!rounds || rounds.length === 0) fetchRounds();
+    }, [rounds, fetchRounds]);
+
+    // Sync from store if jump-to happens, but verify it's in filteredRounds
+    useEffect(() => {
+        if (activeRoundId && filteredRounds.some(r => r._id === activeRoundId)) {
+            setSelectedRound(activeRoundId);
+        } else if (forcePractice && filteredRounds.length > 0 && !selectedRound) {
+            setSelectedRound(filteredRounds[0]._id);
+        }
+    }, [activeRoundId, filteredRounds, forcePractice, selectedRound]);
     const [expandedId, setExpandedId] = useState(null);
 
     // Pagination & Search States
@@ -832,6 +847,10 @@ const QuestionManagerTab = () => {
     const [page, setPage] = useState(1);
     const [limit] = useState(15);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+
+    // Selection States
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [isSelecting, setIsSelecting] = useState(false);
 
     const fetchQuestions = useCallback(async (roundId, isInitial = false) => {
         if (!roundId) return;
@@ -890,6 +909,97 @@ const QuestionManagerTab = () => {
         });
     };
 
+    const handleBulkDelete = () => {
+        if (selectedIds.size === 0) return;
+
+        showConfirm({
+            title: "Bulk Delete Questions",
+            message: `Are you sure you want to delete/unlink ${selectedIds.size} selected questions?`,
+            confirmLabel: "Delete Selected",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.post(`${API}/questions/bulk-delete`, {
+                        questionIds: Array.from(selectedIds),
+                        roundId: selectedRound
+                    });
+                    toast.success(`Successfully processed ${selectedIds.size} questions.`);
+                    setSelectedIds(new Set());
+                    setIsSelecting(false);
+                    fetchQuestions(selectedRound);
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Bulk deletion failed.");
+                    console.error(e);
+                }
+            }
+        });
+    };
+
+    const handleBulkUnlink = () => {
+        const hasBankQuestions = questions.some(q => selectedIds.has(q._id) && q.isBank);
+        if (!hasBankQuestions) {
+            toast.error("No library questions selected for unlinking.");
+            return;
+        }
+
+        showConfirm({
+            title: "Bulk Unlink Questions",
+            message: `Remove selected library questions from this round? They will remain in the Global Library.`,
+            confirmLabel: "Unlink Selected",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.post(`${API}/questions/bulk-delete`, {
+                        questionIds: Array.from(selectedIds),
+                        roundId: selectedRound,
+                        mode: 'unlink'
+                    });
+                    toast.success("Library questions unlinked successfully.");
+                    setSelectedIds(new Set());
+                    setIsSelecting(false);
+                    fetchQuestions(selectedRound);
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Bulk unlinking failed.");
+                    console.error(e);
+                }
+            }
+        });
+    };
+
+    const handleUnlinkAll = () => {
+        showConfirm({
+            title: "Clear all questions?",
+            message: `Careful! This will remove ALL questions from the current round. Library questions will be unlinked, and round-specific questions will be deleted.`,
+            confirmLabel: "Yes, Unlink All",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await api.post(`${API}/rounds/${selectedRound}/unlink-all`);
+                    toast.success("Round cleared successfully.");
+                    fetchQuestions(selectedRound);
+                } catch (e) {
+                    toast.error(e.response?.data?.error || "Operation failed.");
+                    console.error(e);
+                }
+            }
+        });
+    };
+
+    const toggleSelection = (id) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === questions.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(questions.map(q => q._id)));
+        }
+    };
+
     const handleSave = () => {
         fetchQuestions(selectedRound);
         setModal(null);
@@ -930,7 +1040,7 @@ const QuestionManagerTab = () => {
                         className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-8 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none shadow-sm cursor-pointer"
                     >
                         <option value="">— Target Round —</option>
-                        {rounds.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
+                        {filteredRounds.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
                     </select>
                     <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
@@ -952,37 +1062,99 @@ const QuestionManagerTab = () => {
                         <p className="text-sm font-bold text-slate-700 leading-none mt-1">{pagination.totalRecords} Items</p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {isSelecting && selectedIds.size > 0 && (
+                            <div className="flex items-center gap-2">
+                                {questions.some(q => selectedIds.has(q._id) && q.isBank) && (
+                                    <button
+                                        onClick={handleBulkUnlink}
+                                        className="flex items-center gap-2 px-3 py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl text-orange-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                        title="Only unlinks library questions, skips others"
+                                    >
+                                        <X size={16} /> Unlink Library ({Array.from(selectedIds).filter(id => questions.find(q => q._id === id)?.isBank).length})
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleBulkDelete}
+                                    className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-red-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                >
+                                    <Trash2 size={16} /> Delete All ({selectedIds.size})
+                                </button>
+                            </div>
+                        )}
                         <button
-                            onClick={handleDownloadTemplate}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 disabled:opacity-50 disabled:hover:bg-indigo-50 rounded-xl text-indigo-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                            onClick={() => {
+                                setIsSelecting(!isSelecting);
+                                setSelectedIds(new Set());
+                            }}
+                            disabled={!selectedRound || questions.length === 0}
+                            className={`flex items-center gap-2 px-3 py-2 border rounded-xl font-bold text-sm transition-all shadow-sm active:scale-95 ${isSelecting ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
                         >
-                            <Download size={16} /> <span className="hidden sm:inline">Template</span>
+                            <Check size={16} /> <span className="hidden sm:inline">{isSelecting ? 'Cancel Selection' : 'Select'}</span>
                         </button>
-                        <button
-                            onClick={() => setModal('bulk-upload')}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
-                        >
-                            <Upload size={16} /> <span className="hidden sm:inline">Bulk Upload</span>
-                        </button>
-                        <button
-                            onClick={() => setModal('import')}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-50 rounded-xl text-slate-700 font-bold text-sm transition-all shadow-sm active:scale-95"
-                        >
-                            <Import size={16} /> <span className="hidden sm:inline">From Library</span>
-                        </button>
-                        <button
-                            onClick={() => setModal('add')}
-                            disabled={!selectedRound}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-indigo-200 active:scale-95"
-                        >
-                            <Plus size={16} /> <span className="hidden sm:inline">Add Question</span>
-                        </button>
+                        {!isSelecting && (
+                            <>
+                                <button
+                                    onClick={handleDownloadTemplate}
+                                    disabled={!selectedRound}
+                                    className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 disabled:opacity-50 disabled:hover:bg-indigo-50 rounded-xl text-indigo-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                >
+                                    <Download size={16} /> <span className="hidden sm:inline">Template</span>
+                                </button>
+                                <button
+                                    onClick={() => setModal('bulk-upload')}
+                                    disabled={!selectedRound}
+                                    className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 rounded-xl text-emerald-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                >
+                                    <Upload size={16} /> <span className="hidden sm:inline">Bulk Upload</span>
+                                </button>
+                                <button
+                                    onClick={() => setModal('import')}
+                                    disabled={!selectedRound}
+                                    className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-50 rounded-xl text-slate-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                >
+                                    <Import size={16} /> <span className="hidden sm:inline">From Library</span>
+                                </button>
+                                <button
+                                    onClick={handleUnlinkAll}
+                                    disabled={!selectedRound || questions.length === 0}
+                                    className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 rounded-xl text-red-700 font-bold text-sm transition-all shadow-sm active:scale-95"
+                                    title="Unlink/Delete ALL questions in this round"
+                                >
+                                    <Trash2 size={16} /> <span className="hidden sm:inline">Unlink All</span>
+                                </button>
+                                <button
+                                    onClick={() => setModal('add')}
+                                    disabled={!selectedRound}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold text-sm transition-all shadow-md shadow-indigo-200 active:scale-95"
+                                >
+                                    <Plus size={16} /> <span className="hidden sm:inline">Add Question</span>
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
+
+            {isSelecting && questions.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-2 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={toggleSelectAll}
+                            className="flex items-center gap-2 text-xs font-bold text-indigo-700 hover:text-indigo-800 transition-colors"
+                        >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedIds.size === questions.length ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-indigo-300'
+                                }`}>
+                                {selectedIds.size === questions.length && <Check size={10} />}
+                            </div>
+                            {selectedIds.size === questions.length ? 'Deselect All' : 'Select All on Page'}
+                        </button>
+                        <span className="text-xs text-slate-500 font-medium">
+                            {selectedIds.size} questions selected
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* List Container */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
@@ -1016,6 +1188,17 @@ const QuestionManagerTab = () => {
                                 >
                                     {/* Header / Summary Bar */}
                                     <div className="flex items-center gap-4 p-3 pr-4">
+                                        {isSelecting && (
+                                            <div
+                                                onClick={() => toggleSelection(q._id)}
+                                                className="w-8 shrink-0 flex items-center justify-center cursor-pointer"
+                                            >
+                                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedIds.has(q._id) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 hover:border-indigo-300'
+                                                    }`}>
+                                                    {selectedIds.has(q._id) && <Check size={12} />}
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="w-8 shrink-0 flex items-center justify-center">
                                             <span className="text-xs font-black text-slate-300 bg-slate-50 px-2 py-1 rounded-md">{(page - 1) * limit + idx + 1}</span>
                                         </div>

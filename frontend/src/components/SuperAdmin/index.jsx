@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, ClipboardList, LogOut,
   Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck,
-  Power, PieChart, Server, Award, Play
+  Power, PieChart, Server, Award, Play, Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
@@ -28,6 +28,7 @@ import ServerAllocationTab from './ServerAllocationTab';
 import CertificateManager from './CertificateManager';
 import SystemHealthTab from './SystemHealthTab';
 import DatabaseManagerTab from './DatabaseManagerTab';
+import PracticeDashboardTab from './PracticeDashboardTab';
 
 
 const TABS = [
@@ -46,6 +47,7 @@ const TABS = [
   { id: 'admin-contributions', label: 'Admin Contributions', icon: PieChart },
   { id: 'server-allocation', label: 'Server Allocation', icon: Server },
   { id: 'certificates', label: 'Certificates', icon: Award },
+  { id: 'practice', label: 'Practice Dashboard', icon: Sparkles },
   { id: 'health', label: 'System Health', icon: Activity },
   { id: 'database', label: 'Database Manager', icon: Server, roles: ['SUPER_MASTER'] },
 ];
@@ -259,6 +261,7 @@ const SuperAdminDashboard = () => {
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
                   {activeTab === 'certificates' && <CertificateManager />}
                   {activeTab === 'health' && <SystemHealthTab />}
+                  {activeTab === 'practice' && <PracticeDashboardTab />}
                   {activeTab === 'database' && <DatabaseManagerTab />}
                 </div>
               </div>
