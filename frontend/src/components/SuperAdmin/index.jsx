@@ -1,53 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ShieldCheck, BookOpen, ClipboardList, LogOut,
-  Activity, UserCog, Users, PlayCircle, ClipboardCheck, Trophy, UserCheck,
-  Power, PieChart, Server, Award, Play, Sparkles
+  ShieldCheck, BookOpen, 
+  Activity, UserCog, Users, PlayCircle,
+  Power, Server, Play, Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useRoundStore } from '../../store/roundStore';
-import { API } from './constants';
 
 // Tab Components
-import LiveOpsTab from './LiveOpsTab';
 import ActivityLogsTab from './ActivityLogsTab';
 import StudentManagerTab from './StudentManagerTab';
 import AdminManagerTab from './AdminManagerTab';
-import AuditLogsTab from './AuditLogsTab';
 import QuestionBankTab from './QuestionBankTab';
-import QuestionManagerTab from './QuestionManagerTab';
-import EvaluationTab from './EvaluationTab';
-import StudentScoreDashboard from './StudentScoreDashboard';
-import TeamManagerTab from './TeamManagerTab';
-import TeamScoreTab from './TeamScoreTab';
-import AttendanceTab from './AttendanceTab';
-import AdminContributionsTab from './AdminContributionsTab';
 import ServerAllocationTab from './ServerAllocationTab';
-import CertificateManager from './CertificateManager';
 import SystemHealthTab from './SystemHealthTab';
 import DatabaseManagerTab from './DatabaseManagerTab';
 import PracticeDashboardTab from './PracticeDashboardTab';
+import LiveDashboardTab from './LiveDashboardTab';
+import TeamManagerTab from './TeamManagerTab';
 
 
 const TABS = [
-  { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
-  { id: 'activity', label: 'Activity Logs', icon: Activity },
-  { id: 'students', label: 'Students', icon: Users },
-  { id: 'admins', label: 'Admins', icon: UserCog },
-  { id: 'audit', label: 'Submission Audit', icon: ClipboardList },
-  { id: 'question-bank', label: 'Question Bank', icon: BookOpen },
-  { id: 'questions', label: 'Test Questions', icon: ClipboardCheck },
-  { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
-  { id: 'scores', label: 'Student Scores', icon: Trophy },
-  { id: 'teams', label: 'Teams', icon: Users },
-  { id: 'team-scores', label: 'Team Leaderboard', icon: Trophy },
-  { id: 'attendance', label: 'Attendance', icon: UserCheck },
-  { id: 'admin-contributions', label: 'Admin Contributions', icon: PieChart },
-  { id: 'server-allocation', label: 'Server Allocation', icon: Server },
-  { id: 'certificates', label: 'Certificates', icon: Award },
+  { id: 'live-dashboard', label: 'Live Dashboard', icon: PlayCircle },
   { id: 'practice', label: 'Practice Dashboard', icon: Sparkles },
+  { id: 'students', label: 'Student Manager', icon: Users },
+  { id: 'admins', label: 'Admin Manager', icon: UserCog },
+  { id: 'question-bank', label: 'Library', icon: BookOpen },
+  { id: 'teams', label: 'Teams', icon: Users },
+  { id: 'activity', label: 'Activity Logs', icon: Activity },
+  { id: 'server-allocation', label: 'Servers', icon: Server },
   { id: 'health', label: 'System Health', icon: Activity },
   { id: 'database', label: 'Database Manager', icon: Server, roles: ['SUPER_MASTER'] },
 ];
@@ -56,7 +39,7 @@ const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { fetchRounds } = useRoundStore();
-  const [activeTab, setActiveTab] = useState('liveops');
+  const [activeTab, setActiveTab] = useState('live-dashboard');
   const [hoveredTab, setHoveredTab] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
 
@@ -245,23 +228,15 @@ const SuperAdminDashboard = () => {
 
                 {/* Component Injection */}
                 <div className="relative text-slate-600">
-                  {activeTab === 'liveops' && <LiveOpsTab onJumpToTab={setActiveTab} />}
-                  {activeTab === 'activity' && <ActivityLogsTab />}
+                  {activeTab === 'live-dashboard' && <LiveDashboardTab forceType="GENERAL" />}
+                  {activeTab === 'practice' && <LiveDashboardTab forceType="PRACTICE" />}
                   {activeTab === 'students' && <StudentManagerTab />}
-                  {activeTab === 'admins' && <AdminManagerTab />}
-                  {activeTab === 'audit' && <AuditLogsTab />}
-                  {activeTab === 'question-bank' && <QuestionBankTab />}
-                  {activeTab === 'questions' && <QuestionManagerTab />}
-                  {activeTab === 'evaluations' && <EvaluationTab />}
-                  {activeTab === 'scores' && <StudentScoreDashboard />}
+                   {activeTab === 'admins' && <AdminManagerTab />}
                   {activeTab === 'teams' && <TeamManagerTab />}
-                  {activeTab === 'team-scores' && <TeamScoreTab />}
-                  {activeTab === 'attendance' && <AttendanceTab />}
-                  {activeTab === 'admin-contributions' && <AdminContributionsTab />}
+                  {activeTab === 'question-bank' && <QuestionBankTab />}
+                  {activeTab === 'activity' && <ActivityLogsTab />}
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
-                  {activeTab === 'certificates' && <CertificateManager />}
                   {activeTab === 'health' && <SystemHealthTab />}
-                  {activeTab === 'practice' && <PracticeDashboardTab />}
                   {activeTab === 'database' && <DatabaseManagerTab />}
                 </div>
               </div>

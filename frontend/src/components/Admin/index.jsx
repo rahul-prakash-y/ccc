@@ -6,30 +6,22 @@ import { API } from '../SuperAdmin/constants';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // Tab Components
-import LiveOpsTab from '../SuperAdmin/LiveOpsTab';
+import LiveDashboardTab from '../SuperAdmin/LiveDashboardTab';
+import MyAdminAssignmentsTab from '../SuperAdmin/MyAdminAssignmentsTab';
 import StudentManagerTab from '../SuperAdmin/StudentManagerTab';
-import QuestionManagerTab from '../SuperAdmin/QuestionManagerTab';
-import EvaluationTab from '../SuperAdmin/EvaluationTab';
 import TeamManagerTab from '../SuperAdmin/TeamManagerTab';
-import AttendanceTab from "../SuperAdmin/AttendanceTab";
-import CertificateManager from '../SuperAdmin/CertificateManager';
-import PracticeDashboardTab from '../SuperAdmin/PracticeDashboardTab';
 
 const TABS = [
-    { id: 'liveops', label: 'Live Operations', icon: PlayCircle },
-    { id: 'students', label: 'Students', icon: Users },
-    { id: 'questions', label: 'Questions', icon: BookOpen },
-    { id: 'evaluations', label: 'Evaluations', icon: ClipboardCheck },
-    { id: 'teams', label: 'Teams', icon: Users },
-    { id: 'attendance', label: 'Attendance', icon: UserCheck },
-    { id: 'certificates', label: 'Certificates', icon: Award },
+    { id: 'live-dashboard', label: 'Live Dashboard', icon: PlayCircle },
     { id: 'practice', label: 'Practice Dashboard', icon: Sparkles },
+    { id: 'students', label: 'Student Manager', icon: Users },
+    { id: 'teams', label: 'Teams', icon: Users },
 ];
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
-    const [activeTab, setActiveTab] = useState('liveops');
+    const [activeTab, setActiveTab] = useState('live-dashboard');
     const [rounds, setRounds] = useState([]);
 
     // Tooltip State
@@ -214,14 +206,10 @@ const AdminDashboard = () => {
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative">
                             {/* Component Injection */}
                             <div className="relative text-slate-600 h-full">
-                                {activeTab === 'liveops' && <LiveOpsTab />}
+                                {activeTab === 'live-dashboard' && <LiveDashboardTab forceType="GENERAL" />}
+                                {activeTab === 'practice' && <LiveDashboardTab forceType="PRACTICE" />}
                                 {activeTab === 'students' && <StudentManagerTab />}
-                                {activeTab === 'questions' && <QuestionManagerTab rounds={rounds} />}
-                                {activeTab === 'evaluations' && <EvaluationTab />}
                                 {activeTab === 'teams' && <TeamManagerTab />}
-                                {activeTab === 'attendance' && <AttendanceTab />}
-                                {activeTab === 'certificates' && <CertificateManager />}
-                                {activeTab === 'practice' && <PracticeDashboardTab />}
                             </div>
 
                             {/* Bottom Gradient Overlay (Depth Indicator) */}

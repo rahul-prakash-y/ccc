@@ -796,10 +796,16 @@ const SystemOverview = () => {
   );
 };
 
-const LiveOpsTab = ({ onJumpToTab }) => {
+const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
   const { user } = useAuthStore();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'SUPER_MASTER';
-  const { rounds: sections, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
+  const { rounds, fetchRounds, updateRound, removeRound, filterRounds } = useRoundStore();
+  
+  const sections = (rounds || []).filter(r => {
+    if (forceType === 'PRACTICE') return r.type === 'PRACTICE';
+    if (forceType === 'GENERAL') return r.type !== 'PRACTICE';
+    return true;
+  });
   const [loading, setLoading] = useState(!sections.length);
   const [projectorSection, setProjectorSection] = useState(null);
   const [busy, setBusy] = useState({});

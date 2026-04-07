@@ -98,6 +98,10 @@ const questionSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    problemImage: {
+        type: String,
+        default: ''
+    },
     isPractice: {
         type: Boolean,
         default: false,

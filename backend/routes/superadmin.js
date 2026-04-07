@@ -7,7 +7,8 @@ const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
 const AdminOTP = require('../models/AdminOTP');
 const Team = require('../models/Team');
-const { logActivity } = require('../utils/logger');
+const { uploadImage } = require('../utils/cloudinary');
+const fastifyMultipart = require('@fastify/multipart');
 const { hydrateStaticData } = require('../services/cacheService');
 const { checkRoundPermission } = require('../utils/permissions');
 const bcrypt = require('bcryptjs');
@@ -484,7 +485,8 @@ module.exports = async function (fastify, opts) {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
                 order, type, category, options, correctAnswer,
-                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions
+                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions,
+                problemImage
             } = request.body;
 
             if (!title || !description) {
@@ -517,7 +519,8 @@ module.exports = async function (fastify, opts) {
                 assignedAdmin: isManualEvaluation ? assignedAdmin : null,
                 createdBy: request.user?.userId || null,
                 rubrics: rubrics || [],
-                rubricInstructions: rubricInstructions || ''
+                rubricInstructions: rubricInstructions || '',
+                problemImage: problemImage || ''
             });
 
             await question.save();
@@ -592,10 +595,12 @@ module.exports = async function (fastify, opts) {
     // 1. GET /api/superadmin/question-bank
     fastify.get('/question-bank', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search, category, page = 1, limit = 50 } = request.query;
+            const { search, category, difficulty, assignedAdmin, page = 1, limit = 50 } = request.query;
 
             const filter = { isBank: true };
             if (category) filter.category = category;
+            if (difficulty) filter.difficulty = difficulty;
+            if (assignedAdmin) filter.assignedAdmin = assignedAdmin;
 
             if (search) {
                 const searchRegex = new RegExp(search, 'i');
@@ -646,7 +651,8 @@ module.exports = async function (fastify, opts) {
                 title, description, inputFormat, outputFormat,
                 sampleInput, sampleOutput, difficulty, points,
                 type, category, options, correctAnswer,
-                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions
+                isManualEvaluation, assignedAdmin, rubrics, rubricInstructions,
+                problemImage
             } = request.body;
 
             if (!title || !description) {
@@ -673,7 +679,8 @@ module.exports = async function (fastify, opts) {
                 assignedAdmin: isManualEvaluation ? assignedAdmin : null,
                 createdBy: request.user?.userId || null,
                 rubrics: rubrics || [],
-                rubricInstructions: rubricInstructions || ''
+                rubricInstructions: rubricInstructions || '',
+                problemImage: problemImage || ''
             });
 
             await question.save();
@@ -921,8 +928,71 @@ module.exports = async function (fastify, opts) {
         }
     });
 
+    // IMAGE UPLOAD TOOL
+    fastify.post('/upload-image', { 
+        preValidation: [fastify.requireAdmin],
+        limits: { fileSize: 500 * 1024 } 
+    }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data) return reply.code(400).send({ error: 'No file uploaded' });
+
+            const buffer = await data.toBuffer();
+            const result = await uploadImage(buffer, 'ccc_ui_ux');
+
+            return reply.send({ 
+                success: true, 
+                url: result.secure_url,
+                public_id: result.public_id
+            });
+        } catch (error) {
+            console.error('Cloudinary upload error:', error);
+            return reply.code(500).send({ error: 'Failed to upload image' });
+        }
+    });
+
     /**
-     * GET /api/superadmin/manual-evaluations
+     * @route   GET /api/superadmin/my-assignments
+     * @desc    Get questions assigned to the current admin
+     * @access  Private (Admin)
+     */
+    fastify.get('/my-assignments', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const questions = await Question.find({ assignedAdmin: request.user.userId })
+                .populate('round', 'name type status')
+                .sort({ createdAt: -1 });
+
+            // Group by round for better UI organization
+            const grouped = questions.reduce((acc, q) => {
+                const roundId = q.round?._id?.toString() || 'LIBRARY';
+                const roundName = q.round?.name || 'Global Library / Unlinked';
+                const roundType = q.round?.type || 'N/A';
+                
+                if (!acc[roundId]) {
+                    acc[roundId] = {
+                        _id: roundId,
+                        name: roundName,
+                        type: roundType,
+                        questions: []
+                    };
+                }
+                acc[roundId].questions.push(q);
+                return acc;
+            }, {});
+
+            reply.send({ 
+                success: true, 
+                data: Object.values(grouped),
+                total: questions.length 
+            });
+        } catch (error) {
+            console.error('Error fetching admin assignments:', error);
+            reply.code(500).send({ error: 'Failed to fetch assignments' });
+        }
+    });
+
+    /**
+     * @route   GET /api/superadmin/manual-evaluations
      * Returns all submissions that have answers for questions assigned to this admin for manual evaluation.
      * Each entry contains: question info, student info, their answer, and existing manualScores.
      */
@@ -1019,7 +1089,7 @@ module.exports = async function (fastify, opts) {
             const queries = [];
             
             // Regular submissions
-            if (type === 'ALL' || type === 'REGULAR') {
+            if (type === 'ALL' || type === 'REGULAR' || type === 'GENERAL') {
                 queries.push(Submission.find(submissionFilter).populate('student', 'name studentId').populate('round', 'name').sort({ updatedAt: -1 }).lean());
                 queries.push(Submission.countDocuments(submissionFilter));
             } else {
@@ -1244,7 +1314,7 @@ module.exports = async function (fastify, opts) {
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
 
-            const ActiveSubmissionModel = type === 'PRACTICE' ? PracticeSubmission : Submission;
+            const ActiveSubmissionModel = (type === 'PRACTICE') ? PracticeSubmission : Submission;
 
             // 1. Build Match Stage
             const matchStage = {

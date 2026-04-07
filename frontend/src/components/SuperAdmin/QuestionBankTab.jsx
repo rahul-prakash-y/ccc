@@ -12,418 +12,8 @@ import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../store/confirmStore';
 import { SkeletonList } from '../Skeleton';
+import QuestionModal from './QuestionModal';
 
-const QuestionModal = ({ question, onClose, onSave }) => {
-    const isEdit = !!question;
-    const [form, setForm] = useState({
-        title: question?.title || '',
-        description: question?.description || '',
-        inputFormat: question?.inputFormat || '',
-        outputFormat: question?.outputFormat || '',
-        sampleInput: question?.sampleInput || '',
-        sampleOutput: question?.sampleOutput || '',
-        difficulty: question?.difficulty || 'MEDIUM',
-        points: question?.points || 10,
-        type: question?.type || 'CODE',
-        category: question?.category || 'GENERAL',
-        options: question?.options || [],
-        correctAnswer: question?.correctAnswer || '',
-        isManualEvaluation: question?.isManualEvaluation || false,
-        assignedAdmin: question?.assignedAdmin?._id || question?.assignedAdmin || '',
-        rubrics: question?.rubrics || [],
-        rubricInstructions: question?.rubricInstructions || '',
-        isPractice: question?.isPractice || false,
-    });
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState('');
-    const [admins, setAdmins] = useState([]);
-    const [loadingAdmins, setLoadingAdmins] = useState(false);
-    const [rubricSuggestions, setRubricSuggestions] = useState([]);
-
-    // Fetch rubric suggestions when category changes
-    useEffect(() => {
-        if (form.category) {
-            const fetchSuggestions = async () => {
-                try {
-                    const res = await api.get(`${API}/questions/rubric-suggestions?category=${form.category}`);
-                    setRubricSuggestions(res.data.data || []);
-                } catch (e) {
-                    console.error('Failed to load rubric suggestions:', e);
-                }
-            };
-            fetchSuggestions();
-        }
-    }, [form.category]);
-
-    const fetchAdmins = useCallback(async () => {
-        if (admins.length > 0) return;
-        setLoadingAdmins(true);
-        try {
-            const res = await api.get(`${API}/admins`);
-            setAdmins(res.data.data || []);
-        } catch (e) {
-            console.error('Failed to load admins:', e);
-        } finally {
-            setLoadingAdmins(false);
-        }
-    }, [admins.length]);
-
-    const didInitFetch = React.useRef(false);
-    useEffect(() => {
-        if (!didInitFetch.current && form.isManualEvaluation) {
-            didInitFetch.current = true;
-            fetchAdmins();
-        }
-    });
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSaving(true);
-        setError('');
-        try {
-            const url = isEdit ? `${API}/questions/${question._id}` : `${API}/question-bank`;
-            const method = isEdit ? 'put' : 'post';
-            const res = await api({ method, url, data: form });
-            onSave(res.data.data);
-        } catch (err) {
-            setError(err.response?.data?.error || "Failed to save bank question.");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleOptionChange = (index, value) => {
-        const newOptions = [...form.options];
-        newOptions[index] = value;
-        setForm({ ...form, options: newOptions });
-    };
-
-    const addOption = () => setForm({ ...form, options: [...form.options, ''] });
-    const removeOption = (index) => setForm({ ...form, options: form.options.filter((_, i) => i !== index) });
-
-    const handleRubricChange = (index, field, value) => {
-        const newRubrics = [...form.rubrics];
-        newRubrics[index] = { ...newRubrics[index], [field]: field === 'maxScore' ? Number(value) : value };
-        setForm({ ...form, rubrics: newRubrics });
-    };
-
-    const addRubric = () => setForm({ ...form, rubrics: [...form.rubrics, { criterion: '', maxScore: 5 }] });
-    const removeRubric = (index) => setForm({ ...form, rubrics: form.rubrics.filter((_, i) => i !== index) });
-
-    const field = (label, key, type = 'text', rows = null) => (
-        <div>
-            <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">{label}</label>
-            {rows ? (
-                <textarea
-                    rows={rows}
-                    value={form[key]}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 resize-none font-mono shadow-sm"
-                />
-            ) : (
-                <input
-                    type={type}
-                    value={form[key]}
-                    onChange={e => setForm(f => ({ ...f, [key]: type === 'number' ? Number(e.target.value) : e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
-                />
-            )}
-        </div>
-    );
-
-    return (
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 py-8"
-                onClick={e => e.target === e.currentTarget && onClose()}
-            >
-                <motion.div
-                    initial={{ scale: 0.95, y: 10 }}
-                    animate={{ scale: 1, y: 0 }}
-                    exit={{ scale: 0.95, y: 10 }}
-                    className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl max-h-full flex flex-col shadow-2xl overflow-hidden"
-                >
-                    <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-indigo-50/50 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                                <BookOpen size={18} />
-                            </div>
-                            <h2 className="font-bold text-slate-900 text-lg">{isEdit ? 'Edit Bank Question' : 'Add Bank Question'}</h2>
-                        </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
-                            <X size={16} />
-                        </button>
-                    </div>
-
-                    <div className="overflow-y-auto custom-scrollbar p-6 flex-1">
-                        <form id="question-form" onSubmit={handleSubmit} className="space-y-6">
-
-                            {/* Top Configuration Row */}
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Question Type</label>
-                                    <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
-                                    >
-                                        <option value="CODE">Programming / Code</option>
-                                        <option value="MCQ">Multiple Choice (MCQ)</option>
-                                        <option value="DEBUG">Bug Fix / Debug</option>
-                                        <option value="FILL_BLANKS">Fill in Blanks</option>
-                                        <option value="EXPLAIN">Short Answer / Explain</option>
-                                        <option value="UI_UX">UI/UX Submission</option>
-                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Category</label>
-                                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
-                                    >
-                                        <option value="GENERAL">General</option>
-                                        <option value="SQL">SQL</option>
-                                        <option value="HTML">HTML/CSS</option>
-                                        <option value="UI_UX">UI/UX</option>
-                                        <option value="MINI_HACKATHON">Mini Hackathon</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Practice Mode Toggle */}
-                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-                                        <Sparkles size={16} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-800">Practice Mode Only</p>
-                                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">This question will be hidden during real event tests</p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setForm(f => ({ ...f, isPractice: !f.isPractice }))}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${form.isPractice ? 'bg-amber-500' : 'bg-slate-200'}`}
-                                >
-                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${form.isPractice ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            {/* Manual Evaluation Toggle */}
-                            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl">
-                                <label className="flex items-center gap-1.5 text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">
-                                    <ClipboardCheck size={13} /> Manual Evaluation Required
-                                </label>
-                                <div className="flex gap-3">
-                                    {[{ val: false, label: 'No — Auto Graded' }, { val: true, label: 'Yes — Admin Scores' }].map(opt => (
-                                        <label
-                                            key={String(opt.val)}
-                                            className={`flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 cursor-pointer transition-all ${form.isManualEvaluation === opt.val
-                                                ? opt.val ? 'border-amber-500 bg-amber-100 text-amber-900' : 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${form.isManualEvaluation === opt.val
-                                                ? opt.val ? 'border-amber-500' : 'border-indigo-500'
-                                                : 'border-slate-300'
-                                                }`}>
-                                                {form.isManualEvaluation === opt.val && (
-                                                    <span className={`w-2 h-2 rounded-full ${opt.val ? 'bg-amber-500' : 'bg-indigo-500'}`} />
-                                                )}
-                                            </span>
-                                            <input
-                                                type="radio"
-                                                className="sr-only"
-                                                checked={form.isManualEvaluation === opt.val}
-                                                onChange={() => {
-                                                    setForm(f => ({ ...f, isManualEvaluation: opt.val, assignedAdmin: opt.val ? f.assignedAdmin : '' }));
-                                                    if (opt.val) fetchAdmins();
-                                                }}
-                                            />
-                                            <span className="text-xs font-bold">{opt.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
-
-                                {form.isManualEvaluation && (
-                                    <div className="mt-3">
-                                        <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1.5">Assign to Admin *</label>
-                                        {loadingAdmins ? (
-                                            <div className="flex items-center gap-2 text-xs text-amber-600 font-bold">
-                                                <Loader2 size={13} className="animate-spin" /> Loading admins...
-                                            </div>
-                                        ) : (
-                                            <select
-                                                required
-                                                value={form.assignedAdmin}
-                                                onChange={e => setForm(f => ({ ...f, assignedAdmin: e.target.value }))}
-                                                className="w-full bg-white border-2 border-amber-200 rounded-xl px-3 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm"
-                                            >
-                                                <option value="">— Select an Admin —</option>
-                                                {admins.map(a => (
-                                                    <option key={a._id} value={a._id}>{a.name} ({a.studentId})</option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="space-y-4">
-                                {field('Title *', 'title')}
-                                {field('Problem Statement / Prompt *', 'description', 'text', 4)}
-                            </div>
-
-                            {form.type === 'MCQ' && (
-                                <div className="space-y-4 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-                                    <div className="flex justify-between items-center border-b border-indigo-100/50 pb-2">
-                                        <label className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">Options Configuration</label>
-                                        <button type="button" onClick={addOption} className="text-[10px] bg-indigo-600 hover:bg-indigo-700 transition-colors text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm">
-                                            <Plus size={12} /> Add
-                                        </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {form.options.map((opt, i) => (
-                                            <div key={i} className="flex gap-2 items-center">
-                                                <div className="w-6 h-6 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{i + 1}</div>
-                                                <input
-                                                    type="text"
-                                                    value={opt}
-                                                    onChange={e => handleOptionChange(i, e.target.value)}
-                                                    placeholder="Option text..."
-                                                    className="flex-1 bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
-                                                />
-                                                <button type="button" onClick={() => removeOption(i)} className="text-red-400 p-2 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="pt-2">
-                                        {field('Exact Match Answer', 'correctAnswer')}
-                                    </div>
-                                </div>
-                            )}
-
-                            {form.type !== 'MCQ' && (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {field('Input Format Rules', 'inputFormat', 'text', 3)}
-                                        {field('Output Format Rules', 'outputFormat', 'text', 3)}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {field('Sample Test Input', 'sampleInput', 'text', 3)}
-                                        {field('Sample Test Output', 'sampleOutput', 'text', 3)}
-                                    </div>
-                                    {(form.type !== 'CODE' || form.isManualEvaluation) && form.type !== 'UI_UX' && (
-                                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                            {field(form.type === 'CODE' ? 'Reference Solution (Correct Answer)' : 'Expected Correct Answer', 'correctAnswer', 'text', 2)}
-                                        </div>
-                                    )}
-
-                                    {/* Evaluation Rubrics & Instructions */}
-                                    {form.isManualEvaluation && (
-                                        <div className="space-y-4 p-5 bg-amber-50/30 rounded-2xl border border-amber-200/50">
-                                            <div className="flex justify-between items-center border-b border-amber-200/30 pb-2">
-                                                <label className="text-[11px] font-black text-amber-700 uppercase tracking-widest">Evaluation Rubrics</label>
-                                                <button type="button" onClick={addRubric} className="text-[10px] bg-amber-600 hover:bg-amber-700 transition-colors text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm">
-                                                    <Plus size={12} /> Add Criteria
-                                                </button>
-                                            </div>
-                                            <div className="space-y-2">
-                                                {form.rubrics.map((r, i) => (
-                                                    <div key={i} className="flex gap-2 items-center">
-                                                        <input
-                                                            type="text"
-                                                            value={r.criterion}
-                                                            onChange={e => handleRubricChange(i, 'criterion', e.target.value)}
-                                                            placeholder="Criterion (e.g. Visual Appeal)"
-                                                            className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 shadow-sm"
-                                                        />
-                                                        <div className="w-24">
-                                                            <input
-                                                                type="number"
-                                                                value={r.maxScore}
-                                                                onChange={e => handleRubricChange(i, 'maxScore', e.target.value)}
-                                                                placeholder="Max Pts"
-                                                                className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 shadow-sm text-center font-bold"
-                                                            />
-                                                        </div>
-                                                        <button type="button" onClick={() => removeRubric(i)} className="text-red-400 p-2 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                                                    </div>
-                                                ))}
-                                                {form.rubrics.length === 0 && (
-                                                    <p className="text-center py-2 text-xs text-amber-600/60 italic font-medium">No rubrics defined. Click "Add Criteria" or select from suggestions.</p>
-                                                )}
-
-                                                {/* Suggestions section */}
-                                                {rubricSuggestions.length > 0 && (
-                                                    <div className="mt-4 pt-4 border-t border-amber-200/30">
-                                                        <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2">Suggestions for {form.category}</p>
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {rubricSuggestions.map((s, idx) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (!form.rubrics.some(r => r.criterion === s.criterion)) {
-                                                                            setForm(f => ({ ...f, rubrics: [...f.rubrics, { criterion: s.criterion, maxScore: s.maxScore }] }));
-                                                                        }
-                                                                    }}
-                                                                    className="px-2.5 py-1 bg-white border border-amber-200 rounded-lg text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-all flex items-center gap-1.5 active:scale-95"
-                                                                >
-                                                                    <Plus size={10} /> {s.criterion} ({s.maxScore} pts)
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="pt-2">
-                                                {field('Grading Instructions (Internal)', 'rubricInstructions', 'text', 3)}
-                                                <p className="text-[10px] text-amber-600/70 mt-1.5 font-medium italic">These instructions and rubrics are only visible to evaluators.</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-6">
-                                <div>
-                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Difficulty</label>
-                                    <select value={form.difficulty} onChange={e => setForm(f => ({ ...f, difficulty: e.target.value }))}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
-                                    >
-                                        <option value="EASY">EASY</option>
-                                        <option value="MEDIUM">MEDIUM</option>
-                                        <option value="HARD">HARD</option>
-                                    </select>
-                                </div>
-                                {field('Score/Points', 'points', 'number')}
-                            </div>
-
-                            {error && (
-                                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold">
-                                    <AlertTriangle size={16} />{error}
-                                </div>
-                            )}
-                        </form>
-                    </div>
-
-                    <div className="p-5 border-t border-slate-100 bg-slate-50/80 flex gap-3 shrink-0">
-                        <button type="button" onClick={onClose} className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors font-bold text-sm bg-white">
-                            Cancel
-                        </button>
-                        <button type="submit" form="question-form" disabled={saving} className="flex-2 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 active:scale-95 text-sm">
-                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                            {isEdit ? 'Update Question' : 'Save to Bank'}
-                        </button>
-                    </div>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
-};
 
 const BulkUploadModal = ({ onClose, onUploadSuccess }) => {
     const [file, setFile] = useState(null);
@@ -599,17 +189,37 @@ const QuestionBankTab = () => {
     const [modal, setModal] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
 
-    // Pagination & Search States
+    // Filter States
     const [search, setSearch] = useState('');
+    const [selectedAdmin, setSelectedAdmin] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [difficultyFilter, setDifficultyFilter] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(15);
     const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+    const [admins, setAdmins] = useState([]);
+
+    const fetchAdmins = useCallback(async () => {
+        try {
+            const res = await api.get(`${API}/admins`);
+            setAdmins(res.data.data || []);
+        } catch (e) {
+            console.error('Failed to load admins list:', e);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchAdmins();
+    }, [fetchAdmins]);
 
     const fetchQuestions = useCallback(async () => {
         setLoading(questions.length === 0);
         try {
             const params = new URLSearchParams();
             if (search) params.append('search', search);
+            if (selectedAdmin) params.append('assignedAdmin', selectedAdmin);
+            if (categoryFilter) params.append('category', categoryFilter);
+            if (difficultyFilter) params.append('difficulty', difficultyFilter);
             params.append('page', page);
             params.append('limit', limit);
 
@@ -621,16 +231,16 @@ const QuestionBankTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [search, page, limit, questions.length]);
+    }, [search, selectedAdmin, categoryFilter, difficultyFilter, page, limit, questions.length]);
 
     useEffect(() => {
         fetchQuestions();
     }, [fetchQuestions]);
 
-    // Reset page on search change
+    // Reset page on filter change
     useEffect(() => {
         setPage(1);
-    }, [search]);
+    }, [search, selectedAdmin, categoryFilter, difficultyFilter]);
 
     const handleDelete = (questionId) => {
         showConfirm({
@@ -671,15 +281,54 @@ const QuestionBankTab = () => {
                     </div>
                 </div>
 
-                <div className="relative flex-1 max-w-sm">
-                    <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="Search title or category..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                    />
+                <div className="flex-1 flex flex-col sm:flex-row gap-2 max-w-2xl">
+                    <div className="relative flex-1">
+                        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Quick search..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-slate-900 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                        />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <select
+                            value={selectedAdmin}
+                            onChange={e => setSelectedAdmin(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-600 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                        >
+                            <option value="">All Admins</option>
+                            {admins.map(a => (
+                                <option key={a._id} value={a._id}>{a.name.split(' ')[0]}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={categoryFilter}
+                            onChange={e => setCategoryFilter(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-600 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                        >
+                            <option value="">Categories</option>
+                            <option value="GENERAL">General</option>
+                            <option value="SQL">SQL</option>
+                            <option value="HTML">HTML/CSS</option>
+                            <option value="UI_UX">UI/UX</option>
+                            <option value="MINI_HACKATHON">Hackathon</option>
+                        </select>
+
+                        <select
+                            value={difficultyFilter}
+                            onChange={e => setDifficultyFilter(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-600 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                        >
+                            <option value="">Difficulty</option>
+                            <option value="EASY">Easy</option>
+                            <option value="MEDIUM">Medium</option>
+                            <option value="HARD">Hard</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-2 px-2 mt-2 sm:mt-0">
@@ -891,17 +540,16 @@ const QuestionBankTab = () => {
             </div>
 
             <AnimatePresence>
-                {modal && modal !== 'bulk' && (
+                {modal && (
                     <QuestionModal
-                        question={modal === 'add' ? null : modal}
+                        question={modal === true ? null : modal}
+                        isBank={true}
                         onClose={() => setModal(null)}
-                        onSave={handleSave}
-                    />
-                )}
-                {modal === 'bulk' && (
-                    <BulkUploadModal
-                        onClose={() => setModal(null)}
-                        onUploadSuccess={handleSave}
+                        onSave={(updated) => {
+                            if (modal === true) setQuestions([updated, ...questions]);
+                            else setQuestions(questions.map(q => q._id === updated._id ? updated : q));
+                            setModal(null);
+                        }}
                     />
                 )}
             </AnimatePresence>

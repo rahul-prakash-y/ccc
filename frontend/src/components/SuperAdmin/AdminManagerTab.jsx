@@ -362,9 +362,12 @@ const ResetPasswordModal = ({ admin, onClose }) => {
     );
 };
 
+import AdminContributionsTab from './AdminContributionsTab';
+
 // ─── Main Admin Manager Tab ─────────────────────────────────────────────────────────
 const AdminManagerTab = () => {
     const showConfirm = useConfirm(state => state.showConfirm);
+    const [subTab, setSubTab] = useState('list'); // 'list', 'contributions'
 
     // Global Store State
     const {
@@ -389,8 +392,10 @@ const AdminManagerTab = () => {
 
     // 1. Fetch Logic
     useEffect(() => {
-        fetchAdmins({ search, page, limit });
-    }, [search, page, limit, fetchAdmins]);
+        if (subTab === 'list') {
+            fetchAdmins({ search, page, limit });
+        }
+    }, [search, page, limit, fetchAdmins, subTab]);
 
     // Reset page on search change
     useEffect(() => {
@@ -467,6 +472,40 @@ const AdminManagerTab = () => {
 
     return (
         <div className="space-y-4 h-full flex flex-col">
+            {/* Header / Sub-tabs */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-violet-600 rounded-xl text-white shadow-lg shadow-violet-200">
+                        <UserCog size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none">Admin Manager</h3>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1.5">System Access & Audit</p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 shadow-inner border border-slate-200">
+                    <button
+                        onClick={() => setSubTab('list')}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'list' ? 'bg-white text-violet-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Directory
+                    </button>
+                    <button
+                        onClick={() => setSubTab('contributions')}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'contributions' ? 'bg-white text-violet-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Contributions
+                    </button>
+                </div>
+            </div>
+
+            {subTab === 'contributions' ? (
+                <div className="flex-1 overflow-y-auto no-scrollbar">
+                    <AdminContributionsTab />
+                </div>
+            ) : (
+                <div className="flex-1 flex flex-col space-y-4 min-h-0">
 
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center bg-slate-50 p-2 rounded-2xl border border-slate-200/60">
@@ -614,6 +653,8 @@ const AdminManagerTab = () => {
                     </>
                 )}
             </div>
+            </div>
+            )}
 
             {/* Mounted Modals */}
             {showBulkModal && (
