@@ -11,6 +11,7 @@ const { uploadImage } = require('../utils/cloudinary');
 const fastifyMultipart = require('@fastify/multipart');
 const { hydrateStaticData } = require('../services/cacheService');
 const { checkRoundPermission } = require('../utils/permissions');
+const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
 const PDFDocument = require('pdfkit-table');
