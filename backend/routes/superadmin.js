@@ -999,29 +999,60 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/manual-evaluations', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const adminId = request.user.userId;
-            const { page = 1, limit = 10, search = '', type = 'ALL' } = request.query;
+            const currentUserId = request.user.userId;
+            const currentUserRole = request.user.role; // This is available from auth middleware
+            
+            const { page = 1, limit = 10, search = '', type = 'ALL', adminId } = request.query;
 
             const pageNum = Math.max(1, Number(page));
             const limitNum = Math.max(1, Number(limit));
             const skip = (pageNum - 1) * limitNum;
 
-            // 1. Get all questions assigned to this admin for manual evaluation
-            // If type is PRACTICE, we also include all practice-round questions that need manual evaluation
+            const isSuperAdmin = ['SUPER_ADMIN', 'SUPER_MASTER'].includes(currentUserRole);
+
+            // 1. Get all questions assigned for manual evaluation
             const questionFilter = { isManualEvaluation: true };
+            
+            // If Super Admin, they can filter by a target adminId from query, or see EVERYTHING if no adminId provided
+            // If regular Admin, they only see their own assigned assignments
+            const targetAdminId = isSuperAdmin ? (adminId || null) : currentUserId;
+
             if (type === 'PRACTICE') {
                 const practiceRounds = await Round.find({ type: 'PRACTICE' }).select('_id');
                 const practiceRoundIds = practiceRounds.map(r => r._id);
-                questionFilter.$or = [
-                    { assignedAdmin: adminId },
+                
+                const practiceConditions = [
                     { round: { $in: practiceRoundIds } },
                     { linkedRounds: { $in: practiceRoundIds } }
                 ];
+
+                if (targetAdminId) {
+                    questionFilter.$or = [
+                        { assignedAdmin: targetAdminId },
+                        ...practiceConditions
+                    ];
+                } else {
+                    // Super Admin view without specific admin filter - still include practice
+                    questionFilter.$or = practiceConditions;
+                    // For Super Admin we might want to see ALL manual questions including ones with NO assigned admin 
+                    // or assigned to any admin. So we just let the $or handle the practice ones, 
+                    // or if it's NOT practice we'll use a broader filter.
+                }
             } else {
-                questionFilter.assignedAdmin = adminId;
+                if (targetAdminId) {
+                    questionFilter.assignedAdmin = targetAdminId;
+                } else if (!isSuperAdmin) {
+                    // Safety: regular admin must always have a filter
+                    questionFilter.assignedAdmin = currentUserId;
+                }
+                // If isSuperAdmin and no adminId, questionFilter stays { isManualEvaluation: true }
+                // which brings back ALL manual eval questions.
             }
 
-            const adminQuestions = await Question.find(questionFilter).select('_id title description points type round category correctAnswer rubrics rubricInstructions').lean();
+            const adminQuestions = await Question.find(questionFilter)
+                .select('_id title description points type round category correctAnswer rubrics rubricInstructions assignedAdmin')
+                .populate('assignedAdmin', 'name studentId')
+                .lean();
 
             if (adminQuestions.length === 0) {
                 return reply.code(200).send({

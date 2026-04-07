@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon, Image as ImageIcon } from 'lucide-react';
-import { api } from '../../store/authStore';
+import { Search, Loader2, ChevronDown, ClipboardCheck, ExternalLink, AlertTriangle, Check, ChevronUp, User, BookOpen, Star, CheckCircle2, Phone, Calendar, Linkedin, Github, User as UserIcon, Image as ImageIcon, Filter } from 'lucide-react';
+import { api, useAuthStore } from '../../store/authStore';
 import { API } from './constants';
 import Pagination from './components/Pagination';
 import toast from 'react-hot-toast';
 import { useEvaluationStore } from '../../store/evaluationStore';
+import { useAdminStore } from '../../store/adminStore';
 import { SkeletonList } from '../Skeleton';
 
 // ─── Single question evaluation row (inside a student's submission card) ─────
@@ -634,15 +635,27 @@ const EvaluationTab = ({ forceType = 'ALL' }) => {
         removeQuestionFromEvaluation
     } = useEvaluationStore();
 
+    const { user } = useAuthStore();
+    const { admins, fetchAdmins } = useAdminStore();
+    const isSuperAdmin = ['SUPER_ADMIN', 'SUPER_MASTER'].includes(user?.role);
+
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
+    const [selectedAdminId, setSelectedAdminId] = useState('');
     const [transferModal, setTransferModal] = useState({ isOpen: false, question: null, submissionId: null });
 
     // 1. Fetch Logic
     useEffect(() => {
-        fetchEvaluations({ search, page, limit, type: forceType });
-    }, [search, page, limit, fetchEvaluations, forceType]);
+        fetchEvaluations({ search, page, limit, type: forceType, adminId: selectedAdminId });
+    }, [search, page, limit, fetchEvaluations, forceType, selectedAdminId]);
+
+    // Fetch admins for filter if super admin
+    useEffect(() => {
+        if (isSuperAdmin) {
+            fetchAdmins();
+        }
+    }, [isSuperAdmin, fetchAdmins]);
 
     const totalQuestions = data.reduce((sum, sub) => sum + sub.questions.length, 0);
     const totalGraded = data.reduce((sum, sub) =>
@@ -665,14 +678,36 @@ const EvaluationTab = ({ forceType = 'ALL' }) => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    {isSuperAdmin && (
+                        <div className="relative">
+                            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                            <select
+                                value={selectedAdminId}
+                                onChange={e => {
+                                    setSelectedAdminId(e.target.value);
+                                    setPage(1);
+                                }}
+                                className="bg-white border border-amber-200 rounded-xl pl-9 pr-8 py-2 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm appearance-none cursor-pointer placeholder:text-amber-200"
+                            >
+                                <option value="">All Assignments</option>
+                                {admins.map(a => (
+                                    <option key={a._id} value={a._id}>{a.name} ({a.studentId})</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-400 pointer-events-none" />
+                        </div>
+                    )}
                     <div className="relative">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
                         <input
                             type="text"
                             placeholder="Search students..."
                             value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            className="bg-white border border-amber-200 rounded-xl pl-9 pr-4 py-2 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm w-64 placeholder:text-amber-200"
+                            onChange={e => {
+                                setSearch(e.target.value);
+                                setPage(1);
+                            }}
+                            className="bg-white border border-amber-200 rounded-xl pl-9 pr-4 py-2 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-sm w-48 sm:w-64 placeholder:text-amber-200"
                         />
                     </div>
                     {!loading && (
