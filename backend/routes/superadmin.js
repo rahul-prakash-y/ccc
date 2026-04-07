@@ -157,7 +157,9 @@ module.exports = async function (fastify, opts) {
      */
     fastify.get('/audit-logs', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { roundId, search, page = 1, limit = 20 } = request.query;
+            const { roundId, search, page = 1, limit = 20, type = 'GENERAL' } = request.query;
+
+            const Model = type === 'PRACTICE' ? PracticeSubmission : Submission;
 
             let filter = {};
             if (roundId) filter.round = roundId;
@@ -189,7 +191,7 @@ module.exports = async function (fastify, opts) {
             const skip = (pageNum - 1) * limitNum;
 
             const [submissions, total] = await Promise.all([
-                Submission.find(filter)
+                Model.find(filter)
                     .populate('student', 'studentId name role isBanned')
                     .populate('round', 'name status type')
                     .populate('conductedBy', 'name')
@@ -198,7 +200,7 @@ module.exports = async function (fastify, opts) {
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limitNum),
-                Submission.countDocuments(filter)
+                Model.countDocuments(filter)
             ]);
 
             const totalPages = Math.ceil(total / limitNum);
@@ -2652,10 +2654,17 @@ module.exports = async function (fastify, opts) {
     fastify.delete('/submissions/:submissionId', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
         try {
             const { submissionId } = request.params;
-            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            let submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            let Model = Submission;
+            
+            if (!submission) {
+                submission = await PracticeSubmission.findById(submissionId).populate('student', 'name studentId');
+                Model = PracticeSubmission;
+            }
+
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
-            await Submission.findByIdAndDelete(submissionId);
+            await Model.findByIdAndDelete(submissionId);
 
             await logActivity({
                 action: 'DELETED',
@@ -2744,7 +2753,11 @@ module.exports = async function (fastify, opts) {
                 return reply.code(400).send({ error: 'Valid minutes adjustment is required' });
             }
 
-            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            let submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            if (!submission) {
+                submission = await PracticeSubmission.findById(submissionId).populate('student', 'name studentId');
+            }
+
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
             submission.extraTimeMinutes = (submission.extraTimeMinutes || 0) + Number(addMinutes);
@@ -2774,7 +2787,11 @@ module.exports = async function (fastify, opts) {
             const { submissionId } = request.params;
             const { addMinutes = 10 } = request.body || {}; // Default to 10 mins if not provided
 
-            const submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            let submission = await Submission.findById(submissionId).populate('student', 'name studentId');
+            if (!submission) {
+                submission = await PracticeSubmission.findById(submissionId).populate('student', 'name studentId');
+            }
+
             if (!submission) return reply.code(404).send({ error: 'Submission not found' });
 
             if (submission.status !== 'SUBMITTED' && submission.status !== 'DISQUALIFIED') {

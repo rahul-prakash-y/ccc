@@ -27,8 +27,10 @@ export const ALL_ACTIONS = Object.keys(ACTION_STYLES);
 
 // ─── Submission status colours (Audit Logs) ───────────────────────────────────
 export const STATUS_COLORS = {
-    SUBMITTED: 'text-indigo-600',
-    IN_PROGRESS: 'text-amber-600',
-    DISQUALIFIED: 'text-red-600',
-    NOT_STARTED: 'text-gray-400',
+    SUBMITTED: 'bg-indigo-50 border-indigo-100 text-indigo-600',
+    IN_PROGRESS: 'bg-amber-50 border-amber-100 text-amber-600',
+    DISQUALIFIED: 'bg-red-50 border-red-100 text-red-600',
+    NOT_STARTED: 'bg-slate-50 border-slate-100 text-slate-400',
+    COMPLETED: 'bg-emerald-50 border-emerald-100 text-emerald-600',
+    EVALUATED: 'bg-emerald-50 border-emerald-100 text-emerald-600',
 };

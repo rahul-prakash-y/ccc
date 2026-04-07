@@ -133,7 +133,7 @@ const ExtraTimeModal = ({ isOpen, onClose, onConfirm, studentName, title, type }
     );
 };
 
-const AuditLogsTab = () => {
+const AuditLogsTab = ({ forceType = null }) => {
     const { rounds } = useRoundStore();
     const showConfirm = useConfirm(state => state.showConfirm);
     const [selectedRound, setSelectedRound] = useState('');
@@ -155,8 +155,9 @@ const AuditLogsTab = () => {
         const params = { page, limit };
         if (selectedRound) params.roundId = selectedRound;
         if (search) params.search = search;
+        if (forceType) params.type = forceType;
         fetchAuditLogs(params);
-    }, [selectedRound, search, page, limit, fetchAuditLogs]);
+    }, [selectedRound, search, page, limit, fetchAuditLogs, forceType]);
 
     // 2b. Fetch Questions for Round (for MCQ viewing)
     useEffect(() => {
@@ -297,7 +298,9 @@ const AuditLogsTab = () => {
                         className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-8 py-2 text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none cursor-pointer shadow-sm"
                     >
                         <option value="">All Rounds Filter</option>
-                        {rounds.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
+                        {rounds
+                            .filter(r => forceType === 'PRACTICE' ? r.type === 'PRACTICE' : true)
+                            .map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
                     </select>
                     <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>

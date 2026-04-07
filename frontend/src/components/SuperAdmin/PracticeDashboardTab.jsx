@@ -6,9 +6,10 @@ import { useRoundStore } from '../../store/roundStore';
 import EvaluationTab from './EvaluationTab';
 import QuestionManagerTab from './QuestionManagerTab';
 import StudentScoreDashboard from './StudentScoreDashboard';
+import AuditLogsTab from './AuditLogsTab';
 
 const PracticeDashboardTab = () => {
-    const [subTab, setSubTab] = useState('overview'); // 'overview', 'leaderboard', 'evaluations', 'questions'
+    const [subTab, setSubTab] = useState('overview'); // 'overview', 'leaderboard', 'evaluations', 'questions', 'audit'
     const { rounds, fetchRounds } = useRoundStore();
 
     const practiceRounds = (rounds || []).filter(r => r.type === 'PRACTICE');
@@ -55,6 +56,12 @@ const PracticeDashboardTab = () => {
                         className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'questions' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         Questions
+                    </button>
+                    <button
+                        onClick={() => setSubTab('audit')}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'audit' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Audit
                     </button>
                 </div>
             </div>
@@ -172,6 +179,12 @@ const PracticeDashboardTab = () => {
                 {subTab === 'questions' && (
                     <div className="h-full">
                         <QuestionManagerTab forcePractice={true} />
+                    </div>
+                )}
+
+                {subTab === 'audit' && (
+                    <div className="h-full">
+                        <AuditLogsTab forceType="PRACTICE" />
                     </div>
                 )}
             </div>
