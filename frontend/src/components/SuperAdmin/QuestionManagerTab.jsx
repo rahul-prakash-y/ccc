@@ -867,6 +867,25 @@ const QuestionManagerTab = ({ forcePractice = false }) => {
                                                         <p className="leading-relaxed whitespace-pre-wrap font-medium">{q.description}</p>
                                                     </div>
 
+                                                    {q.problemImage && (
+                                                        <div className="mt-4">
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                                                <ClipboardCheck size={10} /> Reference Design / Scenario Image
+                                                            </p>
+                                                            <div className="relative group max-w-md">
+                                                                <img 
+                                                                    src={q.problemImage} 
+                                                                    alt="Problem context" 
+                                                                    className="rounded-2xl border border-slate-200 shadow-sm transition-transform group-hover:scale-[1.02] cursor-zoom-in"
+                                                                    onClick={() => window.open(q.problemImage, '_blank')}
+                                                                />
+                                                                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-colors pointer-events-none rounded-2xl flex items-center justify-center">
+                                                                    <Eye size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {q.type === 'MCQ' && q.options?.length > 0 && (
                                                         <div className="bg-white p-4 rounded-xl border border-slate-200">
                                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Available Options</p>

@@ -739,30 +739,41 @@ module.exports = async function (fastify, opts) {
                 try { parsedAnswers = JSON.parse(codeContent); } catch (e) { }
             }
 
-            // --- Auto-evaluate MCQ questions ---
+            // --- Auto-evaluate MCQ and SQL (Exact Match) questions ---
             const Question = require('../models/Question');
             let autoScore = 0;
             let mcqSolvedCount = 0;
+            let sqlAutoSolvedCount = 0;
             const answeredIds = Object.keys(parsedAnswers).filter(id => mongoose.Types.ObjectId.isValid(id));
 
             if (answeredIds.length > 0) {
                 const { getFullQuestionById } = require('../services/cacheService');
                 for (const qId of answeredIds) {
                     const q = getFullQuestionById(qId);
-                    if (q && q.type === 'MCQ') {
-                        const studentAnswer = String(parsedAnswers[qId] || '').trim();
-                        const correctAns = String(q.correctAnswer || '').trim();
+                    if (!q) continue;
+
+                    const studentAnswer = String(parsedAnswers[qId] || '').trim().replace(/\s+/g, ' ');
+                    const correctAns = String(q.correctAnswer || '').trim().replace(/\s+/g, ' ');
+
+                    if (q.type === 'MCQ') {
                         if (correctAns && studentAnswer === correctAns) {
                             autoScore += (q.points || 0);
                             mcqSolvedCount += 1;
+                        }
+                    } else if (q.category === 'SQL' && q.isManualEvaluation) {
+                        // If exact match for SQL, auto-grade it even if it was meant for manual evaluation
+                        if (correctAns && studentAnswer.toLowerCase() === correctAns.toLowerCase()) {
+                            autoScore += (q.points || 0);
+                            sqlAutoSolvedCount += 1;
                         }
                     }
                 }
             }
             submission.autoScore = autoScore;
             submission.mcqSolvedCount = mcqSolvedCount;
+            // solvedCount is mcq + sqlAuto + manual graded
             const manualSolvedCount = (submission.manualScores || []).filter(ms => ms.score > 0).length;
-            submission.solvedCount = mcqSolvedCount + manualSolvedCount;
+            submission.solvedCount = mcqSolvedCount + sqlAutoSolvedCount + manualSolvedCount;
 
             const totalManualScore = (submission.manualScores || []).reduce((sum, ms) => sum + (ms.score || 0), 0);
 

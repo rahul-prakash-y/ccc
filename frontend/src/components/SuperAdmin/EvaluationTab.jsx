@@ -156,6 +156,25 @@ const QuestionEvalRow = ({ submissionId, questionEntry, onScoreSaved, onTransfer
                                     {question.description}
                                 </p>
                             </div>
+
+                            {question.problemImage && (
+                                <div className="mt-1 pb-3">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                        <ImageIcon size={10} /> Reference Design / Goal
+                                    </p>
+                                    <div className="relative group max-w-[240px]">
+                                        <img 
+                                            src={question.problemImage} 
+                                            alt="Problem Reference" 
+                                            className="rounded-xl border border-slate-200 shadow-sm transition-transform group-hover:scale-[1.02] cursor-zoom-in"
+                                            onClick={() => window.open(question.problemImage, '_blank')}
+                                        />
+                                        <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-colors pointer-events-none rounded-xl flex items-center justify-center">
+                                            <ExternalLink size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             
                             {question.rubricInstructions && (
                                 <div className="pt-2 border-t border-slate-100">

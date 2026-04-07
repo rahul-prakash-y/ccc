@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     BookOpen, Loader2, AlertTriangle, 
     ChevronDown, ChevronUp, CheckCircle2, 
-    Star, Clock, ClipboardCheck
+    Star, Clock, ClipboardCheck, Eye
 } from 'lucide-react';
 import { api } from '../../store/authStore';
 import { API } from './constants';
@@ -134,6 +134,22 @@ const MyAdminAssignmentsTab = () => {
                                                                 {question.description}
                                                             </div>
                                                         </div>
+
+                                                        {question.problemImage && (
+                                                            <div>
+                                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                                                                    <Eye size={10} /> Reference Image
+                                                                </p>
+                                                                <div className="relative group max-w-sm">
+                                                                    <img 
+                                                                        src={question.problemImage} 
+                                                                        alt="Problem Reference" 
+                                                                        className="rounded-xl border border-slate-200 shadow-sm transition-transform group-hover:scale-[1.02] cursor-zoom-in"
+                                                                        onClick={() => window.open(question.problemImage, '_blank')}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        )}
 
                                                         {/* Expected Answer / Reference */}
                                                         {question.correctAnswer && (
