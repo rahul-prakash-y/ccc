@@ -21,7 +21,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
     // Load-balance: resolve the sticky backend at call-time, not module-load-time.
     // This means we never bake a stale URL into the axios instance.
-    config.baseURL = `${getBaseUrl()}/api`;
+    config.baseURL = "/api";
 
     const token = useAuthStore.getState().token;
     if (token) {
