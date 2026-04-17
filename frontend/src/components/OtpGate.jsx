@@ -95,7 +95,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
                     className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white border border-slate-200 shadow-[0_20px_60px_-15px_rgba(79,70,229,0.15)]"
                 >
                     {/* Animated Top Scanner Line */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-transparent via-indigo-500 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
 
                     <div className="p-8">
                         <div className="flex items-start justify-between mb-6">
@@ -116,9 +116,46 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
                             </button>
                         </div>
 
-                        <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
+                        <p className="text-slate-500 text-sm mb-6 leading-relaxed font-medium">
                             Enter the 6-character cryptographic sequence provided by your Administrator. Session limits will engage upon verification.
                         </p>
+
+                        {/* Proctoring Rules */}
+                        <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4"
+                        >
+                            <div className="flex items-center gap-2 text-slate-800 font-black text-[10px] uppercase tracking-[0.2em]">
+                                <ShieldAlert size={14} className="text-indigo-500" />
+                                Arena Protocol & Rules
+                            </div>
+                            <div className="grid gap-3">
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-1 p-1 bg-red-100 text-red-600 rounded-lg">
+                                        <X size={10} strokeWidth={4} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">Zero Tolerance Proctoring</p>
+                                        <p className="text-[10px] text-slate-500 font-medium leading-normal">
+                                            Switching tabs, windows, or applications is <span className="text-red-600 font-bold">STRICTLY PROHIBITED</span> and will be flagged immediately.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-1 p-1 bg-red-100 text-red-600 rounded-lg">
+                                        <X size={10} strokeWidth={4} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">Integrity Lock</p>
+                                        <p className="text-[10px] text-slate-500 font-medium leading-normal">
+                                            Copy-pasting or external content sharing will result in <span className="text-red-600 font-bold">AUTOMATIC DISCONNECTION</span> and a score of <span className="text-red-600 font-bold">0</span>.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
 
                         <form onSubmit={handleSubmit} className="space-y-8">
                             <div>
@@ -167,7 +204,7 @@ const OtpGate = ({ roundId, roundName, isOpen, onClose, onUnlock }) => {
                                 <button
                                     type="submit"
                                     disabled={loading || otp.join('').length !== 6}
-                                    className="flex-[2] relative group px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black tracking-wide disabled:opacity-50 disabled:hover:bg-indigo-600 transition-all overflow-hidden shadow-lg shadow-indigo-200"
+                                    className="flex-2 relative group px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black tracking-wide disabled:opacity-50 disabled:hover:bg-indigo-600 transition-all overflow-hidden shadow-lg shadow-indigo-200"
                                 >
                                     <span className="relative z-10 flex items-center justify-center gap-2">
                                         {loading ? (

@@ -4,11 +4,8 @@ import { API } from '../components/SuperAdmin/constants';
 
 export const useRoundStore = create((set, get) => ({
     rounds: [],
-    activeRoundId: '',
     loading: false,
     lastFetched: 0,
-
-    setActiveRoundId: (id) => set({ activeRoundId: id }),
 
     fetchRounds: async (force = false) => {
         const now = Date.now();

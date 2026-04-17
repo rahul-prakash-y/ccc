@@ -94,11 +94,6 @@ const userSchema = new mongoose.Schema({
     enum: ['Hostel', 'Day Scholar'],
     default: null
   },
-  allocatedServer: {
-    type: String,
-    trim: true,
-    default: null
-  },
   teamRequest: {
     status: {
       type: String,
@@ -112,11 +107,11 @@ const userSchema = new mongoose.Schema({
     requestedAt: {
       type: Date,
       default: null
-    }
-  },
-  isReportPublished: {
+    },
+    isReportPublished: {
     type: Boolean,
     default: false
+  },
   }
 }, {
   timestamps: true

@@ -41,10 +41,6 @@ const questionSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    starterCode: {
-        type: String,
-        default: ''
-    },
     difficulty: {
         type: String,
         enum: ['EASY', 'MEDIUM', 'HARD'],
@@ -85,28 +81,10 @@ const questionSchema = new mongoose.Schema({
         ref: 'User',
         default: null
     },
-    createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        default: null
-    },
-    rubrics: [{
-        criterion: { type: String, required: true },
-        maxScore: { type: Number, required: true }
-    }],
-    rubricInstructions: {
-        type: String,
-        default: ''
-    },
     problemImage: {
         type: String,
         default: ''
     },
-    isPractice: {
-        type: Boolean,
-        default: false,
-        index: true
-    }
 }, {
     timestamps: true
 });

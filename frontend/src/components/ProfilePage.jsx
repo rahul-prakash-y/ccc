@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, FileText, Calendar, Building, Users, Home, Loader2, Save, ArrowLeft, Sparkles, ShieldCheck, MapPin, Code } from 'lucide-react';
+import { User, Mail, Phone, FileText, Calendar, Building, Users, Home, Loader2, Save, Sparkles, ShieldCheck, MapPin, Code } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -71,26 +71,8 @@ const ProfilePage = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-700 relative overflow-hidden">
-            
-            {/* Ambient Background Glows */}
-            <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
-
+        <>
             <div className="max-w-6xl mx-auto px-4 py-8 relative z-10">
-                <motion.button
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    onClick={() => navigate('/dashboard')}
-                    className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-black text-[10px] uppercase tracking-[0.2em] mb-8 transition-all active:scale-95"
-                >
-                    <div className="p-2 rounded-xl bg-white border border-slate-200 group-hover:border-indigo-200 group-hover:bg-indigo-50 transition-all">
-                        <ArrowLeft size={14} />
-                    </div>
-                    Back to Terminal
-                </motion.button>
-
                 <div className="flex flex-col lg:flex-row gap-10 items-start">
                     {/* Left Column: Personal Identity Header */}
                     <motion.div 
@@ -227,11 +209,10 @@ const ProfilePage = () => {
                     </motion.div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 
-// Sub-component for form sections to keep the landscape code readable
 const FormSectionHeader = ({ title, lucideIcon: Icon, color }) => {
     const colors = {
         amber: 'bg-amber-50 text-amber-600',
@@ -249,7 +230,6 @@ const FormSectionHeader = ({ title, lucideIcon: Icon, color }) => {
     );
 };
 
-// Helper component for form inputs to keep the code clean and premium
 const FormGroup = ({ label, name, lucideIcon: Icon, value, onChange, type = "text", options = [], placeholder = "" }) => (
     <div className="relative group">
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
@@ -283,7 +263,7 @@ const FormGroup = ({ label, name, lucideIcon: Icon, value, onChange, type = "tex
             )}
             {type === "select" && (
                 <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <Save size={14} className="rotate-90" /> {/* Just a visual arrow-like element */}
+                    <Save size={14} className="rotate-90" />
                 </div>
             )}
         </div>

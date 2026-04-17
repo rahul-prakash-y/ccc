@@ -16,10 +16,12 @@ export const useContestTimer = ({
     serverStartTime,
     durationMinutes = 60,
     extraTimeMinutes = 0,
-    onTimeUp
+    onTimeUp,
+    onCheatDetected
 }) => {
     const [timeLeft, setTimeLeft] = useState(null);
     const [isTimeUp, setIsTimeUp] = useState(false);
+    const [tabSwitches, setTabSwitches] = useState(0);
 
     const timerRef = useRef(null);
     const isStarted = !!serverStartTime;
@@ -70,6 +72,14 @@ export const useContestTimer = ({
         };
     }, [isStarted, isTimeUp, calculateTimeLeft, onTimeUp]);
 
+    // Anti-Cheat: Visibility/Tab Switch Tracking
+    useEffect(() => {
+        if (!isStarted || isTimeUp) return;
+
+        // No-op: Removed aggressive visibility/unload listeners to prevent false positives on refresh.
+        return () => { };
+    }, [isStarted, isTimeUp]);
+
     // Format time for UI (HH:MM:SS)
     const formatTime = (seconds) => {
         if (seconds === null) return "--:--:--";
@@ -87,6 +97,7 @@ export const useContestTimer = ({
         timeLeft,
         formattedTime: formatTime(timeLeft),
         isTimeUp,
+        tabSwitches,
         isDangerZone: timeLeft !== null && timeLeft < 300 // Last 5 minutes warning state
     };
 };

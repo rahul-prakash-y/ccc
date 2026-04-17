@@ -1,12 +1,16 @@
 require('dotenv').config();
-const fastify = require('fastify')({ 
-    logger: true,
-    bodyLimit: 10 * 1024 * 1024 // 10MB limit (default is 1MB)
-});
+const fastify = require('fastify')({ logger: true });
 const mongoose = require('mongoose');
 const fastifyStatic = require("@fastify/static");
 const path = require("path");
 
+// ─── Application Background Services ─────────────────────────────────────────
+const { hydrateStaticData } = require('./services/cacheService');
+const { hydrateRankingCache } = require('./utils/eligibility');
+const { startSubmissionQueue, flushNow } = require('./services/submissionQueue');
+const { startLeaderboardCache } = require('./services/leaderboardCache');
+
+// ─── Static Files & SPA Fallback ─────────────────────────────────────────────
 fastify.register(fastifyStatic, {
     root: path.join(__dirname, "../frontend/dist"),
     prefix: "/",
@@ -14,34 +18,26 @@ fastify.register(fastifyStatic, {
 
 fastify.setNotFoundHandler((request, reply) => {
     if (request.raw.url.startsWith('/api')) {
-        return reply.code(404).send({
-            success: false,
-            message: 'API route not found'
-        });
+        return reply.code(404).send({ success: false, message: 'API route not found' });
     }
-
-    // SPA fallback
     return reply.sendFile('index.html');
 });
 
-// Configure CORS for Frontend Interaction
+// ─── Middlewares ─────────────────────────────────────────────────────────────
 fastify.register(require('@fastify/cors'), {
-    origin:  '*', // Update in production to explicit domain
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    origin: "*",
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 });
 
-// Configure Multipart processing for Bulk Excel Uploads
 fastify.register(require('@fastify/multipart'), {
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-    }
+    limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Register Custom Plugins (JWT Authentication & Role Decorators)
 fastify.register(require('./plugins/auth'));
 
-// Register Application Routes
+// ─── Routes ──────────────────────────────────────────────────────────────────
 fastify.register(require('./routes/auth'), { prefix: '/api/auth' });
 fastify.register(require('./routes/rounds'), { prefix: '/api/rounds' });
 fastify.register(require('./routes/admin'), { prefix: '/api/admin' });
@@ -51,32 +47,18 @@ fastify.register(require('./routes/student'), { prefix: '/api/student' });
 fastify.register(require('./routes/internal'), { prefix: '/api/internal' });
 fastify.register(require('./routes/database'), { prefix: '/api/database' });
 
-// Graceful Shutdown Logic
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
 const closeServer = async (signal) => {
     fastify.log.info(`Received signal to terminate: ${signal}`);
-
     try {
-        // Close Fastify HTTP connections first
         await fastify.close();
-        fastify.log.info('Fastify server closed. No new requests will be accepted.');
-
-        // ─── Task 2: Drain Submission Queue ──────────────────────────────────
-        // Ensures any pending student submissions in RAM are flushed to MongoDB
-        // before the process exits.
-        const { flushNow } = require('./services/submissionQueue');
-        fastify.log.info('Flushing in-memory submission queue to MongoDB...');
         await flushNow();
-        fastify.log.info('Submission queue drained.');
-
-        // Safely drain the MongoDB connection pool
         if (mongoose.connection.readyState === 1) {
             await mongoose.connection.close();
-            fastify.log.info('MongoDB connections drained properly.');
         }
-
         process.exit(0);
     } catch (err) {
-        fastify.log.error('Error during shutdown', err);
+        console.error('SHUTDOWN ERROR:', err);
         process.exit(1);
     }
 };
@@ -84,41 +66,34 @@ const closeServer = async (signal) => {
 process.on('SIGINT', () => closeServer('SIGINT'));
 process.on('SIGTERM', () => closeServer('SIGTERM'));
 
-// Database Connection & Server Boot
+// ─── Server Boot ──────────────────────────────────────────────────────────────
 const start = async () => {
     try {
-        // Connect to MongoDB Atlas with optimized Connection Pooling
         const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/code_circuit_club';
         await mongoose.connect(mongoUri, {
-            maxPoolSize: 100, // Handle hundreds of concurrent student sessions safely
+            maxPoolSize: 20,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
-            family: 4 // Force IPv4
+            family: 4
         });
-        fastify.log.info('MongoDB Connected with optimized PoolSize 🚀');
+        console.info('MongoDB Connected 🚀');
 
-        // ─── Task 3: Boot-Time Hydration ──────────────────────────────────
-        // Pre-fetches static data (Rounds, Questions) to RAM to survive 
-        // high-concurrency spikes on the student dashboard.
-        const { hydrateStaticData } = require('./services/cacheService');
-        const { hydrateRankingCache } = require('./utils/eligibility');
+        // Pre-warm caches
         await Promise.all([
             hydrateStaticData(),
             hydrateRankingCache()
         ]);
 
-        // ─── Task 1: Start Background Workers ──────────────────────────────────
-        const { startSubmissionQueue } = require('./services/submissionQueue');
+        // Start background workers
+        startLeaderboardCache();
         startSubmissionQueue();
 
-        // Start Node.js Server
         const port = process.env.PORT || 5000;
         await fastify.listen({ port, host: '0.0.0.0' });
-        fastify.log.info(`Code Circle Club API is running live on port ${port}`);
+        console.info(`Server listening on port ${port}`);
 
     } catch (err) {
-        console.error('Fatal Startup Error:', err);
-        fastify.log.error('Fatal Server Error', err);
+        console.error('FATAL STARTUP ERROR:', err);
         process.exit(1);
     }
 };

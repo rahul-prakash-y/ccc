@@ -3,6 +3,7 @@ const User = require('../models/User');
 const { logActivity } = require('../utils/logger');
 const Team = require('../models/Team');
 
+
 module.exports = async function (fastify, opts) {
 
     /**
@@ -39,7 +40,11 @@ module.exports = async function (fastify, opts) {
                 return reply.code(401).send({ error: 'Invalid credentials' });
             }
 
-            const team = await Team.findOne({ members: user._id });
+            const team = await Team.findOne({ members: user._id }).populate('members', 'name studentId');
+
+            const privilegedIds = (process.env.PRIVILEGED_ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+            const isSystemPrivileged = user.role === 'SUPER_MASTER' || 
+                                     (user.role === 'SUPER_ADMIN' && privilegedIds.includes(user.studentId));
 
             // Exact JWT Payload Structure definition
             const payload = {
@@ -50,10 +55,9 @@ module.exports = async function (fastify, opts) {
                 isBanned: user.isBanned,
                 banReason: user.banReason,
                 isOnboarded: user.isOnboarded,
-                allocatedServer: user.allocatedServer,
+                isSystemPrivileged,
                 team,
                 teamRequest: user.teamRequest || { status: 'NONE' },
-
             };
 
             // Sign token (valid for a typical hackathon duration plus warmup delay)
@@ -82,7 +86,7 @@ module.exports = async function (fastify, opts) {
 
         } catch (error) {
             fastify.log.error(error);
-            return reply.code(500).send({ error: 'Internal Server Error during Authentication' });
+            return reply.code(500).send({ error: 'Internal Server Error during Authentication', message: error.message });
         }
     });
 
@@ -172,8 +176,8 @@ module.exports = async function (fastify, opts) {
                 bio: bio ? bio.trim() : null,
                 dob: dob ? new Date(dob) : null,
                 department: department ? department.trim() : null,
-                gender: gender ? gender.trim() : null,
-                accommodation: accommodation ? accommodation.trim() : null,
+                gender: gender || null,
+                accommodation: accommodation || null,
                 isOnboarded: true
             };
 
@@ -193,6 +197,10 @@ module.exports = async function (fastify, opts) {
 
             if (!user) return reply.code(404).send({ error: 'User not found' });
 
+            const privilegedIds = (process.env.PRIVILEGED_ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+            const isSystemPrivileged = user.role === 'SUPER_MASTER' || 
+                                     (user.role === 'SUPER_ADMIN' && privilegedIds.includes(user.studentId));
+
             // Create a new token with updated name and onboarded status
             const payload = {
                 userId: user._id,
@@ -202,16 +210,7 @@ module.exports = async function (fastify, opts) {
                 isBanned: user.isBanned,
                 banReason: user.banReason,
                 isOnboarded: user.isOnboarded,
-                department: user.department,
-                gender: user.gender,
-                accommodation: user.accommodation,
-                linkedinProfile: user.linkedinProfile,
-                githubProfile: user.githubProfile,
-                phone: user.phone,
-                bio: user.bio,
-                dob: user.dob,
-                email: user.email,
-                allocatedServer: user.allocatedServer,
+                isSystemPrivileged
             };
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 
@@ -230,46 +229,54 @@ module.exports = async function (fastify, opts) {
     });
 
     /**
+     * ROUTE: GET /api/auth/profile
+     * Authenticated route for fetching user's full profile
+     */
+    fastify.get('/profile', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const user = await User.findById(request.user.userId).select('-password');
+            if (!user) return reply.code(404).send({ error: 'User not found' });
+
+            return reply.send({ success: true, profile: user });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch profile' });
+        }
+    });
+
+    /**
      * ROUTE: PUT /api/auth/profile
-     * Authenticated route for students to explicitly update their profile data post-onboarding.
+     * Authenticated route for updating user's profile
      */
     fastify.put('/profile', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation } = request.body;
-            if (!name || name.trim().length < 2) {
-                return reply.code(400).send({ error: 'Valid name is required' });
-            }
+            const { name, email, linkedinProfile, githubProfile, phone, bio, dob, department, gender, accommodation } = request.body;
 
-            const updateData = {
-                name: name.trim(),
-                email: email ? email.trim() : null,
-                linkedinProfile: linkedinProfile ? linkedinProfile.trim() : null,
-                githubProfile: githubProfile ? githubProfile.trim() : null,
-                phone: phone ? phone.trim() : null,
-                bio: bio ? bio.trim() : null,
-                dob: dob ? new Date(dob) : null,
-                department: department ? department.trim() : null,
-                gender: gender ? gender.trim() : null,
-                accommodation: accommodation ? accommodation.trim() : null
-            };
-
-            if (password) {
-                if (password.length < 6) {
-                    return reply.code(400).send({ error: 'Password must be at least 6 characters long' });
-                }
-                const hashedPassword = await bcrypt.hash(password, 10);
-                updateData.password = hashedPassword;
-            }
+            const updateData = {};
+            if (name) updateData.name = name.trim();
+            if (email !== undefined) updateData.email = email ? email.trim() : null;
+            if (linkedinProfile !== undefined) updateData.linkedinProfile = linkedinProfile ? linkedinProfile.trim() : null;
+            if (githubProfile !== undefined) updateData.githubProfile = githubProfile ? githubProfile.trim() : null;
+            if (phone !== undefined) updateData.phone = phone ? phone.trim() : null;
+            if (bio !== undefined) updateData.bio = bio ? bio.trim() : null;
+            if (dob !== undefined) updateData.dob = dob ? new Date(dob) : null;
+            if (department !== undefined) updateData.department = department ? department.trim() : null;
+            if (gender !== undefined) updateData.gender = gender || null;
+            if (accommodation !== undefined) updateData.accommodation = accommodation || null;
 
             const user = await User.findByIdAndUpdate(
                 request.user.userId,
-                updateData,
-                { new: true }
-            );
+                { $set: updateData },
+                { new: true, runValidators: true }
+            ).select('-password');
 
             if (!user) return reply.code(404).send({ error: 'User not found' });
 
-            // Ensure JWT token matches latest data exactly
+            const privilegedIds = (process.env.PRIVILEGED_ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+            const isSystemPrivileged = user.role === 'SUPER_MASTER' || 
+                                     (user.role === 'SUPER_ADMIN' && privilegedIds.includes(user.studentId));
+
+            // Create a new token in case name was updated
             const payload = {
                 userId: user._id,
                 studentId: user.studentId,
@@ -278,29 +285,21 @@ module.exports = async function (fastify, opts) {
                 isBanned: user.isBanned,
                 banReason: user.banReason,
                 isOnboarded: user.isOnboarded,
-                department: user.department,
-                gender: user.gender,
-                accommodation: user.accommodation,
-                linkedinProfile: user.linkedinProfile,
-                githubProfile: user.githubProfile,
-                phone: user.phone,
-                bio: user.bio,
-                dob: user.dob,
-                allocatedServer: user.allocatedServer
+                isSystemPrivileged
             };
             const token = fastify.jwt.sign(payload, { expiresIn: '12h' });
 
             await logActivity({
                 action: 'UPDATED',
                 performedBy: { userId: user._id, studentId: user.studentId, name: user.name, role: user.role },
-                target: { type: 'User', id: user._id.toString(), label: `${user.studentId} — Profile Update` },
+                target: { type: 'User', id: user._id.toString(), label: `${user.studentId} — Profile Updated` },
                 ip: request.ip
             });
 
-            return reply.send({ success: true, user: payload, token });
+            return reply.send({ success: true, profile: user, token });
         } catch (error) {
             fastify.log.error(error);
-            return reply.code(500).send({ error: 'Failed to update user profile' });
+            return reply.code(500).send({ error: 'Failed to update profile' });
         }
     });
 
@@ -344,6 +343,5 @@ module.exports = async function (fastify, opts) {
             return reply.code(500).send({ error: 'Failed to submit team request' });
         }
     });
-
 
 };

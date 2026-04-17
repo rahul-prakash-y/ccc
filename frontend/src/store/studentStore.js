@@ -34,26 +34,6 @@ export const useStudentStore = create((set, get) => ({
         }
     },
 
-    allocateServers: async (studentIds, serverUrl) => {
-        try {
-            const res = await api.post('/superadmin/allocate-server', { studentIds, serverUrl });
-            if (res.data.success) {
-                // Update local store to reflect the new allocation
-                set(state => ({
-                    students: state.students.map(s => 
-                        studentIds.includes(s.studentId) 
-                            ? { ...s, allocatedServer: serverUrl || null } 
-                            : s
-                    )
-                }));
-                return { success: true, count: res.data.modifiedCount };
-            }
-            return { success: false, error: 'Allocation failed' };
-        } catch (err) {
-            return { success: false, error: err.response?.data?.error || 'Failed to allocate servers' };
-        }
-    },
-
     addStudent: (student) => {
         set((state) => ({
             students: [student, ...state.students],
@@ -80,5 +60,23 @@ export const useStudentStore = create((set, get) => ({
                 totalRecords: state.pagination.totalRecords - 1
             }
         }));
+    },
+
+    allocateServers: async (studentIds, serverUrl) => {
+        try {
+            const res = await api.post(`${API}/allocate-server`, { studentIds, serverUrl });
+            // Refresh local list if successful
+            if (res.data.success) {
+                const { students } = get();
+                const updated = students.map(s => 
+                    studentIds.includes(s.studentId) ? { ...s, allocatedServer: serverUrl || null } : s
+                );
+                set({ students: updated });
+            }
+            return res.data;
+        } catch (error) {
+            console.error('Failed to allocate servers:', error);
+            return { success: false, error: error.response?.data?.error || 'Server error' };
+        }
     }
 }));

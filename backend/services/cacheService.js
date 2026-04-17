@@ -4,9 +4,7 @@ const Round = require('../models/Round');
 const Question = require('../models/Question');
 
 let globalRoundsCache = [];
-let globalRoundsMap = {};
 let globalQuestionsCache = {};
-let globalQuestionsMap = {}; // Full data (includes correctAnswers)
 
 /**
  * Hydrates the static data arrays (Rounds and Questions) from MongoDB to RAM.
@@ -16,28 +14,21 @@ async function hydrateStaticData() {
     try {
         console.info('[CacheService] Hydrating static data to RAM...');
 
-        // 1. Cache all rounds
+        // Cache all rounds, stripping sensitive OTP information
         globalRoundsCache = await Round.find({})
             .select('-startOtp -endOtp -otpIssuedAt')
             .sort({ createdAt: -1 })
             .lean();
 
-        globalRoundsMap = {};
-        globalRoundsCache.forEach(r => globalRoundsMap[r._id.toString()] = r);
-
-        // 2. Fetch all questions from the DB
+        // Fetch all questions from the DB
         const questions = await Question.find({}).lean();
         
         globalQuestionsCache = {};
-        globalQuestionsMap = {};
 
+        // Map questions strictly to their rounds, removing the answers for memory safety
         questions.forEach(q => {
-            // Populate the O(1) full global map (used for backend evaluations)
-            globalQuestionsMap[q._id.toString()] = q;
-
-            // Create a stripped version for the public cache (no correctAnswers)
-            const strippedQ = { ...q };
-            delete strippedQ.correctAnswer;
+            // Strip correctAnswer to protect memory and prevent sending to clients
+            delete q.correctAnswer;
             
             // Map by primary round
             if (q.round) {
@@ -45,7 +36,7 @@ async function hydrateStaticData() {
                 if (!globalQuestionsCache[rId]) {
                     globalQuestionsCache[rId] = [];
                 }
-                globalQuestionsCache[rId].push(strippedQ);
+                globalQuestionsCache[rId].push(q);
             }
 
             // Map by linkedRounds
@@ -55,12 +46,12 @@ async function hydrateStaticData() {
                     if (!globalQuestionsCache[rId]) {
                         globalQuestionsCache[rId] = [];
                     }
-                    globalQuestionsCache[rId].push(strippedQ);
+                    globalQuestionsCache[rId].push(q);
                 });
             }
         });
         
-        // Deduplicate and sort the public cache
+        // Deduplicate in case a question was mapped twice to the same round
         for (const [rId, qs] of Object.entries(globalQuestionsCache)) {
             const uniqueQsMap = new Map();
             qs.forEach(q => uniqueQsMap.set(q._id.toString(), q));
@@ -77,22 +68,12 @@ function getRoundsCache() {
     return globalRoundsCache;
 }
 
-function getRoundById(roundId) {
-    return globalRoundsMap[roundId.toString()] || null;
-}
-
 function getQuestionsByRound(roundId) {
     return globalQuestionsCache[roundId.toString()] || [];
-}
-
-function getFullQuestionById(questionId) {
-    return globalQuestionsMap[questionId.toString()] || null;
 }
 
 module.exports = {
     hydrateStaticData,
     getRoundsCache,
-    getRoundById,
-    getQuestionsByRound,
-    getFullQuestionById
+    getQuestionsByRound
 };

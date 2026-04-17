@@ -40,7 +40,7 @@ const roundSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL', 'PRACTICE'],
+        enum: ['SQL_CONTEST', 'HTML_CSS_QUIZ', 'UI_UX_CHALLENGE', 'HTML_CSS_DEBUG', 'MINI_HACKATHON', 'GENERAL'],
         default: 'GENERAL'
     },
     // Global test sequence grouping
@@ -87,7 +87,7 @@ const roundSchema = new mongoose.Schema({
         default: 10
     },
     certificateTemplate: {
-        data: Buffer,
+         data: Buffer,
         contentType: String
     },
     startTime: {
@@ -98,10 +98,23 @@ const roundSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
-    authorizedAdmins: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }]
+    // Practice Mode
+    isPracticeEnabled: {
+        type: Boolean,
+        default: true // Admin toggles this to show a "Practice" button to students
+    },
+    isPracticeRound: {
+        type: Boolean,
+        default: false // If true, this round is strictly for practice and appears in the Practice Mode tab
+    },
+    practiceQuestionCount: {
+        type: Number,
+        default: null // null = same as questionCount; set to N to cap sample questions shown
+    },
+    maxPracticeAttempts: {
+        type: Number,
+        default: 3 // Max times a student can practice this round
+    },
 }, {
     timestamps: true
 });

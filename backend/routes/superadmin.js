@@ -15,6 +15,7 @@ const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const XLSX = require('xlsx');
 const PDFDocument = require('pdfkit-table');
+const { generateClubEventReportBuffer } = require('../utils/clubEventReportGenerator');
 const JSZip = require('jszip');
 const fs = require('fs');
 const path = require('path'); // Cache test
@@ -2366,174 +2367,73 @@ module.exports = async function (fastify, opts) {
         }
     });
 
-    // GET /api/superadmin/students/:id/report — export student performance as PDF
+    /**
+     * GET /api/superadmin/students/:id/report
+     * Generates a detailed PDF report for a student's performance across all rounds.
+     * Includes profile, scores, and question-by-question breakdown with answers.
+     */
     fastify.get('/students/:id/report', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { id } = request.params;
-            const student = await User.findById(id).populate('team').lean();
+            const student = await User.findById(id).lean();
             if (!student) return reply.code(404).send({ error: 'Student not found' });
 
-            const [contestSubmissions, practiceSubmissions] = await Promise.all([
-                Submission.find({ student: id }).populate('round').lean(),
-                PracticeSubmission.find({ student: id }).populate('round').lean()
+            const [submissions, practiceSubmissions] = await Promise.all([
+                Submission.find({ student: id }).populate('round').populate('assignedQuestions').lean(),
+                PracticeSubmission.find({ student: id }).populate('round').populate('assignedQuestions').lean()
             ]);
+           
+            // Filter out empty/unstarted sessions for clarity
+            const allSubmissions = [...submissions, ...practiceSubmissions].filter(s => s.status !== 'NOT_STARTED');
+            
+            // Map round data for detail rendering
+            const roundIds = [...new Set(allSubmissions.map(s => s.round?._id?.toString()).filter(Boolean))];
+            const roundsData = {};
+            for (const rId of roundIds) {
+                roundsData[rId] = await Question.find({ 
+                    $or: [{ round: rId }, { linkedRounds: rId }]
+                }).lean();
+            }
 
-            const pdfBuffer = await new Promise(async (resolve, reject) => {
-                try {
-                    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-                    let buffers = [];
-                    doc.on('data', buffers.push.bind(buffers));
-                    doc.on('end', () => resolve(Buffer.concat(buffers)));
-                    doc.on('error', reject);
-
-                    const NAVY = '#1e293b';
-                    const PURPLE = '#581c87';
-                    const AMBER = '#f59e0b';
-                    const LIGHT_BLUE = '#eff6ff';
-
-                    doc.font('Helvetica-Bold').fontSize(22).fillColor(NAVY).text('BANNARI AMMAN INSTITUTE OF', { align: 'center' });
-                    doc.text('TECHNOLOGY', { align: 'center' });
-                    doc.moveDown(0.2);
-                    doc.fontSize(16).fillColor(PURPLE).text('CODE CIRCLE CLUB', { align: 'center' });
-                    doc.moveDown(0.5);
-
-                    const pageWidth = doc.page.width;
-                    const barWidth = 100;
-                    doc.rect((pageWidth - barWidth) / 2, doc.y, barWidth, 3).fill(AMBER);
-                    doc.moveDown(0.8);
-
-                    const pillWidth = 180;
-                    const pillHeight = 24;
-                    const pillX = (pageWidth - pillWidth) / 2;
-                    doc.roundedRect(pillX, doc.y, pillWidth, pillHeight, 12).fill(NAVY);
-                    doc.fillColor('white').fontSize(10).font('Helvetica-Bold').text('PERFORMANCE ANALYTICS REPORT', pillX, doc.y + 7, { width: pillWidth, align: 'center' });
-                    doc.moveDown(1.5);
-
-                    doc.moveTo(40, doc.y).lineTo(pageWidth - 40, doc.y).strokeColor('#cbd5e1').lineWidth(1).stroke();
-                    doc.moveDown(1.5);
-
-                    // --- 1. STUDENT PROFILE ---
-                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
-                    doc.fillColor(NAVY).fontSize(14).text('1. STUDENT PROFILE', 50, doc.y);
-                    doc.moveDown(0.8);
-
-                    const profileY = doc.y;
-                    const col1X = 60;
-                    const col2X = pageWidth / 2 + 50;
-
-                    const drawField = (label, value, x, y, width) => {
-                        doc.fillColor('#64748b').fontSize(10).text(label.toUpperCase(), x, y);
-                        doc.fillColor(NAVY).fontSize(11).font('Helvetica-Bold').text(value || 'N/A', x + 90, y, { align: 'right', width: width || ((pageWidth / 3) - 100) });
-                        doc.moveTo(x, y + 14).lineTo(x + (pageWidth / 2) - 30, y + 14).strokeColor('#f1f5f9').dash(2, { space: 2 }).stroke().undash();
-                    };
-
-                    const attendedCount = contestSubmissions.filter(s => s.status !== 'NOT_STARTED').length;
-
-                    drawField('Full Name', student.name, col1X, profileY);
-                    drawField('Roll Number', student.studentId, col2X, profileY);
-                    drawField('Department', student.department, col1X, profileY + 35);
-                    drawField('Round Stats', `${attendedCount} Contests Attempted`, col2X, profileY + 35);
-
-                    doc.moveDown(4.5);
-
-                    // --- 2. ASSESSMENT SUMMARY (CONTESTS) ---
-                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
-                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('2. CONTEST PERFORMANCE', 50, doc.y);
-                    doc.moveDown(1);
-
-                    if (contestSubmissions.length > 0) {
-                        const assessmentRows = [];
-                        for (const s of contestSubmissions) {
-                            const questions = await Question.find({
-                                $or: [{ round: s.round?._id }, { linkedRounds: s.round?._id }]
-                            });
-                            const totalPoints = questions.reduce((acc, q) => acc + (q.points || 0), 0);
-                            const qualified = s.score >= totalPoints * 0.5;
-                            const resultText = qualified ? 'PASS' : 'FAIL';
-
-                            assessmentRows.push([
-                                new Date(s.createdAt).toLocaleDateString(),
-                                s.round?.name || 'Untitled Round',
-                                String(s.score ?? 0),
-                                resultText
-                            ]);
-                        }
-
-                        const assessmentTable = {
-                            headers: [
-                                { label: "Date", property: 'date', width: 100 },
-                                { label: "Assessment Title", property: 'level', width: 220 },
-                                { label: "Score", property: 'score', width: 80 },
-                                { label: "Status", property: 'result', width: 100 }
-                            ],
-                            rows: assessmentRows
-                        };
-
-                        await doc.table(assessmentTable, {
-                            prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
-                            prepareRow: (row, indexColumn) => {
-                                doc.font("Helvetica").fontSize(10);
-                                if (indexColumn === 3) {
-                                    doc.fillColor(row[3] === 'PASS' ? '#16a34a' : '#dc2626');
-                                } else {
-                                    doc.fillColor(NAVY);
-                                }
-                            }
-                        });
-                    } else {
-                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No contest attempts recorded.');
-                    }
-                    doc.moveDown(2);
-
-                    // --- 3. PRACTICE PERFORMANCE ---
-                    doc.fillColor(PURPLE).rect(40, doc.y, 4, 18).fill();
-                    doc.fillColor(NAVY).fontSize(14).font('Helvetica-Bold').text('3. PRACTICE SESSIONS', 50, doc.y);
-                    doc.moveDown(1);
-
-                    if (practiceSubmissions.length > 0) {
-                        const practiceRows = practiceSubmissions.map(s => ([
-                            new Date(s.createdAt).toLocaleDateString(),
-                            s.round?.name || 'Practice Test',
-                            String(s.score ?? 0),
-                            'COMPLETED'
-                        ]));
-
-                        const practiceTable = {
-                            headers: [
-                                { label: "Date", property: 'date', width: 100 },
-                                { label: "Practice Environment", property: 'level', width: 220 },
-                                { label: "Score", property: 'score', width: 80 },
-                                { label: "Activity", property: 'result', width: 100 }
-                            ],
-                            rows: practiceRows
-                        };
-
-                        await doc.table(practiceTable, {
-                            prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY),
-                            prepareRow: () => doc.font("Helvetica").fontSize(10).fillColor(NAVY)
-                        });
-                    } else {
-                        doc.font('Helvetica-Oblique').fontSize(10).fillColor('#94a3b8').text('No practice records found.');
-                    }
-
-                    // --- Footer ---
-                    const footerY = doc.page.height - 40;
-                    doc.moveTo(40, footerY).lineTo(doc.page.width - 40, footerY).strokeColor(AMBER).lineWidth(2).stroke();
-                    doc.fillColor('#94a3b8').fontSize(8).text('Generated by CCC Internal Portal · Verification Code: ' + student._id.toString().slice(-8).toUpperCase(), 40, footerY + 8, { align: 'center' });
-
-                    doc.end();
-                } catch (err) {
-                    reject(err);
-                }
+            // Build a comprehensive question cache for the generator
+            const allRelatedQuestions = await Question.find({}).lean();
+            const questionsMap = {};
+            allRelatedQuestions.forEach(q => {
+                questionsMap[q._id.toString()] = q;
             });
 
-            return reply
-                .header('Content-Type', 'application/pdf')
-                .header('Content-Disposition', `attachment; filename=Report_${student.studentId}.pdf`)
-                .send(pdfBuffer);
+            const { generateDetailedSubmissionPDF } = require('../utils/reportGenerator');
+            const pdfBuffer = await generateDetailedSubmissionPDF(student, allSubmissions, roundsData, questionsMap);
+
+            reply.type('application/pdf');
+            reply.header('Content-Disposition', `attachment; filename=${student.studentId}_Detailed_Report.pdf`);
+            return reply.send(pdfBuffer);
         } catch (error) {
             fastify.log.error(error);
-            return reply.code(500).send({ error: 'Failed to generate report' });
+            return reply.code(500).send({ error: 'Failed to generate detailed report' });
+        }
+    });
+
+    /**
+     * POST /api/superadmin/club-event-report
+     * Generates a stylized PDF for a Club Event Report based on form data.
+     */
+    fastify.post('/club-event-report', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const data = request.body;
+            if (!data.eventTitle) {
+                return reply.code(400).send({ error: 'Event title is required' });
+            }
+
+            const buffer = await generateClubEventReportBuffer(data);
+
+            const filename = `Club_Event_Report_${data.eventTitle.replace(/\s+/g, '_')}.pdf`;
+            reply.type('application/pdf');
+            reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+            return reply.send(buffer);
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to generate club event report' });
         }
     });
 
@@ -4044,6 +3944,221 @@ module.exports = async function (fastify, opts) {
         });
 
         return reply.send({ success: true, results });
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ─── SLOT TIMING MANAGEMENT ───────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const Slot = require('../models/Slot');
+    const SlotChangeRequest = require('../models/SlotChangeRequest');
+
+    /**
+     * POST /api/superadmin/slots
+     * Create a new slot for a round.
+     */
+    fastify.post('/slots', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { round, label, startTime, endTime, teams, maxCapacity } = request.body;
+
+            if (!round || !label || !startTime || !endTime) {
+                return reply.code(400).send({ error: 'round, label, startTime, and endTime are required' });
+            }
+
+            if (new Date(startTime) >= new Date(endTime)) {
+                return reply.code(400).send({ error: 'startTime must be before endTime' });
+            }
+
+            const slot = new Slot({
+                round,
+                label: label.trim(),
+                startTime: new Date(startTime),
+                endTime: new Date(endTime),
+                teams: teams || [],
+                maxCapacity: maxCapacity || null
+            });
+
+            await slot.save();
+            const populated = await Slot.findById(slot._id).populate('teams', 'name').populate('round', 'name');
+
+            await logActivity({
+                action: 'CREATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Slot', id: slot._id.toString(), label: `${label} for round ${round}` },
+                ip: request.ip
+            });
+
+            return reply.code(201).send({ success: true, data: populated });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to create slot' });
+        }
+    });
+
+    /**
+     * GET /api/superadmin/slots/:roundId
+     * List all slots for a round, with team population.
+     */
+    fastify.get('/slots/:roundId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.params;
+            const slots = await Slot.find({ round: roundId })
+                .populate('teams', 'name members')
+                .sort({ startTime: 1 });
+
+            return reply.send({ success: true, data: slots });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch slots' });
+        }
+    });
+
+    /**
+     * PATCH /api/superadmin/slots/:slotId
+     * Update slot details (label, times, teams, capacity).
+     */
+    fastify.patch('/slots/:slotId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { slotId } = request.params;
+            const updates = {};
+
+            if (request.body.label !== undefined) updates.label = request.body.label.trim();
+            if (request.body.startTime !== undefined) updates.startTime = new Date(request.body.startTime);
+            if (request.body.endTime !== undefined) updates.endTime = new Date(request.body.endTime);
+            if (request.body.teams !== undefined) updates.teams = request.body.teams;
+            if (request.body.maxCapacity !== undefined) updates.maxCapacity = request.body.maxCapacity;
+
+            if (updates.startTime && updates.endTime && updates.startTime >= updates.endTime) {
+                return reply.code(400).send({ error: 'startTime must be before endTime' });
+            }
+
+            const slot = await Slot.findByIdAndUpdate(slotId, updates, { new: true })
+                .populate('teams', 'name members');
+
+            if (!slot) return reply.code(404).send({ error: 'Slot not found' });
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Slot', id: slotId, label: slot.label },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, data: slot });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to update slot' });
+        }
+    });
+
+    /**
+     * DELETE /api/superadmin/slots/:slotId
+     * Delete a slot.
+     */
+    fastify.delete('/slots/:slotId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { slotId } = request.params;
+            const slot = await Slot.findByIdAndDelete(slotId);
+            if (!slot) return reply.code(404).send({ error: 'Slot not found' });
+
+            // Clean up any pending change requests referencing this slot
+            await SlotChangeRequest.deleteMany({
+                $or: [{ currentSlot: slotId }, { requestedSlot: slotId }],
+                status: 'PENDING'
+            });
+
+            await logActivity({
+                action: 'DELETED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'Slot', id: slotId, label: slot.label },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, message: 'Slot deleted' });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to delete slot' });
+        }
+    });
+
+    /**
+     * GET /api/superadmin/slot-change-requests
+     * List all slot change requests (optionally filtered by status or roundId).
+     */
+    fastify.get('/slot-change-requests', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { status, roundId } = request.query;
+            const filter = {};
+            if (status) filter.status = status;
+            if (roundId) filter.round = roundId;
+
+            const requests = await SlotChangeRequest.find(filter)
+                .populate('student', 'studentId name team')
+                .populate('round', 'name')
+                .populate('currentSlot', 'label startTime endTime')
+                .populate('requestedSlot', 'label startTime endTime')
+                .sort({ createdAt: -1 });
+
+            return reply.send({ success: true, data: requests });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch slot change requests' });
+        }
+    });
+
+    /**
+     * PATCH /api/superadmin/slot-change-requests/:requestId
+     * Approve or reject a slot change request.
+     * On approval, moves the student's team from currentSlot to requestedSlot.
+     */
+    fastify.patch('/slot-change-requests/:requestId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { requestId } = request.params;
+            const { status, adminNote } = request.body;
+
+            if (!['APPROVED', 'REJECTED'].includes(status)) {
+                return reply.code(400).send({ error: 'status must be APPROVED or REJECTED' });
+            }
+
+            const changeRequest = await SlotChangeRequest.findById(requestId)
+                .populate('student', 'studentId name team');
+
+            if (!changeRequest) return reply.code(404).send({ error: 'Request not found' });
+            if (changeRequest.status !== 'PENDING') {
+                return reply.code(400).send({ error: 'Request has already been processed' });
+            }
+
+            changeRequest.status = status;
+            if (adminNote) changeRequest.adminNote = adminNote;
+            await changeRequest.save();
+
+            // On APPROVED: move the student's team from currentSlot to requestedSlot
+            if (status === 'APPROVED' && changeRequest.student?.team) {
+                const teamId = changeRequest.student.team;
+
+                // Remove team from current slot
+                await Slot.findByIdAndUpdate(changeRequest.currentSlot, {
+                    $pull: { teams: teamId }
+                });
+
+                // Add team to requested slot
+                await Slot.findByIdAndUpdate(changeRequest.requestedSlot, {
+                    $addToSet: { teams: teamId }
+                });
+            }
+
+            await logActivity({
+                action: 'UPDATED',
+                performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
+                target: { type: 'SlotChangeRequest', id: requestId, label: `${status} for ${changeRequest.student?.name}` },
+                ip: request.ip
+            });
+
+            return reply.send({ success: true, data: changeRequest });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to process slot change request' });
+        }
     });
 
 };

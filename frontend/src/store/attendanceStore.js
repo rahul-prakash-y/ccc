@@ -19,12 +19,7 @@ export const useAttendanceStore = create((set, get) => ({
 
         set({ loading: true });
         try {
-            // Filter out undefined/null values so we don't send empty roundId
-            const cleanParams = {};
-            Object.entries(params).forEach(([k, v]) => {
-                if (v !== undefined && v !== null && v !== '') cleanParams[k] = v;
-            });
-            const queryParams = new URLSearchParams(cleanParams);
+            const queryParams = new URLSearchParams(params);
             const res = await api.get(`/attendance/records?${queryParams.toString()}`);
             set({
                 attendanceRecords: res.data.data || [],
@@ -38,10 +33,9 @@ export const useAttendanceStore = create((set, get) => ({
         }
     },
 
-    fetchActiveOtp: async (roundId) => {
+    fetchActiveOtp: async () => {
         try {
-            const query = roundId ? `?roundId=${roundId}` : '';
-            const res = await api.get(`/attendance/active${query}`);
+            const res = await api.get('/attendance/active');
             if (res.data.success) {
                 set({
                     activeOtp: res.data.data.otp,
@@ -55,11 +49,10 @@ export const useAttendanceStore = create((set, get) => ({
         }
     },
 
-    generateOtp: async (roundId) => {
+    generateOtp: async () => {
         set({ otpLoading: true });
         try {
-            const body = roundId ? { roundId } : {};
-            const res = await api.post('/attendance/generate', body);
+            const res = await api.post('/attendance/generate');
             set({
                 activeOtp: res.data.data.otp,
                 timeLeft: res.data.data.secondsLeft,

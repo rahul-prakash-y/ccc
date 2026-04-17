@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShieldCheck, BookOpen, 
   Activity, UserCog, Users, PlayCircle,
-  Power, Server, Play, Sparkles
+  Power, Server, Play, Sparkles, FileText, Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
@@ -20,6 +20,8 @@ import DatabaseManagerTab from './DatabaseManagerTab';
 import PracticeDashboardTab from './PracticeDashboardTab';
 import LiveDashboardTab from './LiveDashboardTab';
 import TeamManagerTab from './TeamManagerTab';
+import ClubEventReportTab from './ClubEventReportTab';
+import SlotManagerTab from './SlotManagerTab';
 
 
 const TABS = [
@@ -29,10 +31,12 @@ const TABS = [
   { id: 'admins', label: 'Admin Manager', icon: UserCog },
   { id: 'question-bank', label: 'Library', icon: BookOpen },
   { id: 'teams', label: 'Teams', icon: Users },
-  { id: 'activity', label: 'Activity Logs', icon: Activity },
-  { id: 'server-allocation', label: 'Servers', icon: Server },
-  { id: 'health', label: 'System Health', icon: Activity },
-  { id: 'database', label: 'Database Manager', icon: Server, roles: ['SUPER_MASTER'] },
+  { id: 'event-reports', label: 'Event Reports', icon: FileText },
+  { id: 'slot-manager', label: 'Slot Manager', icon: Clock },
+  { id: 'activity', label: 'Activity Logs', icon: Activity, privilegedOnly: true },
+  { id: 'server-allocation', label: 'Servers', icon: Server, privilegedOnly: true },
+  { id: 'health', label: 'System Health', icon: Activity, privilegedOnly: true },
+  { id: 'database', label: 'Database Manager', icon: Server, privilegedOnly: true },
 ];
 
 const SuperAdminDashboard = () => {
@@ -118,7 +122,7 @@ const SuperAdminDashboard = () => {
         {/* 2. SIDEBAR NAVIGATION (ICONS WITH TOOLTIPS) */}
         <aside className="w-16 sm:w-20 bg-white border-r border-slate-200/60 flex flex-col items-center py-4 gap-2 z-30 shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] overflow-y-auto no-scrollbar">
           {
-            TABS.filter(tab => !tab.roles || tab.roles.includes(user?.role)).map((tab) => {
+            TABS.filter(tab => !tab.privilegedOnly || user?.isSystemPrivileged).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -235,6 +239,8 @@ const SuperAdminDashboard = () => {
                   {activeTab === 'teams' && <TeamManagerTab />}
                   {activeTab === 'question-bank' && <QuestionBankTab />}
                   {activeTab === 'activity' && <ActivityLogsTab />}
+                  {activeTab === 'event-reports' && <ClubEventReportTab />}
+                  {activeTab === 'slot-manager' && <SlotManagerTab />}
                   {activeTab === 'server-allocation' && <ServerAllocationTab />}
                   {activeTab === 'health' && <SystemHealthTab />}
                   {activeTab === 'database' && <DatabaseManagerTab />}

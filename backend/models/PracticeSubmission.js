@@ -13,14 +13,14 @@ const practiceSubmissionSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'DISQUALIFIED', 'COMPLETED'],
-        default: 'NOT_STARTED'
+        enum: ['IN_PROGRESS', 'SUBMITTED', 'COMPLETED', 'DISQUALIFIED'],
+        default: 'IN_PROGRESS'
     },
-    startTime: {
+    startedAt: {
         type: Date,
-        default: null
+        default: Date.now
     },
-    endTime: {
+    completedAt: {
         type: Date,
         default: null
     },
@@ -34,36 +34,13 @@ const practiceSubmissionSchema = new mongoose.Schema({
     },
     score: {
         type: Number,
-        default: null 
+        default: null
     },
     autoScore: {
         type: Number,
-        default: 0 
-    },
-    extraTimeMinutes: {
-        type: Number,
         default: 0
     },
-    cheatFlags: {
-        type: Number,
-        default: 0
-    },
-    flags: {
-        type: [String],
-        default: []
-    },
-    tabSwitches: {
-        type: Number,
-        default: 0
-    },
-    forceExited: {
-        type: Boolean,
-        default: false
-    },
-    disqualificationReason: {
-        type: String,
-        default: null
-    },
+    // Manual evaluation scores per question (same as Submission)
     manualScores: [
         {
             questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question' },
@@ -77,35 +54,15 @@ const practiceSubmissionSchema = new mongoose.Schema({
             evaluatedAt: { type: Date, default: Date.now }
         }
     ],
+    // Shuffled question IDs assigned to this student
     assignedQuestions: [
         { type: mongoose.Schema.Types.ObjectId, ref: 'Question' }
-    ],
-    conductedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        default: null
-    },
-    hasCertificate: {
-        type: Boolean,
-        default: false
-    },
-    attemptNumber: {
-        type: Number,
-        default: 1
-    },
-    solvedCount: {
-        type: Number,
-        default: 0
-    },
-    mcqSolvedCount: {
-        type: Number,
-        default: 0
-    }
+    ]
 }, {
     timestamps: true
 });
 
-// Allow multiple attempts for practice rounds, but uniquely identified by attempt number
-practiceSubmissionSchema.index({ student: 1, round: 1, attemptNumber: 1 }, { unique: true });
+// We want to track every attempt (up to limit), so no unique index
+practiceSubmissionSchema.index({ student: 1, round: 1 });
 
 module.exports = mongoose.model('PracticeSubmission', practiceSubmissionSchema);

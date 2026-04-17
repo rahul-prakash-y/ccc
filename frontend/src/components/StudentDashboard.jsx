@@ -1,15 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { 
-    Lock, Clock, Play, CheckCircle, LogOut, ArrowRight, Sparkles, UserCheck, 
-    Loader2, AlertTriangle, Check, ShieldAlert, Power, Award, Timer,
-    LayoutDashboard, CheckCircle2, AlertCircle, BarChart3
-} from 'lucide-react';
+import { Lock, Clock, Play, CheckCircle, ArrowRight, Sparkles, Loader2, AlertTriangle, ShieldAlert, FileDown, Timer, Users, Send, RefreshCw, XCircle, BookOpen, CalendarClock } from 'lucide-react';
 import OtpGate from './OtpGate';
-import ProfileModal from './ProfileModal';
 import { useAuthStore, api } from '../store/authStore';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { SkeletonGrid } from './Skeleton';
+import toast from 'react-hot-toast';
+import { formatFullIST } from '../utils/dateUtils';
 
 const statusConfig = {
     LOCKED: {
@@ -32,18 +29,46 @@ const statusConfig = {
 
 const StudentDashboard = () => {
     const navigate = useNavigate();
-    const { user, logout } = useAuthStore();
+    const { user } = useAuthStore();
     const [rounds, setRounds] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('active'); // 'active' or 'practice'
     const [selectedRound, setSelectedRound] = useState(null);
     const [isOtpOpen, setIsOtpOpen] = useState(false);
-    const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
-    const [attendanceOtp, setAttendanceOtp] = useState('');
-    const [marking, setMarking] = useState(false);
-    const [attendanceStatus, setAttendanceStatus] = useState(null); // 'success', 'error', null
-    const [attendanceMessage, setAttendanceMessage] = useState('');
+    const [activeTab, setActiveTab] = useState('ASSESSMENTS'); // 'ASSESSMENTS' or 'PRACTICE'
+
+    // Team enrollment request state
+    const [teamRequestStatus, setTeamRequestStatus] = useState(user?.teamRequest?.status || 'NONE');
+    const [teamRequestMsg, setTeamRequestMsg] = useState(user?.teamRequest?.message || '');
+    const [submittingRequest, setSubmittingRequest] = useState(false);
+
+    // High-end animation variants for staggered entry
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1,
+                delayChildren: 0.1
+            }
+        }
+    };
+
+    const itemVariants = {
+        hidden: { opacity: 0, scale: 0.95, y: 30 },
+        visible: { 
+            opacity: 1, 
+            scale: 1, 
+            y: 0,
+            transition: {
+                type: "spring",
+                damping: 20,
+                stiffness: 100
+            }
+        }
+    };
+
+    // Guard: recovery logic must only run once per page session.
+    const hasFiredRecovery = useRef(false);
 
     const fetchRounds = useCallback(async () => {
         try {
@@ -60,7 +85,58 @@ const StudentDashboard = () => {
         fetchRounds();
     }, [fetchRounds]);
 
-    const allProcessedRounds = React.useMemo(() => {
+    // Fallback recovery
+    useEffect(() => {
+        if (loading || hasFiredRecovery.current) return;
+        hasFiredRecovery.current = true;
+
+        const attemptRecovery = async () => {
+            const backupKeys = Object.keys(localStorage).filter(k =>
+                k.startsWith('backup_submission_')
+            );
+            if (backupKeys.length === 0) return;
+
+            const statusMap = {};
+            rounds.forEach(r => { statusMap[r._id] = r.mySubmissionStatus; });
+
+            for (const key of backupKeys) {
+                let backup;
+                try {
+                    backup = JSON.parse(localStorage.getItem(key));
+                } catch {
+                    localStorage.removeItem(key);
+                    continue;
+                }
+
+                if (!backup?.roundId || !backup?.payload) {
+                    localStorage.removeItem(key);
+                    continue;
+                }
+
+                if (statusMap[backup.roundId] === 'COMPLETED') {
+                    localStorage.removeItem(key);
+                } else {
+                    try {
+                        await api.post(`/rounds/${backup.roundId}/submit`, backup.payload);
+                        const updatedRes = await api.get('/rounds');
+                        const updated = (updatedRes.data.data || []).find(
+                            r => r._id === backup.roundId
+                        );
+                        if (updated?.mySubmissionStatus === 'COMPLETED') {
+                            localStorage.removeItem(key);
+                            setRounds(updatedRes.data.data || []);
+                        }
+                    } catch (err) {
+                        console.error(`[Recovery] Re-fire failed for round ${backup.roundId}:`, err);
+                    }
+                }
+            }
+        };
+
+        attemptRecovery();
+    }, [loading, rounds]);
+
+    const displayRounds = React.useMemo(() => {
         const groups = {};
         const singles = [];
 
@@ -77,8 +153,6 @@ const StudentDashboard = () => {
 
         Object.values(groups).forEach(groupRounds => {
             groupRounds.sort((a, b) => (a.roundOrder || 1) - (b.roundOrder || 1));
-
-            // The "Active" round is the first one they haven't completed
             let activeRound = groupRounds[groupRounds.length - 1];
             for (const r of groupRounds) {
                 if (r.mySubmissionStatus !== 'COMPLETED') {
@@ -86,9 +160,7 @@ const StudentDashboard = () => {
                     break;
                 }
             }
-
             const displayName = activeRound.name.split(' - Section')[0] || activeRound.name;
-
             result.push({
                 ...activeRound,
                 name: displayName,
@@ -98,13 +170,6 @@ const StudentDashboard = () => {
 
         return result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }, [rounds]);
-
-    const displayRounds = React.useMemo(() => {
-        if (activeTab === 'practice') {
-            return allProcessedRounds.filter(r => r.type === 'PRACTICE');
-        }
-        return allProcessedRounds.filter(r => r.type !== 'PRACTICE');
-    }, [allProcessedRounds, activeTab]);
 
     const getTimeWindowStatus = (round) => {
         const now = new Date();
@@ -120,9 +185,7 @@ const StudentDashboard = () => {
             return { label: `Starts In ${mins}m`, type: 'WAITING', color: 'text-amber-500' };
         }
 
-        if (end && now > end) {
-            return { label: 'Test Window Closed', type: 'CLOSED', color: 'text-slate-400' };
-        }
+        if (end && now > end) return { label: 'Test Window Closed', type: 'CLOSED', color: 'text-slate-400' };
 
         if (end) {
             const diff = end - now;
@@ -131,30 +194,70 @@ const StudentDashboard = () => {
             const hours = Math.floor(mins / 60);
             if (hours < 24) return { label: 'Ends today', value: `${hours}h left`, type: 'ENDING', color: 'text-indigo-500' };
         }
-
         return null;
     };
 
+    // ── Slot-based gating ────────────────────────────────────────────────────
+    const getSlotStatus = (round) => {
+        if (!round.mySlot) return null;
+        const now = new Date();
+        const start = new Date(round.mySlot.startTime);
+        const end = new Date(round.mySlot.endTime);
+        if (now < start) {
+            const diff = start - now;
+            const mins = Math.floor(diff / 60000);
+            const hours = Math.floor(mins / 60);
+            const label = hours > 0 ? `Slot in ${hours}h ${mins % 60}m` : `Slot in ${mins}m`;
+            return { type: 'WAITING', label, color: 'text-amber-500' };
+        }
+        if (now > end) return { type: 'CLOSED', label: 'Slot Ended', color: 'text-slate-400' };
+        return { type: 'ACTIVE', label: round.mySlot.label, color: 'text-emerald-500' };
+    };
+
     const handleRoundClick = (round) => {
+        const isPractice = round.type === 'PRACTICE' || round.type === 'PRACTISE';
+
+        // If it's a practice round, bypass OTP/status checks and start session
+        if (isPractice) {
+            if (round.myPracticeStatus === 'SUBMITTED' || round.myPracticeStatus === 'COMPLETED') {
+                toast.success('Practice session complete.');
+                return;
+            }
+            if (round.myPracticeStatus === 'IN_PROGRESS') {
+                navigate(`/practice/${round._id}`);
+            } else {
+                handlePracticeStart(round._id);
+            }
+            return;
+        }
+
         const windowStatus = getTimeWindowStatus(round);
         if (windowStatus?.type === 'WAITING') {
-            alert(`This assessment is scheduled to start at ${new Date(round.startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`);
+            toast.error(`Assessment starts at ${formatFullIST(round.startTime)}.`);
             return;
         }
         if (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS') {
-            alert('The testing window for this assessment has closed.');
+            toast.error('The testing window for this assessment has closed.');
             return;
         }
 
-        const canReenterPractice = round.type === 'PRACTICE' && (round.attemptCount || 0) < 3;
+        // Slot gating
+        const slotStatus = getSlotStatus(round);
+        if (slotStatus?.type === 'WAITING') {
+            toast.error(`Your slot hasn't started yet. ${slotStatus.label}.`);
+            return;
+        }
+        if (slotStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS') {
+            toast.error('Your assigned slot has ended.');
+            return;
+        }
 
-        // Open OTP gate if:
-        // 1. Round is awaiting OTP
-        // 2. Round is running AND (student hasn't started OR it's a practice test with available attempts)
-        const shouldShowOtp = round.status === 'WAITING_FOR_OTP' || 
-                             (round.status === 'RUNNING' && (!round.mySubmissionStatus || (canReenterPractice && round.mySubmissionStatus !== 'IN_PROGRESS')));
+        if (round.mySubmissionStatus === 'SUBMITTED' || round.mySubmissionStatus === 'COMPLETED') {
+            toast.success('Session complete. Assessment data is sealed.');
+            return;
+        }
 
-        if (shouldShowOtp) {
+        if (round.status === 'WAITING_FOR_OTP' || (round.status === 'RUNNING' && !round.mySubmissionStatus)) {
             setSelectedRound(round);
             setIsOtpOpen(true);
         } else if (round.status === 'RUNNING' || round.mySubmissionStatus === 'IN_PROGRESS') {
@@ -164,433 +267,299 @@ const StudentDashboard = () => {
 
     const handleOtpUnlock = () => {
         setIsOtpOpen(false);
-        if (selectedRound) {
-            navigate(`/arena/${selectedRound._id}`);
-        }
+        if (selectedRound) navigate(`/arena/${selectedRound._id}`);
         setSelectedRound(null);
     };
 
-    const handleDownloadCertificate = async (roundId, roundName) => {
+    const handlePracticeStart = async (roundId) => {
         try {
-            const res = await api.get(`/rounds/${roundId}/certificate`, {
-                responseType: 'blob'
-            });
-            const url = window.URL.createObjectURL(new Blob([res.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `${roundName.replace(/\s+/g, '_')}_certificate.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            await api.post(`/rounds/${roundId}/practice-start`);
+            navigate(`/practice/${roundId}`);
         } catch (e) {
-            console.error('Failed to download certificate:', e);
-            alert('Failed to download certificate. Please contact administrator.');
+            toast.error(e.response?.data?.message || e.response?.data?.error || 'Failed to start practice session.');
+        }
+    };
+
+    const handleTeamRequest = async () => {
+        setSubmittingRequest(true);
+        try {
+            await api.post('/auth/team-request');
+            setTeamRequestStatus('PENDING');
+            setTeamRequestMsg('');
+            toast.success('Team enrollment request submitted successfully.');
+        } catch (e) {
+            toast.error(e.response?.data?.error || 'Failed to submit request.');
+        } finally {
+            setSubmittingRequest(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-700 relative overflow-hidden">
-
-            {/* Ambient Background Glows for "Arena" feel */}
-            <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Glassmorphism Header */}
-            <header className="bg-white/70 backdrop-blur-xl border-b border-slate-200/60 sticky top-0 z-40 shadow-sm transition-all">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+        <>
+            {/* Header Section */}
+            <header className="h-24 bg-white/70 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-40">
+                <div className="flex items-center gap-4">
+                
+                    <img src="./codecirclelogo.png" className="size-10" />
                     <div>
-                        <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            Code Circle Club <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md text-sm border border-indigo-100">Fint & Friends</span>
-                        </h1>
+                        <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">CodeCircle <span className="text-indigo-600">Arena</span></h1>
+                        <div className="flex items-center gap-2 mt-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Terminal Protocol Active</span>
+                        </div>
                         <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1">
                             Student: <span className="font-mono font-bold text-slate-700">{user?.name || 'Unknown'}</span> ({user?.studentId})
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 sm:gap-4">
-                        {/* Profile Button */}
-                        <button
-                            onClick={() => setIsProfileOpen(true)}
-                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-600 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 hover:text-indigo-600 transition-all active:scale-95 shadow-sm"
-                        >
-                            <UserCheck size={14} />
-                            My Profile
-                        </button>
-
-                        {/* Practice Arena Button */}
-                        <button
-                            onClick={() => {
-                                setActiveTab('practice');
-                                window.scrollTo({ top: 500, behavior: 'smooth' });
-                            }}
-                            className={`flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm rounded-xl border ${activeTab === 'practice' ? 'bg-amber-500 text-white border-amber-600' : 'text-[#f59e0b] bg-[#fef3c7] border border-[#fde68a] hover:bg-[#f59e0b] hover:text-white'}`}
-                        >
-                            <Play size={14} />
-                            <span className="hidden sm:inline">Practice Arena</span>
-                            <span className="inline sm:hidden">Practice</span>
-                        </button>
-
-                        {/* Standalone Attendance Button */}
-                        <button
-                            onClick={() => setIsAttendanceOpen(true)}
-                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
-                        >
-                            <UserCheck size={14} />
-                            <span className="hidden sm:inline">Mark Attendance</span>
-                            <span className="inline sm:hidden">Attend</span>
-                        </button>
-
-                        <div className="hidden lg:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
-                        </div>
-
-                        {/* Performance Report Link */}
-                        <Link
-                            to="/performance"
-                            className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
-                        >
-                            <BarChart3 size={14} />
-                            <span className="hidden sm:inline">Report</span>
-                        </Link>
-
-                        <button
-                            onClick={logout}
-                            className="group flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-red-600 bg-white border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-xl px-3 sm:px-4 py-2 transition-all shadow-sm active:scale-95"
-                        >
-                            <Power size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-                            <span className="hidden xs:inline sm:inline">Disconnect</span>
-                        </button>
+                </div>
+                <div className="hidden md:flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">System Live</span>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10 space-y-8">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                    <div>
-                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                            <Sparkles className={activeTab === 'practice' ? "text-amber-500" : "text-indigo-500"} size={28} />
-                            {activeTab === 'practice' ? 'Practice Arena' : 'Available Assessments'}
-                        </h2>
-                        <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
-                            {loading ? 'Scanning server nodes for active deployments...' : 
-                             activeTab === 'practice' ? 'Sharpen your skills with tutorial missions and simulation environments.' : 
-                             'Select an active assessment to initialize your session. Ensure you have the required access keys.'}
-                        </p>
-                    </div>
-
-                    {!loading && (
-                        <div className="bg-slate-200/50 p-1 rounded-2xl flex items-center gap-1 shadow-inner self-start md:self-end">
-                            <button
-                                onClick={() => setActiveTab('active')}
-                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'active' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Live Ops
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('practice')}
-                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'practice' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Practice Mode
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {loading ? (
-                    <div className="py-4">
-                        <SkeletonGrid count={6} />
-                    </div>
-                ) : displayRounds.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
-                        className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-300 rounded-3xl bg-white/50 backdrop-blur-sm"
-                    >
-                        <Lock size={48} className="text-slate-300 mb-4" />
-                        <p className="text-lg font-black text-slate-600">NO ACTIVE ASSESSMENTS</p>
-                        <p className="text-sm text-slate-400 mt-2">Stand by for administrator deployment.</p>
-                    </motion.div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <AnimatePresence>
-                            {displayRounds.map((round, index) => {
-                                const eligibility = round.eligibility || { eligible: true };
-                                const isEligible = eligibility.eligible !== false;
-
-                                let config = isEligible ? statusConfig[round.status] : {
-                                    icon: ShieldAlert,
-                                    label: 'RESTRICTED',
-                                    bg: 'bg-red-50',
-                                    border: 'border-red-100',
-                                    color: 'text-red-500',
-                                    badge: 'border-red-200 bg-red-50 text-red-600'
-                                };
-
-                                if (isEligible && (round.mySubmissionStatus === 'SUBMITTED' || round.mySubmissionStatus === 'COMPLETED')) {
-                                    if (round.type === 'PRACTICE' && (round.attemptCount || 0) < 3) {
-                                        config = {
-                                            ...statusConfig['RUNNING'],
-                                            label: `PRACTICE: ${round.attemptCount || 0}/3 DONE`,
-                                            badge: 'bg-amber-100 text-amber-700 border-amber-200'
-                                        };
-                                    } else {
-                                        config = {
-                                            ...statusConfig['COMPLETED'],
-                                            label: round.mySubmissionStatus === 'SUBMITTED' ? 'Response Locked' : 'Mission Accomplished'
-                                        };
-                                    }
-                                }
-
-                                const Icon = config.icon;
-                                const windowStatus = getTimeWindowStatus(round);
-                                const isWindowRestricted = windowStatus?.type === 'WAITING' || (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS');
-                                
-                                const canReenterPractice = round.type === 'PRACTICE' && (round.attemptCount || 0) < 3;
-                                const isInteractable = (round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && 
-                                                      isEligible && 
-                                                      (!isWindowRestricted || (canReenterPractice && round.mySubmissionStatus !== 'IN_PROGRESS'));
-                                                      
-                                const isLive = round.status === 'RUNNING' && isEligible && !isWindowRestricted;
-
-                                return (
-                                    <motion.div
-                                        key={round._id}
-                                        layout
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.05, ease: "easeOut" }}
-                                        whileHover={isInteractable ? { y: -6, scale: 1.02 } : {}}
-                                        whileTap={isInteractable ? { scale: 0.98 } : {}}
-                                        onClick={() => handleRoundClick(round)}
-                                        className={`group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 bg-white
-                                            ${isInteractable ? 'cursor-pointer shadow-lg hover:shadow-2xl hover:shadow-indigo-500/10' : 'opacity-75 cursor-not-allowed shadow-sm grayscale-[0.2]'}
-                                            ${isLive ? 'border-2 border-emerald-400/50' : 'border border-slate-200'}
-                                        `}
-                                    >
-                                        {/* Subtle internal gradient for live rounds */}
-                                        {isLive && <div className="absolute inset-0 bg-linear-to-br from-emerald-50/50 to-transparent pointer-events-none" />}
-
-                                        <div className="relative z-10">
-                                            <div className="flex justify-between items-start mb-8">
-                                                <div className={`p-3 rounded-2xl border ${config.bg} ${config.border} ${config.color} transition-transform group-hover:scale-110`}>
-                                                    <Icon size={24} />
-                                                </div>
-                                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${config.badge}`}>
-                                                    {config.label}
-                                                </span>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">{round.name}</h3>
-
-                                                {!isEligible ? (
-                                                    <div className="bg-red-50/50 rounded-xl p-3 border border-red-100/50">
-                                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-widest leading-none mb-1">Rank Requirement Failed</p>
-                                                        <p className="text-xs font-bold text-red-800 leading-tight">
-                                                            Top {eligibility.maxRank} only. Your rank: #{eligibility.rank}
-                                                        </p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-col gap-2">
-                                                        <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                                                            <Clock size={14} className="text-slate-400" />
-                                                            {round.testDurationMinutes || round.durationMinutes} Minutes Limit
-                                                            {round.type === 'PRACTICE' && (
-                                                                <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md text-[10px] font-black tracking-widest border border-amber-100 uppercase ml-auto">
-                                                                    Attempt {round.attemptCount || 0}/3
-                                                                </span>
-                                                            )}
-                                                            {round.totalSections > 1 && (
-                                                                <>
-                                                                    <span className="text-slate-300">|</span>
-                                                                    <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">
-                                                                        {round.totalSections} Sections
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                            {round.myScore !== null && (
-                                                                <>
-                                                                    <span className="text-slate-300">|</span>
-                                                                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 rounded-md border border-emerald-100">
-                                                                        Score: {round.myScore.toFixed(2)}
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        {(() => {
-                                                            const windowStatus = getTimeWindowStatus(round);
-                                                            if (!windowStatus) return null;
-                                                            return (
-                                                                <div className={`flex items-center gap-1.5 text-[11px] font-bold ${windowStatus.color}`}>
-                                                                    <Timer size={12} />
-                                                                    {windowStatus.label}
-                                                                    {windowStatus.value && <span className="opacity-60 ml-1">({windowStatus.value})</span>}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Interactive Footer */}
-                                        <div className={`mt-8 pt-4 border-t transition-colors flex items-center justify-between
-                                            ${isLive ? 'border-emerald-100/50' : 'border-slate-100'}
-                                        `}>
-                                            {round.hasCertificate ? (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDownloadCertificate(round._id, round.name);
-                                                    }}
-                                                    className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-xl text-[10px] font-black transition-all active:scale-95"
-                                                >
-                                                    <Award size={12} />
-                                                    DOWNLOAD CERTIFICATE
-                                                </button>
-                                            ) : round.type === 'PRACTICE' && isInteractable ? (
-                                                <button
-                                                    className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black transition-all active:scale-95 shadow-md shadow-amber-200 animate-pulse"
-                                                >
-                                                    <Sparkles size={12} />
-                                                    ATTEND PRACTICE
-                                                </button>
-                                            ) : (
-                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                                    {!isEligible ? 'Access Locked' :
-                                                        round.mySubmissionStatus === 'COMPLETED' ? 'Evaluation Complete' :
-                                                            round.mySubmissionStatus === 'SUBMITTED' ? 'Awaiting Evaluation' :
-                                                                round.status === 'LOCKED' ? 'Access Restricted' :
-                                                                    round.status === 'COMPLETED' ? 'Data Sealed' :
-                                                                        round.status === 'WAITING_FOR_OTP' ? 'Requires Auth Key' :
-                                                                            round.type === 'PRACTICE' ? 'Practice Mode' : 'Session Ready'}
-                                                </p>
-                                            )}
-
-                                            {isInteractable && (
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isLive ? 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white'}`}>
-                                                    <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
-                        </AnimatePresence>
-                    </div>
-                )}
-            </main>
-
-            <OtpGate
-                isOpen={isOtpOpen}
-                roundId={selectedRound?._id}
-                roundName={selectedRound?.name}
-                onClose={() => setIsOtpOpen(false)}
-                onUnlock={handleOtpUnlock}
-            />
-
-            <ProfileModal
-                isOpen={isProfileOpen}
-                onClose={() => setIsProfileOpen(false)}
-            />
-
-            {/* Attendance Modal */}
-            <AnimatePresence>
-                {isAttendanceOpen && (
-                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <main className="flex-1 overflow-y-auto relative z-10 px-4 sm:px-6 py-8 sm:py-12 scrollbar-hide">
+                <div className="max-w-7xl mx-auto space-y-8">
+                    {/* Team Enrollment Banner */}
+                    {!user?.team && (
                         <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden"
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`rounded-2xl border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4
+                                ${teamRequestStatus === 'PENDING' ? 'bg-amber-50 border-amber-200' :
+                                teamRequestStatus === 'REJECTED' ? 'bg-red-50 border-red-200' : 'bg-indigo-50 border-indigo-200'}
+                            `}
                         >
-                            <div className="p-6">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                                        <UserCheck size={20} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-black text-slate-900 leading-none">Mark Attendance</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">
-                                            Roll Call Protocol
-                                        </p>
-                                    </div>
+                            <div className="flex items-start gap-3">
+                                <div className={`p-2 rounded-xl ${teamRequestStatus === 'PENDING' ? 'bg-amber-100 text-amber-600' :
+                                    teamRequestStatus === 'REJECTED' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                    {teamRequestStatus === 'PENDING' ? <Loader2 size={18} className="animate-spin" /> :
+                                        teamRequestStatus === 'REJECTED' ? <XCircle size={18} /> : <Users size={18} />}
                                 </div>
+                                <div>
+                                    <p className={`font-black text-sm ${teamRequestStatus === 'PENDING' ? 'text-amber-800' :
+                                        teamRequestStatus === 'REJECTED' ? 'text-red-800' : 'text-indigo-800'}`}>
+                                        {teamRequestStatus === 'PENDING' ? 'Team Enrollment Request Pending' :
+                                            teamRequestStatus === 'REJECTED' ? 'Team Enrollment Request Rejected' : 'No Team Assigned'}
+                                    </p>
+                                    <p className={`text-xs mt-0.5 ${teamRequestStatus === 'PENDING' ? 'text-amber-600' :
+                                        teamRequestStatus === 'REJECTED' ? 'text-red-600' : 'text-indigo-500'}`}>
+                                        {teamRequestStatus === 'PENDING' ? 'Your request has been submitted. Awaiting admin review.' :
+                                            teamRequestStatus === 'REJECTED' ? (teamRequestMsg || 'Your request was rejected.') :
+                                                'You are not assigned to any team. Request enrollment to participate.'}
+                                    </p>
+                                </div>
+                            </div>
+                            {teamRequestStatus === 'NONE' && (
+                                <button onClick={handleTeamRequest} disabled={submittingRequest} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-sm disabled:opacity-60">
+                                    {submittingRequest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enrollment Request
+                                </button>
+                            )}
+                        </motion.div>
+                    )}
 
-                                {attendanceStatus === 'success' ? (
-                                    <div className="py-4 text-center space-y-3">
-                                        <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                                            <Check size={24} />
-                                        </div>
-                                        <h4 className="font-black text-slate-900">Attendance Marked!</h4>
-                                        <p className="text-sm text-slate-500 font-medium">{attendanceMessage}</p>
-                                        <button
-                                            onClick={() => {
-                                                setIsAttendanceOpen(false);
-                                                setAttendanceStatus(null);
-                                            }}
-                                            className="w-full mt-4 py-3 bg-slate-900 text-white rounded-xl font-black text-sm hover:bg-slate-800 transition-colors"
-                                        >
-                                            CONTINUE
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                                Enter Attendance Key
-                                            </label>
-                                            <input
-                                                type="text"
-                                                maxLength={6}
-                                                value={attendanceOtp}
-                                                onChange={e => setAttendanceOtp(e.target.value.toUpperCase())}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-center text-2xl font-mono font-black tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                                                placeholder="••••••"
-                                                autoFocus
-                                            />
-                                            {attendanceStatus === 'error' && (
-                                                <p className="text-red-500 text-[10px] font-bold mt-2 flex items-center gap-1">
-                                                    <AlertTriangle size={10} /> {attendanceMessage}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div className="flex gap-3 pt-2">
-                                            <button
-                                                onClick={() => setIsAttendanceOpen(false)}
-                                                className="flex-1 py-3 bg-slate-50 text-slate-500 rounded-2xl font-black text-xs hover:bg-slate-100 transition-colors border border-slate-100"
-                                            >
-                                                CANCEL
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    setMarking(true);
-                                                    setAttendanceStatus(null);
-                                                    try {
-                                                        const res = await api.post('/attendance/mark', { otp: attendanceOtp });
-                                                        setAttendanceStatus('success');
-                                                        setAttendanceMessage(res.data.message);
-                                                    } catch (e) {
-                                                        setAttendanceStatus('error');
-                                                        setAttendanceMessage(e.response?.data?.error || 'Validation failed');
-                                                    } finally {
-                                                        setMarking(false);
-                                                    }
-                                                }}
-                                                disabled={marking || attendanceOtp.length < 6}
-                                                className="flex-2 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 disabled:opacity-50"
-                                            >
-                                                {marking ? <Loader2 size={14} className="animate-spin" /> : 'VERIFY & MARK'}
-                                            </button>
+                    {/* Highlighted Team Identity Card */}
+                    {user?.team && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-white border border-slate-200/60 rounded-4xl p-6 sm:p-8 shadow-xl shadow-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative overflow-hidden group"
+                        >
+                            <div className="absolute top-0 right-0 p-8 text-indigo-50/50 -rotate-12 transition-transform group-hover:rotate-0">
+                                <Users size={120} />
+                            </div>
+                            <div className="flex items-center gap-5 relative z-10">
+                                <div className="p-4 bg-linear-to-tr from-indigo-500 to-indigo-700 text-white rounded-3xl shadow-lg shadow-indigo-200">
+                                    <Users size={32} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <h2 className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-1.5 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                                        Assigned Squad
+                                    </h2>
+                                    <p className="text-3xl font-black text-slate-800 tracking-tight capitalize leading-tight">
+                                        {user.team.name}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-col sm:items-end gap-3 relative z-10 w-full sm:w-auto">
+                                <div className="px-5 py-2 bg-emerald-50 text-emerald-600 text-xs font-black uppercase tracking-widest rounded-2xl border border-emerald-100/50 shadow-sm shadow-emerald-100/30 flex items-center gap-2 self-start sm:self-auto">
+                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                    Active Deployment
+                                </div>
+                                
+                                {user.team.members?.length > 0 && (
+                                    <div className="flex flex-col sm:items-end gap-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Squad Roster</p>
+                                        <div className="flex flex-wrap sm:justify-end gap-2 max-w-sm sm:max-w-md">
+                                            {user.team.members.map((member, i) => (
+                                                <div 
+                                                    key={i} 
+                                                    className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all duration-300
+                                                        ${member._id === user._id 
+                                                            ? 'bg-indigo-600 text-white border-indigo-700 shadow-md shadow-indigo-100 scale-105' 
+                                                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-200 hover:text-slate-700'}`}
+                                                >
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${member._id === user._id ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
+                                                    {member.name}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
+
+                                <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-50 border border-slate-100 rounded-xl mt-1">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Team Reference</span>
+                                    <span className="text-[10px] font-bold font-mono text-slate-600 tracking-tight">#{user.team._id?.slice(-8).toUpperCase() || 'ROOT-NODE'}</span>
+                                </div>
                             </div>
                         </motion.div>
+                    )}
+
+                    <div>
+                        <div className="flex items-center gap-6 mb-6 border-b border-slate-100">
+                            <button
+                                onClick={() => setActiveTab('ASSESSMENTS')}
+                                className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'ASSESSMENTS' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Active Assessments
+                                {activeTab === 'ASSESSMENTS' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('PRACTICE')}
+                                className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'PRACTICE' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Practice Mode
+                                {activeTab === 'PRACTICE' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
+                            </button>
+                        </div>
+                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                            <Sparkles className="text-indigo-500" size={28} />
+                            {activeTab === 'ASSESSMENTS' ? 'Available Assessments' : 'Practice Protocol'}
+                        </h2>
+                        <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
+                            {loading ? 'Scanning server nodes...' : activeTab === 'ASSESSMENTS' ? 'Select an active assessment to initialize your session.' : 'Hone your skills with these designated practice rounds.'}
+                        </p>
                     </div>
-                )}
-            </AnimatePresence>
-        </div>
+
+                    {loading ? <SkeletonGrid count={6} /> : (() => {
+                        const filteredRounds = displayRounds.filter(r => {
+                            const isPractice = r.type === 'PRACTICE' || r.type === 'PRACTISE';
+                            if (activeTab === 'PRACTICE') return isPractice;
+                            // Assessments tab only shows non-practice rounds
+                            return !isPractice;
+                        });
+
+                        if (filteredRounds.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-300 rounded-3xl bg-white/50">
+                                    <Lock size={48} className="text-slate-300 mb-4" />
+                                    <p className="text-lg font-black text-slate-600 uppercase">{activeTab === 'ASSESSMENTS' ? 'NO ACTIVE ASSESSMENTS' : 'NO PRACTICE ROUNDS AVAILABLE'}</p>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                <AnimatePresence mode="popLayout">
+                                    {filteredRounds.map((round) => {
+                                    const eligibility = round.eligibility || { eligible: true };
+                                    const isEligible = eligibility.eligible !== false;
+                                    const isPractice = round.type === 'PRACTICE' || round.type === 'PRACTISE';
+                                    
+                                    let config = isEligible ? statusConfig[round.status] : {
+                                        icon: ShieldAlert, label: 'RESTRICTED', bg: 'bg-red-50', border: 'border-red-100', color: 'text-red-500', badge: 'border-red-200 bg-red-50 text-red-600'
+                                     };
+
+                                    if (isEligible && (round.mySubmissionStatus === 'SUBMITTED' || round.mySubmissionStatus === 'COMPLETED')) {
+                                        config = { ...statusConfig['COMPLETED'], label: 'Session Complete' };
+                                    }
+
+                                    // For practice rounds, we use a simpler status
+                                    if (isPractice) {
+                                        const isFinished = round.myPracticeStatus === 'SUBMITTED' || round.myPracticeStatus === 'COMPLETED';
+                                        config = {
+                                            icon: BookOpen,
+                                            label: isFinished ? 'Completed' : round.myPracticeStatus === 'IN_PROGRESS' ? 'In Progress' : 'Available',
+                                            bg: isFinished ? 'bg-emerald-50' : 'bg-indigo-50',
+                                            border: isFinished ? 'border-emerald-200' : 'border-indigo-100',
+                                            color: isFinished ? 'text-emerald-500' : 'text-indigo-600',
+                                            badge: isFinished ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                                        };
+                                    }
+
+                                    const Icon = config.icon;
+                                    const windowStatus = getTimeWindowStatus(round);
+                                    const slotStatus = getSlotStatus(round);
+                                    const isWindowRestricted = !isPractice && (
+                                        windowStatus?.type === 'WAITING' ||
+                                        (windowStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS') ||
+                                        slotStatus?.type === 'WAITING' ||
+                                        (slotStatus?.type === 'CLOSED' && round.mySubmissionStatus !== 'IN_PROGRESS')
+                                    );
+                                    const isFinished = isPractice ? (round.myPracticeStatus === 'SUBMITTED' || round.myPracticeStatus === 'COMPLETED') : (round.mySubmissionStatus === 'SUBMITTED' || round.mySubmissionStatus === 'COMPLETED');
+                                    const isInteractable = isPractice ? !isFinished : ((round.status === 'WAITING_FOR_OTP' || round.status === 'RUNNING') && isEligible && !isWindowRestricted && !isFinished);
+                                    const isLive = !isPractice && round.status === 'RUNNING' && isEligible && !isWindowRestricted && !isFinished;
+
+                                    return (
+                                        <motion.div
+                                            key={round._id} layout variants={itemVariants}
+                                            whileHover={isInteractable ? { scale: 1.03, translateY: -8 } : { dropShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}
+                                            onClick={() => handleRoundClick(round)}
+                                            className={`group relative overflow-hidden rounded-4xl p-8 transition-all duration-500 
+                                                ${isInteractable 
+                                                    ? 'cursor-pointer shadow-xl bg-white/70 border border-white/40 hover:bg-white/80' 
+                                                    : 'shadow-sm opacity-60 grayscale cursor-not-allowed bg-white/40 border border-slate-100'} 
+                                                ${isLive ? 'border-2 border-emerald-400 ring-8 ring-emerald-50/50' : ''}`}
+                                        >
+                                            <div className="flex justify-between items-start mb-8">
+                                                <div className={`p-3 rounded-2xl border ${config.bg} ${config.border} ${config.color}`}><Icon size={24} /></div>
+                                                <div className="flex flex-col items-end gap-2 text-right">
+                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${config.badge}`}>{config.label}</span>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <h3 className="text-xl font-black text-slate-900 leading-tight">{round.name}</h3>
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                                                        <Clock size={14} /> {round.durationMinutes} Minutes
+                                                        {round.totalSections > 1 && <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 bg-indigo-50 px-2 rounded-md">{round.totalSections} Sections</span>}
+                                                    </div>
+                                                    {!isPractice && windowStatus && <div className={`flex items-center gap-1.5 text-[11px] font-bold ${windowStatus.color}`}><Timer size={12} /> {windowStatus.label}</div>}
+                                                    {!isPractice && round.mySlot && (
+                                                        <div className={`flex items-center gap-1.5 text-[11px] font-bold ${slotStatus?.color || 'text-indigo-500'}`}>
+                                                            <CalendarClock size={12} />
+                                                            <span>{round.mySlot.label}</span>
+                                                            <span className="text-[9px] text-slate-400 font-medium ml-0.5">
+                                                                {new Date(round.mySlot.startTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                                                                –{new Date(round.mySlot.endTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                                    {isPractice ? (isFinished ? 'Verdict: Sealed' : 'Mode: Manual Validation') : `Status: ${config.label}`}
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    {isInteractable && <div className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-100 text-indigo-600 transition-all group-hover:bg-indigo-600 group-hover:text-white transform group-hover:translate-x-1"><ArrowRight size={14} /></div>}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                                </AnimatePresence>
+                            </motion.div>
+                        );
+                    })()}
+                </div>
+            </main>
+
+            <OtpGate isOpen={isOtpOpen} roundId={selectedRound?._id} roundName={selectedRound?.name} onClose={() => setIsOtpOpen(false)} onUnlock={handleOtpUnlock} />
+        </>
     );
 };
 

@@ -1,36 +1,32 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { getBaseUrl, clearStickySession } from '../config/apiConfig';
 
-// Create a configured axios instance for the application
+// ─── Axios instance ─────────────────────────────────────────────────────────────
+// NOTE: baseURL is intentionally left empty here.
+// The load-balancing request interceptor below sets it dynamically on every
+// request so that each student is always routed to their sticky backend.
 export const api = axios.create({
-    baseURL: import.meta.env.VITE_FRONTEND_MODE === "development" ? 'http://localhost:5000/api' : '/api', // General API base
+    // 10s global timeout on every request.
+    // Render free-tier cold starts can take 15–30s, but we don't want
+    // browsers to hang indefinitely. At 10s the request aborts cleanly
+    // with an ECONNABORTED error that the Error Boundary can surface.
+    timeout: 10000,
 });
 
-// Interceptor to auto-inject the Auth token and dynamically route to allocated server
+// ─── Request interceptor ────────────────────────────────────────────────────────
+// Two responsibilities:
+//   1. Set the baseURL to the student's sticky backend on EVERY request.
+//   2. Inject the Bearer token if the user is authenticated.
 api.interceptors.request.use((config) => {
-    const state = useAuthStore.getState();
-    const token = state.token;
-    const user = state.user;
+    // Load-balance: resolve the sticky backend at call-time, not module-load-time.
+    // This means we never bake a stale URL into the axios instance.
+    config.baseURL = `${getBaseUrl()}/api`;
 
+    const token = useAuthStore.getState().token;
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
-
-    // Dynamic Server Allocation Logic
-    // If the student has an assigned backend server, redirect all API calls there
-    if(import.meta.env.VITE_FRONTEND_MODE === "development"){
-        config.baseURL = 'http://localhost:5000/api';
-        return config;
-    }
-    if (user?.role === 'STUDENT' && user?.allocatedServer) {
-        // Ensure the allocated URL has /api appended if missing, to maintain convention
-        let base = user.allocatedServer;
-        if (!base.endsWith('/api')) {
-            base = base.replace(/\/$/, '') + '/api';
-        }
-        config.baseURL = base;
-    }
-
     return config;
 }, (error) => Promise.reject(error));
 
@@ -70,9 +66,9 @@ export const useAuthStore = create((set, get) => ({
         set({ user: updatedUser });
     },
 
-    onboard: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation) => {
+    onboard: async (name, email, phone, bio, dob, password, department, gender, accommodation) => {
         try {
-            const res = await api.post('/auth/onboard', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation });
+            const res = await api.post('/auth/onboard', { name, email, phone, bio, dob, password, department, gender, accommodation });
             const { token, user } = res.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
@@ -83,16 +79,35 @@ export const useAuthStore = create((set, get) => ({
         }
     },
 
-    updateProfile: async (name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation) => {
+    fetchProfile: async () => {
         try {
-            const res = await api.put('/auth/profile', { name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation });
-            const { token, user } = res.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-            set({ user, token });
-            return { success: true };
+            const res = await api.get('/auth/profile');
+            if (res.data.success) {
+                set({ user: res.data.profile });
+                localStorage.setItem('user', JSON.stringify(res.data.profile));
+                return { success: true, profile: res.data.profile };
+            }
         } catch (err) {
-            return { success: false, error: err.response?.data?.error || 'Profile update failed' };
+            console.error('Failed to fetch profile', err);
+            return { success: false, error: err.response?.data?.error || 'Failed to fetch profile' };
+        }
+    },
+
+    updateProfile: async (profileData) => {
+        try {
+            const res = await api.put('/auth/profile', profileData);
+            if (res.data.success) {
+                const { token, profile } = res.data;
+                if (token) {
+                    localStorage.setItem('token', token);
+                    set({ token });
+                }
+                set({ user: profile });
+                localStorage.setItem('user', JSON.stringify(profile));
+                return { success: true, profile };
+            }
+        } catch (err) {
+            return { success: false, error: err.response?.data?.error || 'Failed to update profile' };
         }
     },
 
@@ -109,6 +124,10 @@ export const useAuthStore = create((set, get) => ({
 
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('allocatedServer');
+        // Clear sticky session so the next login gets a fresh random assignment.
+        // This prevents a dead backend from haunting a student across events.
+        clearStickySession();
         set({ user: null, token: null });
     }
 }));

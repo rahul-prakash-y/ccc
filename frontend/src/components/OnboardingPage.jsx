@@ -1,26 +1,53 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ArrowRight, Loader2, Rocket, ShieldCheck, Linkedin, Github, Phone, FileText, Lock, CheckCircle2, Calendar, Mail, Briefcase, Users2, Home } from 'lucide-react';
+import { User, ArrowRight, Loader2, Rocket, ShieldCheck, Phone, FileText, Lock, CheckCircle2, Calendar, Mail, Building, Users, Home } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { DEPARTMENTS } from '../config/constants';
+
+const formatDate = (date) => {
+    if (!date) return '';
+
+    const d = new Date(date);
+
+    if (isNaN(d.getTime())) return '';
+
+    return d.toISOString().split('T')[0];
+};
+
 
 const OnboardingPage = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [linkedinProfile, setLinkedinProfile] = useState('');
-    const [githubProfile, setGithubProfile] = useState('');
     const [phone, setPhone] = useState('');
     const [dob, setDob] = useState('');
     const [bio, setBio] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [department, setDepartment] = useState('');
     const [gender, setGender] = useState('');
     const [accommodation, setAccommodation] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const { onboard, user } = useAuthStore();
+    const { onboard, user, fetchProfile } = useAuthStore();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchProfile();
+    }, [fetchProfile]);
+
+    useEffect(() => {
+        if (user) {
+            setName(user.name || '');
+            setEmail(user.email || '');
+            setPhone(user.phone || '');
+            setDob(formatDate(user.dob) || '');
+            setBio(user.bio || '');
+            setDepartment(user.department || '');
+            setGender(user.gender || '');
+            setAccommodation(user.accommodation || '');
+        }
+    }, [user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -39,14 +66,9 @@ const OnboardingPage = () => {
             return;
         }
 
-        if (!department || !gender || !accommodation) {
-            setError('Please complete all required demographic fields (Department, Gender, Accommodation)');
-            return;
-        }
-
         setLoading(true);
         setError('');
-        const res = await onboard(name, email, linkedinProfile, githubProfile, phone, bio, dob, password, department, gender, accommodation);
+        const res = await onboard(name, email, phone, bio, dob, password, department, gender, accommodation);
         setLoading(false);
 
         if (res.success) {
@@ -57,7 +79,7 @@ const OnboardingPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 overflow-hidden relative">
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 overflow-y-auto relative scrollbar-hide">
             {/* Background Decorations */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-violet-600/5 rounded-full blur-[120px]" />
@@ -124,41 +146,6 @@ const OnboardingPage = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="relative group">
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
-                                    LinkedIn
-                                </label>
-                                <div className="relative">
-                                    <Linkedin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
-                                    <input
-                                        type="url"
-                                        value={linkedinProfile}
-                                        onChange={(e) => setLinkedinProfile(e.target.value)}
-                                        placeholder="linkedin.com/in/..."
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium"
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="relative group">
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
-                                    GitHub
-                                </label>
-                                <div className="relative">
-                                    <Github className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
-                                    <input
-                                        type="url"
-                                        value={githubProfile}
-                                        onChange={(e) => setGithubProfile(e.target.value)}
-                                        placeholder="github.com/..."
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="relative group">
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
                                     Phone Number
                                 </label>
                                 <div className="relative">
@@ -191,38 +178,40 @@ const OnboardingPage = () => {
                             </div>
                         </div>
 
-                        {/* Demographic Fields */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="relative group">
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
-                                    Department
-                                </label>
-                                <div className="relative">
-                                    <Briefcase className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
-                                    <input
-                                        type="text"
-                                        value={department}
-                                        onChange={(e) => setDepartment(e.target.value)}
-                                        placeholder="e.g. CS"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium"
-                                        required
-                                    />
-                                </div>
+                        <div className="relative group">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
+                                Department
+                            </label>
+                            <div className="relative">
+                                <Building className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
+                                <select
+                                    value={department}
+                                    onChange={(e) => setDepartment(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium appearance-none"
+                                    required
+                                >
+                                    <option value="" disabled>Select Department</option>
+                                    {DEPARTMENTS.map((dept) => (
+                                        <option key={dept} value={dept}>{dept}</option>
+                                    ))}
+                                </select>
                             </div>
+                        </div>
 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="relative group">
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
                                     Gender
                                 </label>
                                 <div className="relative">
-                                    <Users2 className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
+                                    <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
                                     <select
                                         value={gender}
                                         onChange={(e) => setGender(e.target.value)}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium appearance-none"
                                         required
                                     >
-                                        <option value="" disabled>Select...</option>
+                                        <option value="" disabled>Select Gender</option>
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
                                         <option value="Other">Other</option>
@@ -233,7 +222,7 @@ const OnboardingPage = () => {
 
                             <div className="relative group">
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">
-                                    Stay Type
+                                    Accommodation
                                 </label>
                                 <div className="relative">
                                     <Home className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={20} />
@@ -243,9 +232,9 @@ const OnboardingPage = () => {
                                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 transition-all text-base font-medium appearance-none"
                                         required
                                     >
-                                        <option value="" disabled>Select...</option>
+                                        <option value="" disabled>Select Accommodation</option>
                                         <option value="Hostel">Hostel</option>
-                                        <option value="Day Scholar">Day Scholar</option>
+                                        <option value="Dayscholar">Dayscholar</option>
                                     </select>
                                 </div>
                             </div>

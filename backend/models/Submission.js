@@ -53,10 +53,6 @@ const submissionSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
-    flags: {
-        type: [String],
-        default: []
-    },
     tabSwitches: {
         type: Number,
         default: 0
@@ -96,24 +92,12 @@ const submissionSchema = new mongoose.Schema({
     hasCertificate: {
         type: Boolean,
         default: false
-    },
-    attemptNumber: {
-        type: Number,
-        default: 1
-    },
-    solvedCount: {
-        type: Number,
-        default: 0
-    },
-    mcqSolvedCount: {
-        type: Number,
-        default: 0
     }
 }, {
     timestamps: true
 });
 
-// Allow multiple attempts for practice rounds, but uniquely identified by attempt number
-submissionSchema.index({ student: 1, round: 1, attemptNumber: 1 }, { unique: true });
+// Ensure a student can only have one submission per round
+submissionSchema.index({ student: 1, round: 1 }, { unique: true });
 
 module.exports = mongoose.model('Submission', submissionSchema);

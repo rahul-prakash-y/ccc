@@ -1,8 +1,6 @@
 const AttendanceOTP = require('../models/AttendanceOTP');
 const Attendance = require('../models/Attendance');
 const { logActivity } = require('../utils/logger');
-const XLSX = require('xlsx');
-
 
 module.exports = async function (fastify, opts) {
 
@@ -153,21 +151,16 @@ module.exports = async function (fastify, opts) {
     // ─── ADMIN/SUPERADMIN: Get Attendance List ──────────────────────────────
     fastify.get('/records', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { search, page = 1, limit = 20, roundId } = request.query;
-            const filter = {};
+            const { search, page = 1, limit = 20 } = request.query;
+            let filter = {};
 
-            // Filter by round if provided
-            if (roundId) {
-                filter.round = roundId;
-            }
-
+            // Search logic (optional but good)
             const attendance = await Attendance.find(filter)
                 .populate('student', 'name studentId')
                 .populate('markedBy', 'name')
-                .populate('round', 'name')
                 .sort({ createdAt: -1 })
                 .skip((page - 1) * limit)
-                .limit(Number(limit));
+                .limit(limit);
 
             const total = await Attendance.countDocuments(filter);
 
@@ -186,119 +179,6 @@ module.exports = async function (fastify, opts) {
         }
     });
 
-    // ─── ADMIN: Export Attendance as Excel ────────────────────────────────────
-    fastify.get('/export', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
-        try {
-            const { roundId } = request.query;
-            const filter = {};
-            if (roundId) filter.round = roundId;
-
-            // Fetch ALL records (no pagination) for export
-            const records = await Attendance.find(filter)
-                .populate('student', 'name studentId')
-                .populate('markedBy', 'name')
-                .populate('round', 'name')
-                .sort({ round: 1, createdAt: 1 });
-
-            // ── Build workbook ────────────────────────────────────────────────
-            const wb = XLSX.utils.book_new();
-
-            if (records.length === 0) {
-                // Empty sheet with headers
-                const ws = XLSX.utils.aoa_to_sheet([
-                    ['S.No', 'Student Name', 'Student ID', 'Round', 'Marked At', 'Marked By (Admin)']
-                ]);
-                XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-            } else if (roundId) {
-                // Single sheet for the filtered round
-                const roundName = records[0]?.round?.name || 'Attendance';
-                const rows = [
-                    ['S.No', 'Student Name', 'Student ID', 'Round', 'Marked At', 'Marked By (Admin)']
-                ];
-                records.forEach((r, idx) => {
-                    rows.push([
-                        idx + 1,
-                        r.student?.name || 'Unknown',
-                        r.student?.studentId || '—',
-                        r.round?.name || '—',
-                        new Date(r.createdAt).toLocaleString('en-IN'),
-                        r.markedBy?.name || 'System'
-                    ]);
-                });
-                const ws = XLSX.utils.aoa_to_sheet(rows);
-
-                // Column widths
-                ws['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 16 }, { wch: 24 }, { wch: 22 }, { wch: 24 }];
-
-                XLSX.utils.book_append_sheet(wb, ws, roundName.slice(0, 31)); // Excel sheet name limit: 31 chars
-            } else {
-                // One sheet per round, plus an "All Rounds" master sheet
-
-                // Group by round
-                const byRound = {};
-                records.forEach(r => {
-                    const key = r.round?._id?.toString() || 'no_round';
-                    const label = r.round?.name || 'No Round';
-                    if (!byRound[key]) byRound[key] = { label, records: [] };
-                    byRound[key].records.push(r);
-                });
-
-                // Master sheet (all records)
-                const masterRows = [
-                    ['S.No', 'Student Name', 'Student ID', 'Round', 'Marked At', 'Marked By (Admin)']
-                ];
-                records.forEach((r, idx) => {
-                    masterRows.push([
-                        idx + 1,
-                        r.student?.name || 'Unknown',
-                        r.student?.studentId || '—',
-                        r.round?.name || '—',
-                        new Date(r.createdAt).toLocaleString('en-IN'),
-                        r.markedBy?.name || 'System'
-                    ]);
-                });
-                const masterWs = XLSX.utils.aoa_to_sheet(masterRows);
-                masterWs['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 16 }, { wch: 24 }, { wch: 22 }, { wch: 24 }];
-                XLSX.utils.book_append_sheet(wb, masterWs, 'All Rounds');
-
-                // Per-round sheets
-                Object.values(byRound).forEach(({ label, records: recs }) => {
-                    const rows = [
-                        ['S.No', 'Student Name', 'Student ID', 'Round', 'Marked At', 'Marked By (Admin)']
-                    ];
-                    recs.forEach((r, idx) => {
-                        rows.push([
-                            idx + 1,
-                            r.student?.name || 'Unknown',
-                            r.student?.studentId || '—',
-                            r.round?.name || '—',
-                            new Date(r.createdAt).toLocaleString('en-IN'),
-                            r.markedBy?.name || 'System'
-                        ]);
-                    });
-                    const ws = XLSX.utils.aoa_to_sheet(rows);
-                    ws['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 16 }, { wch: 24 }, { wch: 22 }, { wch: 24 }];
-                    XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 31));
-                });
-            }
-
-            // ── Serialize and send ────────────────────────────────────────────
-            const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
-            const filename = roundId
-                ? `Attendance_${records[0]?.round?.name || 'Round'}_${new Date().toISOString().slice(0, 10)}.xlsx`
-                : `Attendance_AllRounds_${new Date().toISOString().slice(0, 10)}.xlsx`;
-
-            reply
-                .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                .header('Content-Disposition', `attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}"`)
-                .send(buffer);
-
-        } catch (error) {
-            fastify.log.error(error);
-            return reply.code(500).send({ error: 'Failed to export attendance' });
-        }
-    });
-
     // ─── ADMIN: Delete Attendance Record ─────────────────────────────────────
     fastify.delete('/:id', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
@@ -308,6 +188,11 @@ module.exports = async function (fastify, opts) {
             if (!attendance) {
                 return reply.code(404).send({ error: 'Attendance record not found' });
             }
+
+            // Optional: Only allow the admin who marked it or a SuperAdmin to delete it
+            // if (request.user.role !== 'SUPERADMIN' && attendance.markedBy.toString() !== request.user.userId) {
+            //     return reply.code(403).send({ error: 'Unauthorized to delete this record' });
+            // }
 
             await Attendance.findByIdAndDelete(id);
 

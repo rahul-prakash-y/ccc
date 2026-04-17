@@ -1,33 +1,52 @@
-// Fallback mock function if it hasn't been implemented yet globally
-if (typeof global.hydrateStaticData !== 'function') {
-    global.hydrateStaticData = async () => {
-        // Mock hydration logic
-        return new Promise(resolve => setTimeout(resolve, 500));
-    };
-}
+'use strict';
+
+const { hydrateStaticData } = require('../services/cacheService');
 
 module.exports = async function (fastify, opts) {
+    /**
+     * POST /api/internal/sync-cache
+     * Internal endpoint to trigger RAM cache refresh across multiple instances.
+     * Auth: Shared Secret Key (Bearer Token)
+     */
     fastify.post('/sync-cache', async (request, reply) => {
+        const sharedSecret = process.env.SHARED_SECRET_KEY;
+        const authHeader = request.headers.authorization;
+
+        // 1. Authentication Check
+        if (!sharedSecret) {
+            fastify.log.error('[InternalSync] SHARED_SECRET_KEY is not defined in .env');
+            return reply.code(500).send({ 
+                success: false, 
+                error: 'Server configuration error: missing sync key' 
+            });
+        }
+
+        if (authHeader !== `Bearer ${sharedSecret}`) {
+            fastify.log.warn(`[InternalSync] Unauthorized sync attempt from IP: ${request.ip}`);
+            return reply.code(401).send({ 
+                success: false, 
+                error: 'Unauthorized: Invalid Sync Token' 
+            });
+        }
+
+        // 2. Hydration Trigger
         try {
-            // Secure with SHARED_SECRET_KEY
-            const authHeader = request.headers.authorization;
-            const expectedSecret = `Bearer ${process.env.SHARED_SECRET_KEY}`;
+            fastify.log.info('[InternalSync] Received valid sync trigger. Refreshing RAM cache...');
+            
+            // Re-fetch all Rounds and Questions from MongoDB into RAM
+            await hydrateStaticData();
 
-            if (!process.env.SHARED_SECRET_KEY || authHeader !== expectedSecret) {
-                return reply.code(403).send({ success: false, error: 'Unauthorized: Invalid Shared Secret' });
-            }
-
-            // Trigger the global hydration function (or local if passed via context)
-            if (typeof global.hydrateStaticData === 'function') {
-                await global.hydrateStaticData();
-            } else {
-                throw new Error("hydrateStaticData function is missing");
-            }
-
-            return reply.send({ success: true, message: 'Server cache successfully synchronized with MongoDB.' });
+            return reply.code(200).send({ 
+                success: true, 
+                message: 'RAM Cache Synced Successfully', 
+                timestamp: new Date().toISOString() 
+            });
         } catch (error) {
-            fastify.log.error('Cache sync error:', error);
-            return reply.code(500).send({ success: false, error: 'Failed to synchronize cache' });
+            fastify.log.error(`[InternalSync] Cache hydration failed: ${error.message}`);
+            return reply.code(500).send({ 
+                success: false, 
+                error: `Cache hydration failed: ${error.message}` 
+            });
         }
     });
 };

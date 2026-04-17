@@ -13,6 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { SkeletonCodeArena } from './Skeleton';
+import SubmitButton from './SubmitButton';
 
 import useContestTimer from '../hooks/useContestTimer';
 import useAutoSave from '../hooks/useAutoSave';
@@ -30,9 +31,14 @@ const CodeArena = ({ language = 'javascript' }) => {
     const [roundInfo, setRoundInfo] = useState(null);
     const [extraTimeMinutes, setExtraTimeMinutes] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    const [isMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
     const [showPreview, setShowPreview] = useState(true);
 
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Anti-Cheat State
     const [isBanned, setIsBanned] = useState(false);
@@ -66,34 +72,61 @@ const CodeArena = ({ language = 'javascript' }) => {
         }
     }, [roundId, updateUser]);
 
-
-    // Determine if this is a creative or practice round.
-    // For these rounds, copy/paste/right-click are allowed for ease of use or utility.
-    const isSecurityDisabled = roundInfo?.type === 'UI_UX_CHALLENGE' || roundInfo?.type === 'MINI_HACKATHON' || roundInfo?.type === 'PRACTICE';
+    // Round types where students must freely paste URLs (Figma / GitHub).
+    // Anti-cheat listeners are completely skipped for these round types.
+    const OPEN_ROUND_TYPES = ['UI_UX_CHALLENGE', 'MINI_HACKATHON'];
 
     useEffect(() => {
-        // Do NOT block clipboard or context menu for these rounds.
-        if (isSecurityDisabled) return;
+        // ── Open-round bypass ─────────────────────────────────────────────────
+        // UI/UX and Mini Hackathon rounds require students to paste external URLs.
+        // If roundInfo hasn't loaded yet, we also skip (no false positives on mount).
+        if (!roundInfo || OPEN_ROUND_TYPES.includes(roundInfo.type)) return;
 
         const handlePaste = (e) => {
             e.preventDefault();
-            handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Copy/Paste Detected.' });
+            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
         };
-        const blockAction = (e) => e.preventDefault();
-
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'TAB_SWITCH_DETECTED' });
+            }
+        };
+        const handleBlur = () => {
+            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'WINDOW_BLUR_DETECTED' });
+        };
+        const blockAction = (e) => {
+            e.preventDefault();
+            handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'CONTEXT_MENU_DETECTED' });
+        };
         const handleKeyDown = (e) => {
-            // Block Copy/Paste/Cut via Keyboard
+            // Block DevTools
+            if (e.key === 'F12') {
+                e.preventDefault();
+                handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'DEV_TOOLS_DETECTED' });
+            }
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C' || e.key === 'i' || e.key === 'j' || e.key === 'c')) {
+                e.preventDefault();
+                handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'DEV_TOOLS_DETECTED' });
+            }
+            // Block View Source
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) {
+                e.preventDefault();
+                handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'VIEW_SOURCE_DETECTED' });
+            }
+            // Block copy/paste/cut
             if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
                 e.preventDefault();
-                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Keyboard Paste Detected.' });
+                if (e.key === 'v') handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'PASTE_DETECTED' });
+                else handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'COPY_CUT_DETECTED' });
             }
+        };
 
-            // Block DevTools Shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U)
-            if (e.key === 'F12' ||
-                ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-                ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u'))) {
-                e.preventDefault();
-                handleCheatDetected({ type: 'CHEAT_FLAG', count: 1, detail: 'Developer Tools / Source View Attempted.' });
+        let initialWidth = window.innerWidth;
+        const handleResize = () => {
+            // If window width changes by more than 100px (loosened sensitivity), it's likely a split screen snap
+            if (Math.abs(window.innerWidth - initialWidth) > 100) {
+                handleCheatDetected({ type: 'CHEAT_FLAG', detail: 'SPLIT_SCREEN_DETECTED' });
+                initialWidth = window.innerWidth; // Reset so we don't spam
             }
         };
 
@@ -102,6 +135,9 @@ const CodeArena = ({ language = 'javascript' }) => {
         window.addEventListener('cut', blockAction, { capture: true });
         window.addEventListener('contextmenu', blockAction, { capture: true });
         window.addEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('blur', handleBlur);
 
         return () => {
             window.removeEventListener('paste', handlePaste, { capture: true });
@@ -109,8 +145,12 @@ const CodeArena = ({ language = 'javascript' }) => {
             window.removeEventListener('cut', blockAction, { capture: true });
             window.removeEventListener('contextmenu', blockAction, { capture: true });
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('blur', handleBlur);
         };
-    }, [handleCheatDetected, isSecurityDisabled]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [handleCheatDetected, roundInfo]); // roundInfo in deps so guard re-evaluates after load
 
     // --- Data Loading ---
     useEffect(() => {
@@ -130,24 +170,15 @@ const CodeArena = ({ language = 'javascript' }) => {
                 const draft = localStorage.getItem(`draft_${roundId}`);
                 if (draft) {
                     try {
-                        const parsedDraft = JSON.parse(draft);
-                        // Merge draft with server questions just in case draft is missing some
-                        const initialAnswers = {};
-                        res.data.data.questions.forEach(q => {
-                            initialAnswers[q._id] = parsedDraft[q._id] !== undefined
-                                ? parsedDraft[q._id]
-                                : (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : ''));
-                        });
-                        setAnswers(initialAnswers);
+                        setAnswers(JSON.parse(draft));
                     } catch {
-                        // Draft parsing failed, fallback 
                         const initialAnswers = {};
-                        res.data.data.questions.forEach(q => initialAnswers[q._id] = (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
+                        res.data.data.questions.forEach((q, i) => initialAnswers[q._id] = i === 0 ? draft : '');
                         setAnswers(initialAnswers);
                     }
                 } else {
                     const initialAnswers = {};
-                    res.data.data.questions.forEach(q => initialAnswers[q._id] = (q.starterCode || (q.type === 'DEBUG' ? q.sampleInput : '')));
+                    res.data.data.questions.forEach(q => initialAnswers[q._id] = '');
                     setAnswers(initialAnswers);
                 }
             } catch (err) {
@@ -156,7 +187,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                         setIsSubmittedBlock(true);
                     } else {
                         setIsBanned(true);
-                        setBanReason(err.response?.data?.reason || "Disqualified (Platform Security)");
+                        setBanReason(err.response?.data?.reason || err.response?.data?.error || "Disqualified (Platform Security)");
                     }
                 }
             } finally {
@@ -173,8 +204,7 @@ const CodeArena = ({ language = 'javascript' }) => {
         durationMinutes: roundInfo?.durationMinutes || 60,
         extraTimeMinutes,
         onTimeUp: () => setIsSubmitModalOpen(true),
-        // Disable cheat detection entirely for specific round types
-        onCheatDetected: isSecurityDisabled ? null : handleCheatDetected
+        onCheatDetected: handleCheatDetected
     });
 
     const { saveStatus } = useAutoSave(answers, roundId, 60000, isTimeUp || isBanned, (responsePayload) => {
@@ -184,7 +214,13 @@ const CodeArena = ({ language = 'javascript' }) => {
     });
 
     const handleAnswerChange = (questionId, value) => {
-        if (!isTimeUp && !isBanned) setAnswers(prev => ({ ...prev, [questionId]: value }));
+        if (!isTimeUp && !isBanned) {
+            setAnswers(prev => {
+                const newAnswers = { ...prev, [questionId]: value };
+                localStorage.setItem(`draft_${roundId}`, JSON.stringify(newAnswers));
+                return newAnswers;
+            });
+        }
     };
 
     // --- OTP Input Logic ---
@@ -228,9 +264,36 @@ const CodeArena = ({ language = 'javascript' }) => {
 
         setIsSubmitting(true);
         setSubmitError(null);
+
+        // ─── STEP 1: Save backup BEFORE the network request ───────────────────────
+        // This runs synchronously. Even if the tab crashes immediately after,
+        // the payload is already on disk. The key encodes roundId so multiple
+        // in-progress rounds never overwrite each other's backups.
+        const submissionPayload = { endOtp: otpString, answers, pdfUrl };
+        const backupKey = `backup_submission_${roundId}`;
         try {
-            const res = await api.post(`/rounds/${roundId}/submit`, { endOtp: otpString, answers, pdfUrl });
+            localStorage.setItem(backupKey, JSON.stringify({
+                roundId,
+                payload: submissionPayload,
+                savedAt: new Date().toISOString(),
+            }));
+        } catch (storageErr) {
+            // localStorage can throw if storage is full — log and continue,
+            // the real submission still fires.
+            console.warn('[Backup] Could not write to localStorage:', storageErr);
+        }
+
+        // ─── STEP 2: Fire the real API request ────────────────────────────────────
+        try {
+            const res = await api.post(`/rounds/${roundId}/submit`, submissionPayload);
+
+            // ─── STEP 3: Do NOT clear the backup yet ──────────────────────────────
+            // A 200 OK only means the backend accepted the job into its async queue.
+            // It does NOT confirm the DB write completed. We keep the backup alive.
+            // StudentDashboard will clear it once it confirms the round is COMPLETED.
+
             if (res.data.nextRoundId) {
+                // Mid-test section transition — navigate to next section
                 navigate(`/arena/${res.data.nextRoundId}`);
             } else {
                 toast.success("Transmission Successful. Disconnecting from Arena.");
@@ -241,6 +304,8 @@ const CodeArena = ({ language = 'javascript' }) => {
             setEndOtp(['', '', '', '', '', '']);
             otpRefs.current[0]?.focus();
             setIsSubmitting(false);
+            // Keep the backup — the student can retry and the fallback in
+            // StudentDashboard will also attempt a re-fire on next load.
         }
     };
 
@@ -274,7 +339,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                 <h1 className="text-5xl font-black tracking-tight text-slate-900 uppercase">Connection Terminated</h1>
                 <div className="max-w-lg mt-6 space-y-6">
                     <p className="text-slate-500 text-lg leading-relaxed">
-                        Security protocols were triggered. Your session has been flagged and suspended by the proctoring engine.
+                        Security protocols were triggered. Your session has been flagged and suspended by the proctoring engine. <b>Your current score has been recorded as ZERO.</b>
                     </p>
                     <div className="bg-white border-2 border-red-100 p-6 rounded-2xl shadow-xl shadow-red-500/5">
                         <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Violation Record</span>
@@ -464,6 +529,29 @@ const CodeArena = ({ language = 'javascript' }) => {
                                 {q?.description}
                             </div>
 
+                            {q?.problemImage && (
+                                <div className="mb-8 p-1 bg-slate-50 border border-slate-100 rounded-3xl overflow-hidden group shadow-sm transition-all hover:border-indigo-200">
+                                    <div className="relative overflow-hidden rounded-2xl aspect-video bg-white flex items-center justify-center">
+                                       <img 
+                                           src={q.problemImage} 
+                                           alt="Design Reference" 
+                                           className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.05] cursor-zoom-in"
+                                           onClick={() => window.open(q.problemImage, '_blank')}
+                                       />
+                                       <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/50 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-widest rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                           Click to expand
+                                       </div>
+                                    </div>
+                                    <div className="p-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <Eye size={12} className="text-indigo-500" />
+                                            Design Protocol Artifact
+                                        </div>
+                                        <span className="text-[9px] font-bold text-slate-400 font-mono">REF://{q._id?.slice(-6).toUpperCase()}</span>
+                                    </div>
+                                </div>
+                            )}
+
                             {q?.type !== 'MCQ' && (
                                 <div className="space-y-6">
                                     {(q?.inputFormat || q?.outputFormat) && (
@@ -514,7 +602,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                             <Terminal size={14} className="text-indigo-400" />
                             <span>
                                 {q?.type === 'MCQ' ? 'Selection_Matrix.exe' :
-                                    (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'FILL_BLANKS' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ?
+                                    (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'MISSING_BLOCK' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ?
                                         `solution.${(q?.category === 'SQL' || roundInfo?.type === 'SQL_CONTEST') ? 'sql' :
                                             (q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? 'html' :
                                                 q?.category === 'CSS' ? 'css' : language}` :
@@ -621,8 +709,8 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                     onChange={(e) => {
                                                         const file = e.target.files[0];
                                                         if (file && file.type === 'application/pdf') {
-                                                            if (file.size > 10 * 1024 * 1024) {
-                                                                toast.error("File size must be less than 10MB");
+                                                            if (file.size > 1 * 1024 * 1024) {
+                                                                toast.error("File size must be less than 1MB");
                                                                 return;
                                                             }
                                                             const reader = new FileReader();
@@ -656,7 +744,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                     </div>
                                 </div>
                             </div>
-                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'FILL_BLANKS' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? (
+                        ) : (q?.type === 'CODE' || q?.type === 'DEBUG' || q?.type === 'MISSING_BLOCK' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG') ? (
                             !q ? (
                                 <div className="flex flex-col p-8 h-full w-full gap-6 animate-pulse bg-white">
                                     <div className="h-8 bg-slate-200 rounded-md w-1/3"></div>
@@ -681,7 +769,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                 height="100%"
                                                 language={(q?.category === 'HTML' || roundInfo?.type === 'HTML_CSS_QUIZ' || roundInfo?.type === 'HTML_CSS_DEBUG' || roundInfo?.type === 'MINI_HACKATHON') ? 'html' : 'css'}
                                                 theme="light"
-                                                value={currentAnswer || q?.starterCode || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                                value={currentAnswer || (q?.type === 'DEBUG' || q?.type === 'MISSING_BLOCK' ? q?.sampleInput : '')}
                                                 onChange={(val) => handleAnswerChange(q?._id, val)}
                                                 options={{
                                                     minimap: { enabled: false },
@@ -720,7 +808,7 @@ const CodeArena = ({ language = 'javascript' }) => {
                                                 q?.category === 'CSS' ? 'css' :
                                                     'javascript'}
                                         theme="light" // Switched to Monaco's built-in light theme
-                                        value={currentAnswer || q?.starterCode || (q?.type === 'DEBUG' ? q?.sampleInput : '')}
+                                        value={currentAnswer || (q?.type === 'DEBUG' || q?.type === 'MISSING_BLOCK' ? q?.sampleInput : '')}
                                         onChange={(val) => handleAnswerChange(q?._id, val)}
                                         options={{
                                             minimap: { enabled: false },
@@ -829,20 +917,15 @@ const CodeArena = ({ language = 'javascript' }) => {
 
                                     <div className="flex gap-3 pt-2">
                                         {!isTimeUp && <button type="button" onClick={() => setIsSubmitModalOpen(false)} disabled={isSubmitting} className="flex-1 px-4 py-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold transition-all shadow-sm">Cancel</button>}
-                                        <button
+                                        <SubmitButton
                                             type="submit"
                                             disabled={isSubmitting || ((!roundInfo?.hasNextRound || isTimeUp) && endOtp.join('').length !== 6)}
-                                            className={`flex-2 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
+                                            isLoading={isSubmitting}
+                                            loadingText="Verifying"
+                                            className={`flex-2 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black transition-all shadow-lg text-sm ${isTimeUp ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}
                                         >
-                                            {isSubmitting ? (
-                                                <Loader2 size={16} className="animate-spin" />
-                                            ) : (
-                                                <>
-                                                    {isTimeUp ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
-                                                    {roundInfo?.hasNextRound ? 'Proceed' : 'Commit & Exit'}
-                                                </>
-                                            )}
-                                        </button>
+                                            {roundInfo?.hasNextRound && !isTimeUp ? <><Send size={16} /> Proceed to Next</> : <><Send size={16} /> Confirm Sequence</>}
+                                        </SubmitButton>
                                     </div>
                                 </form>
                             </div>
