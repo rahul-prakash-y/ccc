@@ -24,6 +24,13 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState('');
+    const [page, setPage] = useState(1);
+    const [limit] = useState(10);
+    const [pagination, setPagination] = useState({ totalPages: 1, totalRecords: 0 });
+
+    useEffect(() => {
+        setPage(1);
+    }, [search, category]);
 
     useEffect(() => {
         const fetchBankAndExisting = async () => {
@@ -32,12 +39,15 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                 const params = new URLSearchParams();
                 if (search) params.append('search', search);
                 if (category) params.append('category', category);
+                params.append('page', page);
+                params.append('limit', limit);
 
                 const [bankRes, existingRes] = await Promise.all([
                     api.get(`${API}/question-bank?${params.toString()}`),
                     api.get(`${API}/questions/${roundId}?limit=1000`) // fetch all to check imported
                 ]);
                 setBankQuestions(bankRes.data.data || []);
+                setPagination(bankRes.data.pagination || { totalPages: 1, totalRecords: 0 });
 
                 // Track which bank IDs have already been imported
                 const qList = existingRes.data.data || [];
@@ -50,7 +60,7 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
             }
         };
         fetchBankAndExisting();
-    }, [roundId, search, category]);
+    }, [roundId, search, category, page, limit]);
 
     const toggleSelection = (id, isAlreadyImported) => {
         if (isAlreadyImported) return;
@@ -178,47 +188,56 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                                 No questions found in the Global Library.
                             </div>
                         ) : (
-                            <div className="grid gap-3">
-                                {bankQuestions.map(q => {
-                                    const isAlreadyImported = importedBankIds.has(q._id);
-                                    const isSelected = selectedIds.has(q._id);
+                            <>
+                                <div className="grid gap-3">
+                                    {bankQuestions.map(q => {
+                                        const isAlreadyImported = importedBankIds.has(q._id);
+                                        const isSelected = selectedIds.has(q._id);
 
-                                    return (
-                                        <div
-                                            key={q._id}
-                                            onClick={() => toggleSelection(q._id, isAlreadyImported)}
-                                            className={`p-4 rounded-xl border-2 transition-all flex gap-4 items-center 
-                                                ${isAlreadyImported ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' :
-                                                    isSelected ? 'border-emerald-500 bg-emerald-50 flex-row-reverse cursor-pointer' :
-                                                        'border-slate-200 bg-white hover:border-slate-300 cursor-pointer'
-                                                }`}
-                                        >
-                                            <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border 
-                                                ${isAlreadyImported ? 'bg-slate-200 border-slate-300 text-slate-400' :
-                                                    isSelected ? 'bg-emerald-500 border-emerald-500 text-white' :
-                                                        'bg-white border-slate-300'
-                                                }`}>
-                                                {(isSelected || isAlreadyImported) && <Check size={14} />}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <p className="font-bold text-slate-900 text-sm">{q.title}</p>
-                                                    {isAlreadyImported && (
-                                                        <span className="text-[9px] font-black uppercase tracking-widest bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded">
-                                                            Imported
-                                                        </span>
-                                                    )}
+                                        return (
+                                            <div
+                                                key={q._id}
+                                                onClick={() => toggleSelection(q._id, isAlreadyImported)}
+                                                className={`p-4 rounded-xl border-2 transition-all flex gap-4 items-center 
+                                                    ${isAlreadyImported ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' :
+                                                        isSelected ? 'border-emerald-500 bg-emerald-50 flex-row-reverse cursor-pointer' :
+                                                            'border-slate-200 bg-white hover:border-slate-300 cursor-pointer'
+                                                    }`}
+                                            >
+                                                <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border 
+                                                    ${isAlreadyImported ? 'bg-slate-200 border-slate-300 text-slate-400' :
+                                                        isSelected ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                            'bg-white border-slate-300'
+                                                    }`}>
+                                                    {(isSelected || isAlreadyImported) && <Check size={14} />}
                                                 </div>
-                                                <div className="flex gap-2 text-[10px] uppercase font-bold tracking-wider">
-                                                    <span className={`px-1.5 py-0.5 rounded border ${DIFFICULTY_COLORS[q.difficulty]}`}>{q.difficulty}</span>
-                                                    <span className="text-slate-500">{q.type}</span>
-                                                    <span className="text-emerald-600">{q.category}</span>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <p className="font-bold text-slate-900 text-sm">{q.title}</p>
+                                                        {isAlreadyImported && (
+                                                            <span className="text-[9px] font-black uppercase tracking-widest bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded">
+                                                                Imported
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2 text-[10px] uppercase font-bold tracking-wider">
+                                                        <span className={`px-1.5 py-0.5 rounded border ${DIFFICULTY_COLORS[q.difficulty]}`}>{q.difficulty}</span>
+                                                        <span className="text-slate-500">{q.type}</span>
+                                                        <span className="text-emerald-600">{q.category}</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <Pagination
+                                    currentPage={page}
+                                    totalPages={pagination.totalPages}
+                                    onPageChange={setPage}
+                                    totalRecords={pagination.totalRecords}
+                                    limit={limit}
+                                />
+                            </>
                         )}
                     </div>
 
