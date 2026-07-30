@@ -57,7 +57,12 @@ const practiceSubmissionSchema = new mongoose.Schema({
     // Shuffled question IDs assigned to this student
     assignedQuestions: [
         { type: mongoose.Schema.Types.ObjectId, ref: 'Question' }
-    ]
+    ],
+    conductedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    }
 }, {
     timestamps: true
 });

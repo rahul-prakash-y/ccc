@@ -39,7 +39,7 @@ const SidebarItem = ({ icon, onClick, label, variant = "indigo", isActive = fals
 const Sidebar = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { logout } = useAuthStore();
+    const { user, logout } = useAuthStore();
     const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
     const [attendanceOtp, setAttendanceOtp] = useState('');
     const [marking, setMarking] = useState(false);
@@ -113,13 +113,15 @@ const Sidebar = () => {
                         isActive={location.pathname === '/performance-report'}
                         onClick={() => navigate('/performance-report')}
                     />
-                    <SidebarItem
-                        icon={Zap}
-                        label="Practice Matrix"
-                        variant="amber"
-                        isActive={location.pathname === '/practice-dashboard'}
-                        onClick={() => navigate('/practice-dashboard')}
-                    />
+                    {user?.role === 'STUDENT' && (
+                        <SidebarItem
+                            icon={Zap}
+                            label="Practice Matrix"
+                            variant="amber"
+                            isActive={location.pathname === '/practice-dashboard'}
+                            onClick={() => navigate('/practice-dashboard')}
+                        />
+                    )}
                 </div>
 
                 <div className="mt-auto">

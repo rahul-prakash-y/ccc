@@ -81,6 +81,19 @@ const questionSchema = new mongoose.Schema({
         ref: 'User',
         default: null
     },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    rubrics: [{
+        criterion: { type: String, default: '' },
+        maxScore: { type: Number, default: 0 }
+    }],
+    rubricInstructions: {
+        type: String,
+        default: ''
+    },
     problemImage: {
         type: String,
         default: ''

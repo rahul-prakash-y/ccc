@@ -78,6 +78,10 @@ const roundSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     }],
+    authorizedAdmins: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     certificatesReleased: {
         type: Boolean,
         default: false

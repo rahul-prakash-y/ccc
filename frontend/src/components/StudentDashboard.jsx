@@ -427,13 +427,15 @@ const StudentDashboard = () => {
                                 Active Assessments
                                 {activeTab === 'ASSESSMENTS' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
                             </button>
-                            <button
-                                onClick={() => setActiveTab('PRACTICE')}
-                                className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'PRACTICE' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Practice Mode
-                                {activeTab === 'PRACTICE' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
-                            </button>
+                            {user?.role === 'STUDENT' && (
+                                <button
+                                    onClick={() => setActiveTab('PRACTICE')}
+                                    className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'PRACTICE' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Practice Mode
+                                    {activeTab === 'PRACTICE' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
+                                </button>
+                            )}
                         </div>
                         <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
                             <Sparkles className="text-indigo-500" size={28} />
