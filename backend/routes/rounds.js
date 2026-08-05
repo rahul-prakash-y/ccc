@@ -589,29 +589,29 @@ module.exports = async function (fastify, opts) {
             // ─── Slot Timing Enforcement ─────────────────────────────────────────────
             const roundSlots = await Slot.find({ round: roundId }).lean();
             if (roundSlots.length > 0) {
-                // This round uses slot-based timing — check if student's team has a slot
                 const studentDoc = await User.findById(studentId).select('team').lean();
-                if (studentDoc?.team) {
-                    const mySlot = roundSlots.find(s => s.teams.some(t => t.toString() === studentDoc.team.toString()));
-                    if (mySlot) {
-                        if (now < new Date(mySlot.startTime)) {
-                            return reply.code(403).send({
-                                error: 'Slot Not Started',
-                                message: `Your slot "${mySlot.label}" starts at ${new Date(mySlot.startTime).toLocaleString()}.`
-                            });
-                        }
-                        if (now > new Date(mySlot.endTime)) {
-                            return reply.code(403).send({
-                                error: 'Slot Ended',
-                                message: `Your slot "${mySlot.label}" ended at ${new Date(mySlot.endTime).toLocaleString()}.`
-                            });
-                        }
-                    } else {
+                const teamIdStr = studentDoc?.team ? studentDoc.team.toString() : null;
+                const mySlot = (teamIdStr && roundSlots.find(s => s.teams && s.teams.some(t => t.toString() === teamIdStr)))
+                    || roundSlots.find(s => !s.teams || s.teams.length === 0);
+
+                if (mySlot) {
+                    if (now < new Date(mySlot.startTime)) {
                         return reply.code(403).send({
-                            error: 'No Slot Assigned',
-                            message: 'Your team has not been assigned a slot for this test. Contact your admin.'
+                            error: 'Slot Not Started',
+                            message: `Your slot "${mySlot.label}" starts at ${new Date(mySlot.startTime).toLocaleString()}.`
                         });
                     }
+                    if (now > new Date(mySlot.endTime)) {
+                        return reply.code(403).send({
+                            error: 'Slot Ended',
+                            message: `Your slot "${mySlot.label}" ended at ${new Date(mySlot.endTime).toLocaleString()}.`
+                        });
+                    }
+                } else {
+                    return reply.code(403).send({
+                        error: 'Slot Not Assigned',
+                        message: 'You have not been assigned a slot for this test. Please request or contact your admin.'
+                    });
                 }
             }
 
