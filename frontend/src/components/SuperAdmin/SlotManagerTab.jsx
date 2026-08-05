@@ -9,13 +9,40 @@ import { api } from '../../store/authStore';
 import { API } from './constants';
 import toast from 'react-hot-toast';
 
-// ── Format Date to IST for input ──────────────────────────────────────────────
-const formatDateForInput = (date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    const istOffset = 330 * 60 * 1000;
-    const local = new Date(d.getTime() + istOffset);
-    return local.toISOString().slice(0, 16);
+// ── Format ISO Date String to 'YYYY-MM-DDTHH:mm' in IST (Asia/Kolkata) for input ──────────────
+const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(date);
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '00';
+
+    const year = getPart('year');
+    const month = getPart('month');
+    const day = getPart('day');
+    const rawHour = getPart('hour');
+    const hour = rawHour === '24' ? '00' : rawHour;
+    const minute = getPart('minute');
+
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+};
+
+// ── Convert datetime-local input string (in IST) to UTC ISO string ───────────────────
+const istInputToISO = (datetimeLocalVal) => {
+    if (!datetimeLocalVal) return '';
+    const istDate = new Date(datetimeLocalVal.includes('+') ? datetimeLocalVal : `${datetimeLocalVal}:00+05:30`);
+    return istDate.toISOString();
 };
 
 const formatSlotTime = (date) => {
@@ -135,17 +162,10 @@ const SlotModal = ({ isOpen, onClose, slot, roundId, teams, onSave }) => {
 
         setSaving(true);
         try {
-            // Convert local input back to UTC ISO string
-            const toISO = (val) => {
-                const d = new Date(val);
-                const istOffset = 330 * 60 * 1000;
-                return new Date(d.getTime() - istOffset).toISOString();
-            };
-
             const payload = {
                 label,
-                startTime: toISO(startTime),
-                endTime: toISO(endTime),
+                startTime: istInputToISO(startTime),
+                endTime: istInputToISO(endTime),
                 teams: selectedTeams
             };
 

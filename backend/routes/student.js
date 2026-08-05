@@ -100,11 +100,12 @@ module.exports = async function (fastify, opts) {
             const userId = request.user.userId;
             const student = await User.findById(userId).select('team').lean();
 
-            if (!student?.team) {
-                return reply.send({ success: true, data: [] });
+            let filter = { $or: [{ teams: { $size: 0 } }, { teams: { $exists: false } }] };
+            if (student?.team) {
+                filter = { $or: [{ teams: student.team }, { teams: { $size: 0 } }, { teams: { $exists: false } }] };
             }
 
-            const slots = await Slot.find({ teams: student.team })
+            const slots = await Slot.find(filter)
                 .populate('round', 'name status startTime endTime durationMinutes')
                 .sort({ startTime: 1 });
 

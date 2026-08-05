@@ -202,17 +202,14 @@ module.exports = async function (fastify, opts) {
             const studentId = request.user.userId;
 
             // Batch fetch all submissions for this student to avoid N+1 overhead
-            const [allSubmissions, allPracticeSubs] = await Promise.all([
+            const [allSubmissions, allPracticeSubs, studentUser, allSlots] = await Promise.all([
                 Submission.find({ student: studentId }).lean(),
-                PracticeSubmission.find({ student: studentId }).sort({ createdAt: -1 }).lean()
+                PracticeSubmission.find({ student: studentId }).sort({ createdAt: -1 }).lean(),
+                User.findById(studentId).select('team').lean(),
+                Slot.find({}).lean()
             ]);
 
-            // Fetch student's team to resolve slot assignments
-            const student = await User.findById(studentId).select('team').lean();
-            let studentSlots = [];
-            if (student?.team) {
-                studentSlots = await Slot.find({ teams: student.team }).lean();
-            }
+            const teamIdStr = studentUser?.team ? studentUser.team.toString() : null;
 
             // Enrich rounds with the student's submission status & eligibility
             const enrichedRounds = await Promise.all(rounds.map(async (round) => {
@@ -241,8 +238,12 @@ module.exports = async function (fastify, opts) {
                     }
                 }
 
-                // Find the student's assigned slot for this round (if any)
-                const mySlot = studentSlots.find(s => s.round.toString() === round._id.toString()) || null;
+                // Find the student's assigned slot for this round
+                const roundSlots = allSlots.filter(s => s.round.toString() === round._id.toString());
+                const mySlot = (teamIdStr && roundSlots.find(s => s.teams && s.teams.map(t => t.toString()).includes(teamIdStr)))
+                    || roundSlots.find(s => !s.teams || s.teams.length === 0)
+                    || roundSlots[0]
+                    || null;
 
                 return {
                     ...round,

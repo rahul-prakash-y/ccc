@@ -4018,9 +4018,10 @@ module.exports = async function (fastify, opts) {
      */
     fastify.post('/slots', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
-            const { round, label, startTime, endTime, teams, maxCapacity } = request.body;
+            const { round, roundId, label, startTime, endTime, teams, maxCapacity } = request.body;
+            const targetRound = round || roundId;
 
-            if (!round || !label || !startTime || !endTime) {
+            if (!targetRound || !label || !startTime || !endTime) {
                 return reply.code(400).send({ error: 'round, label, startTime, and endTime are required' });
             }
 
@@ -4029,7 +4030,7 @@ module.exports = async function (fastify, opts) {
             }
 
             const slot = new Slot({
-                round,
+                round: targetRound,
                 label: label.trim(),
                 startTime: new Date(startTime),
                 endTime: new Date(endTime),
@@ -4043,7 +4044,7 @@ module.exports = async function (fastify, opts) {
             await logActivity({
                 action: 'CREATED',
                 performedBy: { userId: request.user?.userId, studentId: request.user?.studentId, name: request.user?.name, role: request.user?.role },
-                target: { type: 'Slot', id: slot._id.toString(), label: `${label} for round ${round}` },
+                target: { type: 'Slot', id: slot._id.toString(), label: `${label} for round ${targetRound}` },
                 ip: request.ip
             });
 
@@ -4051,6 +4052,25 @@ module.exports = async function (fastify, opts) {
         } catch (error) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to create slot' });
+        }
+    });
+
+    /**
+     * GET /api/superadmin/slots
+     * List all slots (optionally filtered by roundId query).
+     */
+    fastify.get('/slots', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+        try {
+            const { roundId } = request.query;
+            const filter = roundId ? { round: roundId } : {};
+            const slots = await Slot.find(filter)
+                .populate('teams', 'name members')
+                .sort({ startTime: 1 });
+
+            return reply.send({ success: true, data: slots });
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: 'Failed to fetch slots' });
         }
     });
 
@@ -4072,11 +4092,7 @@ module.exports = async function (fastify, opts) {
         }
     });
 
-    /**
-     * PATCH /api/superadmin/slots/:slotId
-     * Update slot details (label, times, teams, capacity).
-     */
-    fastify.patch('/slots/:slotId', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
+    const updateSlotHandler = async (request, reply) => {
         try {
             const { slotId } = request.params;
             const updates = {};
@@ -4108,7 +4124,10 @@ module.exports = async function (fastify, opts) {
             fastify.log.error(error);
             return reply.code(500).send({ error: 'Failed to update slot' });
         }
-    });
+    };
+
+    fastify.patch('/slots/:slotId', { preValidation: [fastify.requireAdmin] }, updateSlotHandler);
+    fastify.put('/slots/:slotId', { preValidation: [fastify.requireAdmin] }, updateSlotHandler);
 
     /**
      * DELETE /api/superadmin/slots/:slotId

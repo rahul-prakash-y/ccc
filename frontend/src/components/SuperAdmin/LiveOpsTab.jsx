@@ -360,13 +360,32 @@ const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
 
 // ── Time window settings per section ──────────────────────────────────────────
 const TimeWindowSettings = ({ section, onSave, busy, isSuperAdmin }) => {
-  const formatDateForInput = (date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    // Explicitly force IST (UTC + 5:30) for everyone
-    const istOffset = 330 * 60 * 1000; 
-    const local = new Date(d.getTime() + istOffset);
-    return local.toISOString().slice(0, 16);
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(date);
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '00';
+
+    const year = getPart('year');
+    const month = getPart('month');
+    const day = getPart('day');
+    const rawHour = getPart('hour');
+    const hour = rawHour === '24' ? '00' : rawHour;
+    const minute = getPart('minute');
+
+    return `${year}-${month}-${day}T${hour}:${minute}`;
   };
 
   const [start, setStart] = useState(formatDateForInput(section.startTime));
