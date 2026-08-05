@@ -113,6 +113,15 @@ module.exports = fp(async function (fastify, opts) {
         }
     });
 
+    // ── Authenticate Allow Banned (Logout for blocked accounts) ───────────────
+    fastify.decorate('authenticateAllowBanned', async function (request, reply) {
+        try {
+            await request.jwtVerify();
+        } catch (err) {
+            if (!reply.sent) reply.code(401).send({ error: 'Unauthorized: Invalid or missing token' });
+        }
+    });
+
     // ── Admin-only ────────────────────────────────────────────────────────────
     fastify.decorate('requireAdmin', async function (request, reply) {
         try {

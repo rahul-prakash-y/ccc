@@ -21,10 +21,13 @@ const OtpPanel = ({ section, onOtpChange }) => {
   const [flashing, setFlashing] = useState(false);
   const [loadingOtp, setLoadingOtp] = useState(true);
   const prevOtpRef = useRef(null);
+  const isFetchingRef = useRef(false);
   const active = section.status === 'WAITING_FOR_OTP' || section.status === 'RUNNING';
 
   // Always fetch on mount so each admin sees THEIR OWN keys
   const fetchOtp = useCallback(async (isInitial = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (isInitial) setLoadingOtp(true);
     try {
       const res = await api.get(`/rounds/${section._id}/refresh-otp`);
@@ -40,6 +43,7 @@ const OtpPanel = ({ section, onOtpChange }) => {
       // If no OTP has been generated yet for this admin, show dashes
       setOtp(prev => ({ ...prev, startOtp: prev.startOtp ?? '------', endOtp: prev.endOtp ?? '------' }));
     } finally {
+      isFetchingRef.current = false;
       if (isInitial) setLoadingOtp(false);
     }
   }, [section._id, onOtpChange]);
@@ -49,16 +53,17 @@ const OtpPanel = ({ section, onOtpChange }) => {
     fetchOtp(true);
   }, [fetchOtp]);
 
-  // Continuous polling only while active
+  // Fetch new OTP from server ONLY when timer expires (secondsLeft reaches 0)
   useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() => fetchOtp(false), 5000);
-    return () => clearInterval(t);
-  }, [active, fetchOtp]);
+    if (!active || otp.secondsLeft === null) return;
+    if (otp.secondsLeft <= 0) {
+      fetchOtp(false);
+    }
+  }, [active, otp.secondsLeft, fetchOtp]);
 
   // Per-second visual countdown (client-side only, active only)
   useEffect(() => {
-    if (!active || otp.secondsLeft === null) return;
+    if (!active || otp.secondsLeft === null || otp.secondsLeft <= 0) return;
     const tick = setInterval(() => {
       setOtp(prev => ({ ...prev, secondsLeft: Math.max(0, (prev.secondsLeft ?? 1) - 1) }));
     }, 1000);
@@ -212,61 +217,143 @@ const ProjectorOtp = ({ section }) => {
 };
 
 // ── Question pool settings per section ─────────────────────────────────────────
+// ── Question pool settings per section ─────────────────────────────────────────
 const QuestionSettings = ({ section, onSave, busy, isSuperAdmin }) => {
   const [qCount, setQCount] = useState(section.questionCount ?? '');
+  const [typeCounts, setTypeCounts] = useState({
+    MCQ: section.typeQuestionCounts?.MCQ ?? '',
+    CODE: section.typeQuestionCounts?.CODE ?? '',
+    DEBUG: section.typeQuestionCounts?.DEBUG ?? '',
+    FILL_BLANKS: section.typeQuestionCounts?.FILL_BLANKS ?? '',
+    EXPLAIN: section.typeQuestionCounts?.EXPLAIN ?? '',
+    UI_UX: section.typeQuestionCounts?.UI_UX ?? '',
+    MINI_HACKATHON: section.typeQuestionCounts?.MINI_HACKATHON ?? ''
+  });
   const [shuffle, setShuffle] = useState(section.shuffleQuestions !== false);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    setQCount(section.questionCount ?? '');
+    setTypeCounts({
+      MCQ: section.typeQuestionCounts?.MCQ ?? '',
+      CODE: section.typeQuestionCounts?.CODE ?? '',
+      DEBUG: section.typeQuestionCounts?.DEBUG ?? '',
+      FILL_BLANKS: section.typeQuestionCounts?.FILL_BLANKS ?? '',
+      EXPLAIN: section.typeQuestionCounts?.EXPLAIN ?? '',
+      UI_UX: section.typeQuestionCounts?.UI_UX ?? '',
+      MINI_HACKATHON: section.typeQuestionCounts?.MINI_HACKATHON ?? ''
+    });
+    setShuffle(section.shuffleQuestions !== false);
+  }, [section]);
 
   const handleSave = async () => {
-    await onSave(section._id, qCount === '' ? null : Number(qCount), shuffle);
+    await onSave(
+      section._id,
+      qCount === '' ? null : Number(qCount),
+      typeCounts,
+      shuffle
+    );
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleTypeChange = (typeKey, val) => {
+    setTypeCounts(prev => ({ ...prev, [typeKey]: val }));
+  };
+
+  const perTypeTotal = Object.values(typeCounts).reduce((acc, curr) => {
+    const n = Number(curr);
+    return acc + (!isNaN(n) && curr !== '' && n > 0 ? n : 0);
+  }, 0);
+
+  const typeConfigList = [
+    { label: 'MCQs', key: 'MCQ', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    { label: 'Coding', key: 'CODE', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    { label: 'Debugging', key: 'DEBUG', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { label: 'Fillups', key: 'FILL_BLANKS', color: 'bg-rose-50 text-rose-700 border-rose-200' },
+    { label: 'Explanation', key: 'EXPLAIN', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { label: 'UI/UX', key: 'UI_UX', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+    { label: 'Hackathon', key: 'MINI_HACKATHON', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  ];
+
   return (
-    <div className="mb-3 p-3 bg-violet-50/60 border border-violet-100 rounded-xl">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Settings2 size={10} className="text-violet-500" />
-        <p className="text-[9px] font-black text-violet-500 uppercase tracking-widest">Question Pool Settings</p>
+    <div className="mb-3 p-4 bg-violet-50/60 border border-violet-100 rounded-2xl space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Settings2 size={14} className="text-violet-600" />
+          <p className="text-xs font-black text-violet-700 uppercase tracking-widest">Question Distribution & Limits</p>
+        </div>
+        {perTypeTotal > 0 && (
+          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+            Per-Type Target: {perTypeTotal} Qs
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Questions per student */}
-        <div className="flex items-center gap-1.5 min-w-[120px]">
-          <label className="text-[10px] font-bold text-slate-500 whitespace-nowrap">Qs per student</label>
+
+      {/* Global Limit & Shuffle */}
+      <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-violet-100">
+        <div>
+          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Max Overall Qs per student</label>
           <input
             type="number"
             min={1}
             value={qCount}
             onChange={e => setQCount(e.target.value)}
-            placeholder="All"
-            className="w-16 text-center text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+            placeholder="All available"
+            className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-400/40"
           />
         </div>
-        {/* Shuffle toggle */}
-        <button
-          onClick={() => setShuffle(s => !s)}
-          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black border transition-all ${shuffle ? 'bg-violet-100 border-violet-200 text-violet-700' : 'bg-white border-slate-200 text-slate-400'
+        <div className="flex flex-col justify-end">
+          <button
+            type="button"
+            onClick={() => setShuffle(s => !s)}
+            className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black border transition-all ${
+              shuffle ? 'bg-violet-100 border-violet-300 text-violet-800' : 'bg-slate-50 border-slate-200 text-slate-400'
             }`}
-        >
-          <Shuffle size={10} />
-          {shuffle ? 'Shuffle ON' : 'Shuffle OFF'}
-        </button>
-        {/* Save button */}
+          >
+            <Shuffle size={12} />
+            {shuffle ? 'Question Shuffle: ON' : 'Question Shuffle: OFF'}
+          </button>
+        </div>
+      </div>
+
+      {/* Per Category / Type Limits */}
+      <div>
+        <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-2">
+          Question Count Per Category / Type (MCQs, Coding, Debugging, Fillups, etc.)
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {typeConfigList.map(item => (
+            <div key={item.key} className={`p-2 rounded-xl border flex flex-col gap-1 ${item.color}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-tight">{item.label}</span>
+                <span className="text-[8px] opacity-60 font-bold">{item.key}</span>
+              </div>
+              <input
+                type="number"
+                min={0}
+                placeholder="All"
+                value={typeCounts[item.key] ?? ''}
+                onChange={e => handleTypeChange(item.key, e.target.value)}
+                className="w-full text-center text-xs font-bold bg-white/90 border border-slate-200/80 rounded-lg px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-violet-400/40 text-slate-800"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="pt-1 flex items-center justify-end">
         <button
           onClick={handleSave}
           disabled={busy}
-          className={`flex-1 px-3 py-1 rounded-lg text-[10px] font-black border transition-all disabled:opacity-50 ${saved ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
-            }`}
+          className={`px-5 py-2 rounded-xl text-xs font-black border transition-all shadow-sm active:scale-95 disabled:opacity-50 ${
+            saved ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
+          }`}
         >
-          {busy ? <Loader2 size={10} className="animate-spin" /> : saved ? '✓ Saved' : 'Save'}
+          {busy ? <Loader2 size={14} className="animate-spin" /> : saved ? '✓ Saved & Applied' : 'Save Question Settings'}
         </button>
       </div>
-      {qCount && (
-        <p className="text-[9px] text-violet-400 mt-1.5 font-medium">
-          Each student gets {qCount} randomly selected question{qCount > 1 ? 's' : ''} from the pool
-        </p>
-      )}
     </div>
   );
 };
@@ -832,7 +919,8 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
 
   useEffect(() => {
     fetchSections();
-    const t = setInterval(() => fetchSections(true), 15000);
+    // Poll every 15 minutes
+    const t = setInterval(() => fetchSections(true), 1500000);
     return () => clearInterval(t);
   }, [fetchSections]);
 
@@ -857,10 +945,10 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
     }
   };
 
-  const handleSaveQuestionSettings = async (sectionId, questionCount, shuffleQuestions) => {
+  const handleSaveQuestionSettings = async (sectionId, questionCount, typeQuestionCounts, shuffleQuestions) => {
     setBusy(b => ({ ...b, [`${sectionId}-qsettings`]: true }));
     try {
-      const res = await api.patch(`${API}/rounds/${sectionId}/question-settings`, { questionCount, shuffleQuestions });
+      const res = await api.patch(`${API}/rounds/${sectionId}/question-settings`, { questionCount, typeQuestionCounts, shuffleQuestions });
       const updatedSection = res.data.data;
       updateRound(sectionId, updatedSection);
     } catch (err) {
@@ -1025,6 +1113,7 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
         testDurationMinutes,
         roundOrder: 1,
         questionCount: roundsConfig[0].questionCount === '' ? null : Number(roundsConfig[0].questionCount),
+        typeQuestionCounts: roundsConfig[0].typeQuestionCounts || null,
         isTeamTest,
         maxParticipants: maxParticipants === '' ? null : Number(maxParticipants),
         startTime: startTime ? (startTime.includes('+') ? startTime : `${startTime}+05:30`) : null,
@@ -1037,7 +1126,7 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
       setMaxParticipants('');
       setStartTime('');
       setEndTime('');
-      setRoundsConfig([{ type: 'GENERAL', questionCount: '' }]);
+      setRoundsConfig([{ type: 'GENERAL', questionCount: '', typeQuestionCounts: { MCQ: '', CODE: '', DEBUG: '', FILL_BLANKS: '', EXPLAIN: '', UI_UX: '', MINI_HACKATHON: '' } }]);
       fetchSections();
     } catch (err) { console.error(err); }
     finally { setAdding(false); }
@@ -1204,7 +1293,7 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Questions per student</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Questions per student (Max Cap)</label>
                       <input
                         type="number"
                         placeholder="All"
@@ -1216,6 +1305,34 @@ const LiveOpsTab = ({ onJumpToTab, forceType = null }) => {
                           setRoundsConfig(newConf);
                         }}
                       />
+                    </div>
+                    <div className="pt-2 border-t border-indigo-100/50 space-y-1.5">
+                      <label className="text-[10px] font-black text-indigo-900 uppercase tracking-widest block">Per-Type Question Breakdown (Optional)</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: 'MCQs', key: 'MCQ' },
+                          { label: 'Coding', key: 'CODE' },
+                          { label: 'Debugging', key: 'DEBUG' },
+                          { label: 'Fillups', key: 'FILL_BLANKS' }
+                        ].map(t => (
+                          <div key={t.key} className="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-indigo-100">
+                            <span className="text-[9px] font-bold text-slate-600">{t.label}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="All"
+                              className="w-12 text-center text-xs font-bold bg-slate-50 border border-slate-200 rounded px-1 py-0.5 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              value={roundsConfig[0].typeQuestionCounts?.[t.key] || ''}
+                              onChange={e => {
+                                const newConf = [...roundsConfig];
+                                if (!newConf[0].typeQuestionCounts) newConf[0].typeQuestionCounts = {};
+                                newConf[0].typeQuestionCounts[t.key] = e.target.value;
+                                setRoundsConfig(newConf);
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 pt-2 border-t border-indigo-100/30">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight italic">Max Participants (Top X Rank)</label>

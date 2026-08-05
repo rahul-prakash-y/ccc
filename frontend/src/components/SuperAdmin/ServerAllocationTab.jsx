@@ -22,7 +22,12 @@ const ServerAllocationTab = () => {
     const [selectedServerUrl, setSelectedServerUrl] = useState('');
     const [isAllocating, setIsAllocating] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [pageInput, setPageInput] = useState(1);
     const [limit] = useState(30); // Show 25 per page
+
+    useEffect(() => {
+        setPageInput(currentPage);
+    }, [currentPage]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -252,13 +257,36 @@ const ServerAllocationTab = () => {
                         </button>
                         
                         <div className="flex items-center gap-1">
-                            <span className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded-md shadow-sm">
-                                {currentPage}
-                            </span>
-                            <span className="text-xs text-slate-400 px-1">of</span>
-                            <span className="px-3 py-1 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-md">
-                                {pagination.totalPages}
-                            </span>
+                            <span className="text-xs font-bold text-slate-500">Page</span>
+                            <input
+                                type="number"
+                                min="1"
+                                max={pagination.totalPages || 1}
+                                value={pageInput}
+                                onChange={(e) => setPageInput(e.target.value)}
+                                onBlur={() => {
+                                    let p = parseInt(pageInput, 10);
+                                    const maxP = pagination.totalPages || 1;
+                                    if (isNaN(p) || p < 1) p = 1;
+                                    if (p > maxP) p = maxP;
+                                    setPageInput(p);
+                                    if (p !== currentPage) setCurrentPage(p);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        let p = parseInt(pageInput, 10);
+                                        const maxP = pagination.totalPages || 1;
+                                        if (isNaN(p) || p < 1) p = 1;
+                                        if (p > maxP) p = maxP;
+                                        setPageInput(p);
+                                        if (p !== currentPage) setCurrentPage(p);
+                                    }
+                                }}
+                                className="w-12 h-8 text-center bg-white border border-slate-200 rounded-lg text-slate-700 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                title="Enter page number and press Enter"
+                            />
+                            <span className="text-xs text-slate-400 font-medium px-1">of {pagination.totalPages}</span>
                         </div>
 
                         <button

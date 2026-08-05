@@ -1024,14 +1024,25 @@ module.exports = async function (fastify, opts) {
                     return selectedGroup;
                 };
 
-                // Shuffle each group individually without hardcoded limits
-                const mcqQuestions = shuffleGroup(groupedQuestions['MCQ'], 'MCQ');
-                const codeQuestions = shuffleGroup(groupedQuestions['CODE'], 'CODE');
-                const debugQuestions = shuffleGroup(groupedQuestions['DEBUG'], 'DEBUG');
-                const fillBlanksQuestions = shuffleGroup(groupedQuestions['FILL_BLANKS'], 'FILL_BLANKS');
-                const explainQuestions = shuffleGroup(groupedQuestions['EXPLAIN'], 'EXPLAIN');
-                const shortAnswerQuestions = shuffleGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER');
-                const otherQuestions = shuffleGroup(groupedQuestions['OTHER'], 'OTHER');
+                // Shuffle and slice each group individually according to typeQuestionCounts if configured
+                const typeCounts = round.typeQuestionCounts || {};
+
+                const selectFromGroup = (group, typeKey) => {
+                    const shuffled = shuffleGroup(group, typeKey);
+                    const limit = typeCounts[typeKey];
+                    if (limit !== undefined && limit !== null && limit !== '' && Number(limit) >= 0) {
+                        return shuffled.slice(0, Number(limit));
+                    }
+                    return shuffled;
+                };
+
+                const mcqQuestions = selectFromGroup(groupedQuestions['MCQ'], 'MCQ');
+                const codeQuestions = selectFromGroup(groupedQuestions['CODE'], 'CODE');
+                const debugQuestions = selectFromGroup(groupedQuestions['DEBUG'], 'DEBUG');
+                const fillBlanksQuestions = selectFromGroup(groupedQuestions['FILL_BLANKS'], 'FILL_BLANKS');
+                const explainQuestions = selectFromGroup(groupedQuestions['EXPLAIN'], 'EXPLAIN');
+                const shortAnswerQuestions = selectFromGroup(groupedQuestions['SHORT_ANSWER'], 'SHORT_ANSWER');
+                const otherQuestions = selectFromGroup(groupedQuestions['OTHER'], 'OTHER');
 
                 // Combine questions sequentially
                 let selected = [...mcqQuestions, ...codeQuestions, ...debugQuestions, ...fillBlanksQuestions, ...explainQuestions, ...shortAnswerQuestions, ...otherQuestions];
@@ -1308,7 +1319,7 @@ module.exports = async function (fastify, opts) {
         }
 
         try {
-            const round = await Round.findById(roundId).select('name durationMinutes testDurationMinutes isPracticeEnabled practiceQuestionCount questionCount maxPracticeAttempts shuffleQuestions');
+            const round = await Round.findById(roundId).select('name durationMinutes testDurationMinutes isPracticeEnabled practiceQuestionCount questionCount maxPracticeAttempts shuffleQuestions typeQuestionCounts');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
 
             if (!round.isPracticeEnabled) {
@@ -1340,21 +1351,45 @@ module.exports = async function (fastify, opts) {
 
                 // Assign Questions (similar to normal test logic)
                 const Question = require('../models/Question');
-                let questions = await Question.find({ linkedRounds: roundId }).select('_id order').lean();
+                let questions = await Question.find({
+                    $or: [
+                        { round: roundId },
+                        { linkedRounds: roundId }
+                    ]
+                }).select('_id order type').lean();
 
-                if (round.shuffleQuestions) {
-                    for (let i = questions.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [questions[i], questions[j]] = [questions[j], questions[i]];
+                const typeCounts = round.typeQuestionCounts || {};
+                const grouped = {};
+                questions.forEach(q => {
+                    const t = q.type || 'OTHER';
+                    if (!grouped[t]) grouped[t] = [];
+                    grouped[t].push(q);
+                });
+
+                let selectedPractice = [];
+                const typesToProcess = ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX', 'MINI_HACKATHON', 'SHORT_ANSWER', 'OTHER'];
+                
+                typesToProcess.forEach(t => {
+                    let group = grouped[t] || [];
+                    if (round.shuffleQuestions) {
+                        for (let i = group.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [group[i], group[j]] = [group[j], group[i]];
+                        }
                     }
-                }
+                    const limitCount = typeCounts[t];
+                    if (limitCount !== undefined && limitCount !== null && limitCount !== '' && Number(limitCount) >= 0) {
+                        group = group.slice(0, Number(limitCount));
+                    }
+                    selectedPractice.push(...group);
+                });
 
                 const cap = round.practiceQuestionCount ?? round.questionCount ?? null;
                 if (cap !== null && cap > 0) {
-                    questions = questions.slice(0, cap);
+                    selectedPractice = selectedPractice.slice(0, cap);
                 }
 
-                practiceSub.assignedQuestions = questions.map(q => q._id);
+                practiceSub.assignedQuestions = selectedPractice.map(q => q._id);
                 await practiceSub.save();
             }
 

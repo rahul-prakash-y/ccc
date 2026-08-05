@@ -142,10 +142,7 @@ const ActivityLogsTab = () => {
             )}
 
             {/* Pagination & Footer Summary */}
-            <div className="flex flex-col sm:flex-row justify-between items-center px-2 py-2 gap-4 border-t border-gray-100 mt-2">
-                <span className="text-gray-500 font-mono hidden sm:inline">
-                    Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.totalRecords)} of {pagination.totalRecords} Records
-                </span>
+            <div className="flex flex-col sm:flex-row justify-between items-center px-2 py-2 gap-4 border-t border-gray-100 mt-2">  
                 <Pagination
                     currentPage={page}
                     totalPages={pagination.totalPages}

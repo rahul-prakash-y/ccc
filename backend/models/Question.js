@@ -61,7 +61,7 @@ const questionSchema = new mongoose.Schema({
     },
     category: {
         type: String,
-        enum: ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'],
+        enum: ['SQL', 'HTML_CSS_QUIZ', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'],
         default: 'GENERAL'
     },
     options: {

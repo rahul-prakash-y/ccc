@@ -61,6 +61,15 @@ const roundSchema = new mongoose.Schema({
         type: Number,
         default: null // null = all questions; set to N to give each student N random questions
     },
+    typeQuestionCounts: {
+        MCQ: { type: Number, default: null },
+        CODE: { type: Number, default: null },
+        DEBUG: { type: Number, default: null },
+        FILL_BLANKS: { type: Number, default: null },
+        EXPLAIN: { type: Number, default: null },
+        UI_UX: { type: Number, default: null },
+        MINI_HACKATHON: { type: Number, default: null }
+    },
     shuffleQuestions: {
         type: Boolean,
         default: true // When true, each student gets questions in a different order

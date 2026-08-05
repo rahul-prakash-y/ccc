@@ -116,4 +116,26 @@ module.exports = async function (fastify, opts) {
             return reply.code(500).send({ error: `Failed to delete document from ${collection}` });
         }
     });
+
+    /**
+     * POST /api/database/:collection/batch-delete
+     * Delete multiple documents in a collection by array of IDs
+     */
+    fastify.post('/:collection/batch-delete', async (request, reply) => {
+        const { collection } = request.params;
+        const { ids } = request.body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return reply.code(400).send({ error: 'No IDs provided for batch deletion' });
+        }
+
+        try {
+            const Model = mongoose.connection.models[collection] || mongoose.model(collection, new mongoose.Schema({}, { strict: false }), collection);
+            const result = await Model.deleteMany({ _id: { $in: ids } });
+            return { success: true, count: result.deletedCount, message: `Successfully deleted ${result.deletedCount} document(s)` };
+        } catch (error) {
+            fastify.log.error(error);
+            return reply.code(500).send({ error: `Failed to batch delete documents from ${collection}` });
+        }
+    });
 };

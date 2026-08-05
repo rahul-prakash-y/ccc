@@ -156,8 +156,7 @@ const ImportFromLibraryModal = ({ roundId, onClose, onImportSuccess }) => {
                                         <option value="">All Categories</option>
                                         <option value="GENERAL">General</option>
                                         <option value="SQL">SQL</option>
-                                        <option value="HTML">HTML</option>
-                                        <option value="CSS">CSS</option>
+                                        <option value="HTML_CSS_QUIZ">HTML_CSS_QUIZ</option>
                                         <option value="UI_UX">UI/UX</option>
                                         <option value="MINI_HACKATHON">Hackathon</option>
                                     </select>

@@ -31,12 +31,22 @@ module.exports = async function (fastify, opts) {
         try {
             const {
                 name, description, durationMinutes, type,
-                questionCount, shuffleQuestions,
+                questionCount, typeQuestionCounts, shuffleQuestions,
                 testGroupId, testDurationMinutes, roundOrder,
                 maxParticipants, startTime, endTime, authorizedAdmins
             } = request.body;
 
             if (!name) return reply.code(400).send({ error: 'Round name is required' });
+
+            const formattedTypeCounts = typeQuestionCounts && typeof typeQuestionCounts === 'object' ? {
+                MCQ: typeQuestionCounts.MCQ === '' || typeQuestionCounts.MCQ === undefined || typeQuestionCounts.MCQ === null ? null : Number(typeQuestionCounts.MCQ),
+                CODE: typeQuestionCounts.CODE === '' || typeQuestionCounts.CODE === undefined || typeQuestionCounts.CODE === null ? null : Number(typeQuestionCounts.CODE),
+                DEBUG: typeQuestionCounts.DEBUG === '' || typeQuestionCounts.DEBUG === undefined || typeQuestionCounts.DEBUG === null ? null : Number(typeQuestionCounts.DEBUG),
+                FILL_BLANKS: typeQuestionCounts.FILL_BLANKS === '' || typeQuestionCounts.FILL_BLANKS === undefined || typeQuestionCounts.FILL_BLANKS === null ? null : Number(typeQuestionCounts.FILL_BLANKS),
+                EXPLAIN: typeQuestionCounts.EXPLAIN === '' || typeQuestionCounts.EXPLAIN === undefined || typeQuestionCounts.EXPLAIN === null ? null : Number(typeQuestionCounts.EXPLAIN),
+                UI_UX: typeQuestionCounts.UI_UX === '' || typeQuestionCounts.UI_UX === undefined || typeQuestionCounts.UI_UX === null ? null : Number(typeQuestionCounts.UI_UX),
+                MINI_HACKATHON: typeQuestionCounts.MINI_HACKATHON === '' || typeQuestionCounts.MINI_HACKATHON === undefined || typeQuestionCounts.MINI_HACKATHON === null ? null : Number(typeQuestionCounts.MINI_HACKATHON)
+            } : undefined;
 
             const round = new Round({
                 name,
@@ -46,6 +56,7 @@ module.exports = async function (fastify, opts) {
                 isOtpActive: false,
                 type: type || 'GENERAL',
                 questionCount: questionCount === undefined ? null : (questionCount === '' ? null : Number(questionCount)),
+                ...(formattedTypeCounts ? { typeQuestionCounts: formattedTypeCounts } : {}),
                 shuffleQuestions: shuffleQuestions === undefined ? true : Boolean(shuffleQuestions),
                 testGroupId: testGroupId || null,
                 testDurationMinutes: testDurationMinutes || null,
@@ -374,17 +385,35 @@ module.exports = async function (fastify, opts) {
      * Update questionCount and shuffleQuestions for a round.
      * Clears previously assigned question sets so the new config takes effect.
      */
-    fastify.patch('/rounds/:roundId/question-settings', { preValidation: [fastify.requireSuperAdmin] }, async (request, reply) => {
+    fastify.patch('/rounds/:roundId/question-settings', { preValidation: [fastify.requireAdmin] }, async (request, reply) => {
         try {
             const { roundId } = request.params;
-            const { questionCount, shuffleQuestions } = request.body;
+
+            const hasPermission = await checkRoundPermission(request.user, roundId);
+            if (!hasPermission) return reply.code(403).send({ error: 'Forbidden: You do not have permission to modify question settings for this round' });
+
+            const { questionCount, typeQuestionCounts, shuffleQuestions } = request.body;
 
             const updateFields = {};
-            if (questionCount !== undefined) updateFields.questionCount = questionCount === '' ? null : Number(questionCount) || null;
+            if (questionCount !== undefined) updateFields.questionCount = questionCount === '' || questionCount === null ? null : Number(questionCount) || null;
             if (shuffleQuestions !== undefined) updateFields.shuffleQuestions = Boolean(shuffleQuestions);
+            if (typeQuestionCounts !== undefined) {
+                updateFields.typeQuestionCounts = {
+                    MCQ: typeQuestionCounts?.MCQ === '' || typeQuestionCounts?.MCQ === undefined || typeQuestionCounts?.MCQ === null ? null : Number(typeQuestionCounts.MCQ),
+                    CODE: typeQuestionCounts?.CODE === '' || typeQuestionCounts?.CODE === undefined || typeQuestionCounts?.CODE === null ? null : Number(typeQuestionCounts.CODE),
+                    DEBUG: typeQuestionCounts?.DEBUG === '' || typeQuestionCounts?.DEBUG === undefined || typeQuestionCounts?.DEBUG === null ? null : Number(typeQuestionCounts.DEBUG),
+                    FILL_BLANKS: typeQuestionCounts?.FILL_BLANKS === '' || typeQuestionCounts?.FILL_BLANKS === undefined || typeQuestionCounts?.FILL_BLANKS === null ? null : Number(typeQuestionCounts.FILL_BLANKS),
+                    EXPLAIN: typeQuestionCounts?.EXPLAIN === '' || typeQuestionCounts?.EXPLAIN === undefined || typeQuestionCounts?.EXPLAIN === null ? null : Number(typeQuestionCounts.EXPLAIN),
+                    UI_UX: typeQuestionCounts?.UI_UX === '' || typeQuestionCounts?.UI_UX === undefined || typeQuestionCounts?.UI_UX === null ? null : Number(typeQuestionCounts.UI_UX),
+                    MINI_HACKATHON: typeQuestionCounts?.MINI_HACKATHON === '' || typeQuestionCounts?.MINI_HACKATHON === undefined || typeQuestionCounts?.MINI_HACKATHON === null ? null : Number(typeQuestionCounts.MINI_HACKATHON)
+                };
+            }
 
             const round = await Round.findByIdAndUpdate(roundId, updateFields, { new: true }).select('-startOtp -endOtp -otpIssuedAt -certificateTemplate.data');
             if (!round) return reply.code(404).send({ error: 'Round not found' });
+
+            // Hydrate RAM static cache so question assignment gets latest round config
+            await hydrateStaticData();
 
             // Clear previously assigned question sets so students get re-assigned on next load
             await Submission.updateMany({ round: roundId }, { $set: { assignedQuestions: [] } });
@@ -393,7 +422,7 @@ module.exports = async function (fastify, opts) {
                 action: 'UPDATED',
                 performedBy: { userId: request.user?.userId, name: request.user?.name, role: request.user?.role },
                 target: { type: 'Round', id: roundId, label: `${round.name} question settings` },
-                metadata: { questionCount: round.questionCount, shuffleQuestions: round.shuffleQuestions },
+                metadata: { questionCount: round.questionCount, typeQuestionCounts: round.typeQuestionCounts, shuffleQuestions: round.shuffleQuestions },
                 ip: request.ip
             });
 
@@ -761,15 +790,35 @@ module.exports = async function (fastify, opts) {
 
             const validDifficulties = ['EASY', 'MEDIUM', 'HARD'];
             const validTypes = ['MCQ', 'CODE', 'DEBUG', 'FILL_BLANKS', 'EXPLAIN', 'UI_UX', 'MINI_HACKATHON'];
-            const validCategories = ['SQL', 'HTML', 'CSS', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'];
+            const validCategories = ['SQL', 'HTML_CSS_QUIZ', 'UI_UX', 'GENERAL', 'MINI_HACKATHON'];
 
             const questionsToSave = [];
             let errorCount = 0;
             const errors = [];
 
-            // Pre-fetch all admins to map studentId to _id for assignedAdmin
-            const allAdmins = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN'] } }).select('_id studentId name').lean();
-            const adminMap = new Map(allAdmins.map(a => [String(a.studentId).trim(), a._id]));
+            // Pre-fetch all admins to map ObjectId, studentId, email, name to _id for assignedAdmin
+            const allAdmins = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN', 'SUPER_MASTER'] } }).select('_id studentId name email').lean();
+            const adminMap = new Map();
+            allAdmins.forEach(a => {
+                if (a._id) {
+                    const idStr = a._id.toString();
+                    adminMap.set(idStr, a._id);
+                    adminMap.set(idStr.toLowerCase(), a._id);
+                }
+                if (a.studentId) {
+                    const sid = String(a.studentId).trim();
+                    adminMap.set(sid, a._id);
+                    adminMap.set(sid.toLowerCase(), a._id);
+                }
+                if (a.email) {
+                    const em = String(a.email).trim().toLowerCase();
+                    adminMap.set(em, a._id);
+                }
+                if (a.name) {
+                    const nm = String(a.name).trim().toLowerCase();
+                    adminMap.set(nm, a._id);
+                }
+            });
 
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
@@ -790,21 +839,31 @@ module.exports = async function (fastify, opts) {
                 const points = Number(row.points || row.Points) || 10;
                 const isManualEvaluation = String(row.isManualEvaluation || row.Manual_Evaluation).toLowerCase() === 'true';
 
-                // Handle assignedAdmin (mapping Student ID from Excel to User ID)
+                // Handle assignedAdmin (mapping Student ID, User ID, Email or Name from Excel to User ID)
                 let assignedAdminId = null;
                 const assignedAdminStudentId = String(row.assignedAdmin || row.Assigned_Admin || row.Manual_Evaluation_Assigned_To || '').trim();
                 
                 if (isManualEvaluation) {
                     if (assignedAdminStudentId) {
-                        assignedAdminId = adminMap.get(assignedAdminStudentId);
+                        assignedAdminId = adminMap.get(assignedAdminStudentId) || adminMap.get(assignedAdminStudentId.toLowerCase());
+
+                        // Fallback: Check direct MongoDB ObjectId lookup if not yet in map
+                        if (!assignedAdminId && mongoose.Types.ObjectId.isValid(assignedAdminStudentId)) {
+                            const foundUser = await User.findById(assignedAdminStudentId).select('_id').lean();
+                            if (foundUser) {
+                                assignedAdminId = foundUser._id;
+                                adminMap.set(assignedAdminStudentId, foundUser._id);
+                            }
+                        }
+
                         if (!assignedAdminId) {
                             errorCount++;
-                            errors.push(`Row ${lineNum}: Admin with Student ID "${assignedAdminStudentId}" not found.`);
+                            errors.push(`Row ${lineNum}: Admin with Identifier "${assignedAdminStudentId}" not found.`);
                             continue;
                         }
                     } else {
                         errorCount++;
-                        errors.push(`Row ${lineNum}: Manual evaluation requires an assigned Admin Student ID.`);
+                        errors.push(`Row ${lineNum}: Manual evaluation requires an assigned Admin Student ID or User ID.`);
                         continue;
                     }
                 }

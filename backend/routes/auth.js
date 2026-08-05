@@ -137,7 +137,7 @@ module.exports = async function (fastify, opts) {
      * ROUTE: POST /api/auth/logout
      * Authenticated route. Allows tracing when a user actively clicks 'Logout'.
      */
-    fastify.post('/logout', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    fastify.post('/logout', { preValidation: [fastify.authenticateAllowBanned] }, async (request, reply) => {
         try {
             const user = request.user;
 

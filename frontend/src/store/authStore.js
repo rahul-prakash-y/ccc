@@ -30,6 +30,26 @@ api.interceptors.request.use((config) => {
     return config;
 }, (error) => Promise.reject(error));
 
+// ─── Response interceptor ───────────────────────────────────────────────────────
+// Handles 401 Unauthorized globally across all API requests:
+// Clears session state and redirects user to the login screen.
+const handle401Error = (error) => {
+    if (error.response && error.response.status === 401) {
+        const requestUrl = error.config?.url || '';
+        // Skip redirect for login endpoint itself so invalid credential errors can be displayed in UI
+        if (!requestUrl.includes('/auth/login')) {
+            useAuthStore.getState().logout();
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }
+    }
+    return Promise.reject(error);
+};
+
+api.interceptors.response.use((response) => response, handle401Error);
+axios.interceptors.response.use((response) => response, handle401Error);
+
 export const useAuthStore = create((set, get) => ({
     user: null,
     token: null,
@@ -111,8 +131,13 @@ export const useAuthStore = create((set, get) => ({
         }
     },
 
+    loggingOut: false,
+
     logout: async () => {
-        const { token } = get();
+        const { token, loggingOut } = get();
+        if (loggingOut) return;
+        set({ loggingOut: true });
+
         if (token) {
             try {
                 // Ping backend to trace organic logout
@@ -128,6 +153,6 @@ export const useAuthStore = create((set, get) => ({
         // Clear sticky session so the next login gets a fresh random assignment.
         // This prevents a dead backend from haunting a student across events.
         clearStickySession();
-        set({ user: null, token: null });
+        set({ user: null, token: null, loggingOut: false });
     }
 }));

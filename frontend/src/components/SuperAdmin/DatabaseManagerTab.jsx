@@ -111,8 +111,10 @@ const DatabaseManagerTab = () => {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState(null);
   const [jsonInput, setJsonInput] = useState('');
@@ -160,11 +162,53 @@ const DatabaseManagerTab = () => {
   }, [fetchCollections]);
 
   useEffect(() => {
+    setPageInput(page);
+  }, [page]);
+
+  useEffect(() => {
     if (selectedCollection) {
+      setSelectedIds([]);
       fetchDocuments();
     }
   }, [selectedCollection, page, search, fetchDocuments]);
 
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const pageIds = documents.map(d => d._id);
+      setSelectedIds(prev => Array.from(new Set([...prev, ...pageIds])));
+    } else {
+      const pageIdSet = new Set(documents.map(d => d._id));
+      setSelectedIds(prev => prev.filter(id => !pageIdSet.has(id)));
+    }
+  };
+
+  const handleSelectRow = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected document(s) from "${selectedCollection}"? This action cannot be undone.`)) return;
+
+    try {
+      const { data } = await axios.post(`${API_BASE}/${selectedCollection}/batch-delete`, { ids: selectedIds }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (data.success) {
+        toast.success(data.message || `Deleted ${data.count} documents successfully`);
+        setSelectedIds([]);
+        fetchDocuments();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to delete selected documents');
+    }
+  };
+
+  const isAllPageSelected = documents.length > 0 && documents.every(d => selectedIds.includes(d._id));
+  const isSomePageSelected = documents.some(d => selectedIds.includes(d._id));
 
   const handleSave = async () => {
     try {
@@ -219,6 +263,7 @@ const DatabaseManagerTab = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Document deleted successfully');
+      setSelectedIds(prev => prev.filter(i => i !== id));
       fetchDocuments();
     } catch (err) {
       console.error(err);
@@ -334,6 +379,14 @@ const DatabaseManagerTab = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
+                  {selectedIds.length > 0 && (
+                    <button 
+                      onClick={handleBatchDelete}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 transition-all active:scale-95 shadow-md shadow-red-200 animate-in fade-in duration-150"
+                    >
+                      <Trash2 size={16} /> Delete Selected ({selectedIds.length})
+                    </button>
+                  )}
                   <button 
                     onClick={() => openModal()}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-95"
@@ -348,45 +401,65 @@ const DatabaseManagerTab = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 bg-slate-50 z-10">
                     <tr>
+                      <th className="px-4 py-3 text-center border-b border-slate-100 w-10">
+                        <input
+                          type="checkbox"
+                          checked={isAllPageSelected}
+                          ref={el => { if (el) el.indeterminate = isSomePageSelected && !isAllPageSelected; }}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">ID</th>
                       <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Details (JSON Snippet)</th>
                       <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.map((doc) => (
-                      <tr key={doc._id} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-6 py-4">
-                          <code className="text-xs font-mono text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
-                            {doc._id}
-                          </code>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="max-w-md truncate text-xs font-mono text-slate-500">
-                            {JSON.stringify(doc).substring(0, 100)}...
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
-                              onClick={() => openModal(doc)}
-                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(doc._id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {documents.map((doc) => {
+                      const isSelected = selectedIds.includes(doc._id);
+                      return (
+                        <tr key={doc._id} className={`transition-colors group ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50/50'}`}>
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleSelectRow(doc._id)}
+                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <code className="text-xs font-mono text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                              {doc._id}
+                            </code>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="max-w-md truncate text-xs font-mono text-slate-500">
+                              {JSON.stringify(doc).substring(0, 100)}...
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={() => openModal(doc)}
+                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(doc._id)}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {documents.length === 0 && !loading && (
                       <tr>
-                        <td colSpan="3" className="px-6 py-12 text-center text-slate-400 italic">
+                        <td colSpan="4" className="px-6 py-12 text-center text-slate-400 italic">
                           No documents found in this collection
                         </td>
                       </tr>
@@ -408,7 +481,38 @@ const DatabaseManagerTab = () => {
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  <span className="text-xs font-bold text-slate-700 px-3">Page {page}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-bold text-slate-500">Page</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={Math.max(1, Math.ceil(total / limit))}
+                      value={pageInput}
+                      onChange={(e) => setPageInput(e.target.value)}
+                      onBlur={() => {
+                        let p = parseInt(pageInput, 10);
+                        const maxP = Math.max(1, Math.ceil(total / limit));
+                        if (isNaN(p) || p < 1) p = 1;
+                        if (p > maxP) p = maxP;
+                        setPageInput(p);
+                        if (p !== page) setPage(p);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          let p = parseInt(pageInput, 10);
+                          const maxP = Math.max(1, Math.ceil(total / limit));
+                          if (isNaN(p) || p < 1) p = 1;
+                          if (p > maxP) p = maxP;
+                          setPageInput(p);
+                          if (p !== page) setPage(p);
+                        }
+                      }}
+                      className="w-12 h-8 text-center bg-white border border-slate-200 rounded-lg text-slate-700 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      title="Enter page number and press Enter"
+                    />
+                    <span className="text-xs text-slate-400 font-medium">of {Math.max(1, Math.ceil(total / limit))}</span>
+                  </div>
                   <button
                     disabled={page * limit >= total}
                     onClick={() => setPage(p => p + 1)}

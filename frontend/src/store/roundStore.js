@@ -11,9 +11,9 @@ export const useRoundStore = create((set, get) => ({
         const now = Date.now();
         const { lastFetched, loading, rounds } = get();
 
-        // Cache for 10 seconds unless forced or empty
+        // Cache for 15 minutes unless forced or empty
         if (!force && loading) return;
-        if (!force && (now - lastFetched < 10000) && rounds.length > 0) return;
+        if (!force && (now - lastFetched < 1500000) && rounds.length > 0) return;
 
         set({ loading: true });
         try {
